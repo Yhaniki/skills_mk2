@@ -1,0 +1,10 @@
+"AddonInfo"
+{
+	addonSteamAppID		550
+	addontitle		    "Yhaniki mod client side assets"
+	addonversion		1.0
+	addonauthor 		"Project Yhaniki"
+	addonDescription 	"Assets required for client-side L4D2 to join server with Yhaniki mod. For server-side files, please refer to yhaniki.net."
+	addonContent_Sound 	1
+	addonContent_Other 	1
+}
