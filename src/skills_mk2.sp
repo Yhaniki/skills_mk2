@@ -1,3 +1,4 @@
+#define SKILL_DEBUG       (true)
 #include <sourcemod>
 #include <sdktools>
 #include <sdkhooks>
@@ -139,48 +140,23 @@ public Setup_Materials() {
 	PrecacheParticle(PARTICLE_EAGLEEYE);
 	PrecacheParticle(PARTICLE_FX_AFTER_EXPLOSION);
 	PrecacheParticle(PARTICLE_FX_EXPLOSION_RING);
-
 	PrintToServer("===========Material Setup End===========");
 }
 
 public SetupMaterial(const char[] file) {
-	PrintToServer("SetupMaterial: %s", file);
-	// AddFileToDownloadsTable(file);
-	PrecacheGeneric(file, true);
+	AddFileToDownloadsTable(file);
+	PrecacheGeneric(file);
 }
 
 //===========================================================
 //======================= Particles =========================
 //===========================================================
 
-stock void PrecacheEffect(const char[] sEffectName) {
-    static int table = INVALID_STRING_TABLE;
-    
-    if (table == INVALID_STRING_TABLE)
-    {
-        table = FindStringTable("EffectDispatch");
-    }
-    bool save = LockStringTables(false);
-    AddToStringTable(table, sEffectName);
-    LockStringTables(save);
-}
-stock void PrecacheParticleEffect(const char[] sEffectName) {
-    static int table = INVALID_STRING_TABLE;
-    
-    if (table == INVALID_STRING_TABLE)
-    {
-        table = FindStringTable("ParticleEffectNames");
-    }
-    bool save = LockStringTables(false);
-    AddToStringTable(table, sEffectName);
-    LockStringTables(save);
-} 
-
 public Action:PrecacheParticle(String:particlename[]) {
 	new particle = CreateEntityByName("info_particle_system");
 	if (IsValidEntity(particle))
 	{
-		PrintToServer("PrecacheParticle: %s", particlename);
+		PrintToServer("PAR: %s Precached", particlename);
 		DispatchKeyValue(particle, "effect_name", particlename);
 		DispatchKeyValue(particle, "targetname", "particle");
 		DispatchSpawn(particle);
@@ -189,46 +165,6 @@ public Action:PrecacheParticle(String:particlename[]) {
 		CreateTimer(0.1, DeleteParticles, particle, TIMER_FLAG_NO_MAPCHANGE);
 	}  
 }
-
-// stock int PrecacheParticleSystem(const char[] particleSystem)
-// {
-//     static int particleEffectNames = INVALID_STRING_TABLE;
-
-//     if (particleEffectNames == INVALID_STRING_TABLE) {
-//         if ((particleEffectNames = FindStringTable("ParticleEffectNames")) == INVALID_STRING_TABLE) {
-//             return INVALID_STRING_INDEX;
-//         }
-//     }
-
-//     int index = FindStringIndex2(particleEffectNames, particleSystem);
-//     if (index == INVALID_STRING_INDEX) {
-//         int numStrings = GetStringTableNumStrings(particleEffectNames);
-//         if (numStrings >= GetStringTableMaxStrings(particleEffectNames)) {
-//             return INVALID_STRING_INDEX;
-//         }
-        
-//         AddToStringTable(particleEffectNames, particleSystem);
-//         index = numStrings;
-//     }
-    
-//     return index;
-// }
-
-// stock int FindStringIndex2(int tableidx, const char[] str)
-// {
-//     char buf[1024];
-    
-//     int numStrings = GetStringTableNumStrings(tableidx);
-//     for (int i=0; i < numStrings; i++) {
-//         ReadStringTable(tableidx, i, buf, sizeof(buf));
-        
-//         if (StrEqual(buf, str)) {
-//             return i;
-//         }
-//     }
-    
-//     return INVALID_STRING_INDEX;
-// }
 
 public Action:DeleteParticles(Handle:timer, any:particle) {
    if (IsValidEntity(particle)) {
@@ -523,10 +459,12 @@ public Action:Skill_Notify_Ani(Handle:timer, any:client) {
 //===========================================================
 
 public bool:MP_Decrease(client, Float:mp) {
-	if (Skill_MP[client] < mp) {
+if (Skill_MP[client] < mp) {
 		return false;
 	} else {
+#if (!SKILL_DEBUG)
 		Skill_MP[client] -= mp;
+#endif
 		return true;
 	}
 }
@@ -625,20 +563,91 @@ public Action:Timer_Skill_Null_Ready(Handle:timer, any:client) {
 	TriggerTimer(Skill_Notify_Timer[client]);
 	return Plugin_Handled;
 }
+//------------------------------------//
+//--------------steal-----------------//
+const int WAPON_TYPE_NUM = 4;
+stock ForceWeaponDrop(client)
+{
+	// if (GetPlayerWeaponSlot(client, 1) > 0)
+	// {
+	// 	new weapon = GetPlayerWeaponSlot(client, 0);
+	// 	SDKHooks_DropWeapon(client, weapon, NULL_VECTOR, NULL_VECTOR);
+	// }
+	// new rndItem = GetRandomInt(0, WAPON_TYPE_NUM-1);//0123
+	// new weapon = GetNowWeapon(client);
+	// if (weapon > 0)
+	// {
+	// 	SDKHooks_DropWeapon(client, weapon, NULL_VECTOR, NULL_VECTOR);
+	// }
+	new weapon = GetNowWeapon(client);
+	if (weapon > 0)
+	{
+		SDKHooks_DropWeapon(client, weapon, NULL_VECTOR, NULL_VECTOR);
+	}
+	GivePlayerItem(client, "weapon_pistol_magnum");
+	new wq = CreateEntityByName("weapon_autoshotgun");
+	DispatchSpawn(wq);
+	EquipPlayerWeapon(client, wq);
 
-//----------Explosion (爆裂)----------//
+	new Float:vAngles[3], Float:fOrigin[3];
+	GetClientEyePosition(client, fOrigin);
+	GetClientEyeAngles(client, vAngles);
 
-public Action:Timer_Skill_Explosion_Start(Handle:timer, any:client) {
-	PrepareAndEmitSoundtoAll("skills\\explosion.mp3", .entity = client, .volume = 1.0);
+	PrintToChatAll("%f %f %f", vAngles[0], vAngles[1], vAngles[2]);
+
+	new Float:Range = 2000.0;
+	new Float:Pos[3];
+	GetAimOrigin(client, Pos, 0.1);
+	// DataPack DP = new DataPack();
+	// new entity0 = DP.ReadCell();
+	// GetEntPropVector(entity0, Prop_Send, "m_vecOrigin", Pos);
+	// PrintToChatAll("Prop_Send %s", Prop_Send);
+	// GiveAdrenaline(client);
+}
+public GetNowWeapon(client)
+{
+	new weapon;
 	
-	GlowForSecs(client, 100, 0, 0, 1.5);
-	ExplodeAim(client, 1.5);
+	for (new i = 0; i < WAPON_TYPE_NUM; i++)
+	{
+		if (GetPlayerWeaponSlot(client, i) > 0) // player holing this type of weapon
+		{
+			weapon = GetPlayerWeaponSlot(client, i);
+			break;
+		}
+	}
+	return weapon;
+}
+public Skill_Steal(client)
+{
+	// 1. Read the type and coordinates of the object aimed by the player
+	// 2. If the player has aimed another client, check the item they are currently holding
+	//    Randomly select one item from the client and remove it from their inventory
+	char weapon[MAXCMD] = "weapon_autoshotgun"; //TODO: get random item
+	new wq = CreateEntityByName(weapon);
+	DispatchSpawn(wq);
+	EquipPlayerWeapon(client, wq);
+
+	// 3. If the player has aimed a zombie, randomly choose an item from the item table
+	//    The chance of obtaining an item can be based on a predetermined percentage set in the table
+	// 4. If the player hasn't aimed at any person, return a failed status
+
+	
+}
+//------------------------------------//
+//----------Explosion (爆裂)----------//
+public Action:Timer_Skill_Explosion_Start(Handle:timer, any:client) {
+	// PrepareAndEmitSoundtoAll("skills\\explosion.mp3", .entity = client, .volume = 1.0);
+	
+	// GlowForSecs(client, 100, 0, 0, 1.5);
+	// ExplodeAim(client, 1.5);
+	ForceWeaponDrop(client);
+
 	//ExExplodeAim(client, 0.3);
 	PrintToChatAll("%N - EXPLOSION!", client);
 	
 	return Plugin_Stop;
 }
-
 //----------Mana Shield (魔心護盾)----------//
 
 public Action:Timer_Skill_ManaShield_Start(Handle:timer, any:client) {
