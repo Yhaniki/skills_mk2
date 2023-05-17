@@ -6,6 +6,8 @@
 #include "resourcemanager.sp"
 #include "damage.sp"
 
+const ITEMNAME = 64;
+const ITEMNUM = 64;
 const MAXCMD = 64;
 const MAXSKILLNAME = 64;
 const MAXSKILLS = 64;
@@ -75,6 +77,9 @@ public Plugin:MyInfo = {
 	version = "",
 	url = ""
 }
+
+char itemName = {"test1","test1","test3"};
+
 
 public OnPluginStart() {
 	//CheckPlayerConnections();
@@ -565,52 +570,25 @@ public Action:Timer_Skill_Null_Ready(Handle:timer, any:client) {
 }
 //------------------------------------//
 //--------------steal-----------------//
-const int WAPON_TYPE_NUM = 4;
-stock ForceWeaponDrop(client)
+const int WEAPON_TYPE_NUM = 5;
+public int  ForceWeaponDrop(client)
 {
-	// if (GetPlayerWeaponSlot(client, 1) > 0)
-	// {
-	// 	new weapon = GetPlayerWeaponSlot(client, 0);
-	// 	SDKHooks_DropWeapon(client, weapon, NULL_VECTOR, NULL_VECTOR);
-	// }
-	// new rndItem = GetRandomInt(0, WAPON_TYPE_NUM-1);//0123
-	// new weapon = GetNowWeapon(client);
-	// if (weapon > 0)
-	// {
-	// 	SDKHooks_DropWeapon(client, weapon, NULL_VECTOR, NULL_VECTOR);
-	// }
 	new weapon = GetNowWeapon(client);
 	if (weapon > 0)
 	{
-		SDKHooks_DropWeapon(client, weapon, NULL_VECTOR, NULL_VECTOR);
+		RemoveEntity(weapon);
+		// SDKHooks_DropWeapon(client, weapon, NULL_VECTOR, NULL_VECTOR);
 	}
-	GivePlayerItem(client, "weapon_pistol_magnum");
-	new wq = CreateEntityByName("weapon_autoshotgun");
-	DispatchSpawn(wq);
-	EquipPlayerWeapon(client, wq);
-
-	new Float:vAngles[3], Float:fOrigin[3];
-	GetClientEyePosition(client, fOrigin);
-	GetClientEyeAngles(client, vAngles);
-
-	PrintToChatAll("%f %f %f", vAngles[0], vAngles[1], vAngles[2]);
-
-	new Float:Range = 2000.0;
-	new Float:Pos[3];
-	GetAimOrigin(client, Pos, 0.1);
-	// DataPack DP = new DataPack();
-	// new entity0 = DP.ReadCell();
-	// GetEntPropVector(entity0, Prop_Send, "m_vecOrigin", Pos);
-	// PrintToChatAll("Prop_Send %s", Prop_Send);
-	// GiveAdrenaline(client);
+	return weapon;
 }
-public GetNowWeapon(client)
+
+public int GetNowWeapon(client)
 {
-	new weapon;
-	
-	for (new i = 0; i < WAPON_TYPE_NUM; i++)
+	int weapon = 0;
+
+	for (new i = 0; i < WEAPON_TYPE_NUM; i++)
 	{
-		if (GetPlayerWeaponSlot(client, i) > 0) // player holing this type of weapon
+		if (GetPlayerWeaponSlot(client, i) > 0)
 		{
 			weapon = GetPlayerWeaponSlot(client, i);
 			break;
@@ -618,21 +596,58 @@ public GetNowWeapon(client)
 	}
 	return weapon;
 }
+
+public SetItemToPlayer(client, char[] item)
+{
+	// char weapon[MAXCMD] = "weapon_autoshotgun"; //TODO: get random item
+	new wq = CreateEntityByName(item);
+	DispatchSpawn(wq);
+	EquipPlayerWeapon(client, wq);
+}
+
 public Skill_Steal(client)
 {
 	// 1. Read the type and coordinates of the object aimed by the player
-	// 2. If the player has aimed another client, check the item they are currently holding
-	//    Randomly select one item from the client and remove it from their inventory
-	char weapon[MAXCMD] = "weapon_autoshotgun"; //TODO: get random item
-	new wq = CreateEntityByName(weapon);
-	DispatchSpawn(wq);
-	EquipPlayerWeapon(client, wq);
+	new entityId = GetClientAimTarget(client, false);//return Entity
+	new String:item[MAXCMD];
 
-	// 3. If the player has aimed a zombie, randomly choose an item from the item table
-	//    The chance of obtaining an item can be based on a predetermined percentage set in the table
-	// 4. If the player hasn't aimed at any person, return a failed status
-
-	
+	if (entityId >= 0)
+	{
+		GetEdictClassname(entityId, item, MAXCMD);
+		PrintToChatAll("%N - test %d %s", client, entityId, item);
+		if ((IsClientInGame(client) == true) &&
+			(IsPlayerAlive(client) == true) &&
+			(GetClientTeam(client) != 3))
+		{
+			// 2. If the player has aimed another client, check the item they are currently holding
+			//    Randomly select one item from the client and remove it from their inventory
+			int weaponIdx = ForceWeaponDrop(entityId);
+			if (weaponIdx > 0)
+			{
+				GetEdictClassname(weaponIdx, item, MAXCMD);
+				SetItemToPlayer(client, item);
+				PrintToChatAll("%N - steal %S from %N", client, item, entityId);
+			}
+			else
+			{
+				PrintToChatAll("%N no item", entityId);
+			}
+		}
+		else //if (IsAliveInf(entityId))
+		{
+			// 3. If the player has aimed a zombie, randomly choose an item from the item table
+			//    The chance of obtaining an item can be based on a predetermined percentage set in the table
+			// todo
+			char[] item = "weapon_autoshotgun";
+			SetItemToPlayer(client, item);
+			PrintToChatAll("%N - steal %S from %N", client, item, entityId);
+		}
+	}
+	else
+	{
+		// 4. If the player hasn't aimed at any person, return a failed status
+		PrintToChatAll("%N - steal failed", client);
+	}
 }
 //------------------------------------//
 //----------Explosion (爆裂)----------//
@@ -641,11 +656,12 @@ public Action:Timer_Skill_Explosion_Start(Handle:timer, any:client) {
 	
 	// GlowForSecs(client, 100, 0, 0, 1.5);
 	// ExplodeAim(client, 1.5);
-	ForceWeaponDrop(client);
 
-	//ExExplodeAim(client, 0.3);
-	PrintToChatAll("%N - EXPLOSION!", client);
-	
+	// //ExExplodeAim(client, 0.3);
+	// PrintToChatAll("%N - EXPLOSION!", client);
+
+	PrintToChatAll("%N - test", client);
+	Skill_Steal(client);
 	return Plugin_Stop;
 }
 //----------Mana Shield (魔心護盾)----------//
@@ -867,7 +883,8 @@ public bool:IsAliveInf(client) {
 }
 
 public bool:IsAliveSpecialInf(client) {
-	if (client > GetMaxClients() || client <= 0) return false;
+	if (client > GetMaxClients() || client <= 0) 
+	return false;
 	return (IsClientInGame(client) == true)
 	&& (IsPlayerAlive(client) == true)
 	&& (GetClientTeam(client) == 3);
