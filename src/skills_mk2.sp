@@ -77,9 +77,78 @@ public Plugin:MyInfo = {
 	version = "",
 	url = ""
 }
+#define MAX_WEAPONS 10
+// static char g_sWeaponNames[MAX_WEAPONS][] = 
+// {
+// 	"weapon_autoshotgun",
+// 	"weapon_grenade_launcher" ,
+// 	"weapon_hunting_rifle",
+// 	"weapon_pistol" ,
+// 	"weapon_pistol_magnum" ,
+// 	"weapon_pumpshotgun" ,
+// 	"weapon_rifle" ,
+// 	"weapon_rifle_ak47" ,
+// 	"weapon_rifle_desert" ,
+// 	"weapon_rifle_m60" ,
+// 	"weapon_rifle_sg552" ,
+// 	"weapon_shotgun_chrome",
+// 	"weapon_shotgun_spas" ,
+// 	"weapon_smg" ,
+// 	"weapon_smg_mp5" ,
+// 	"weapon_smg_silenced" ,
+// 	"weapon_sniper_awp",
+// 	"weapon_sniper_military" ,
+// 	"weapon_sniper_scout" ,
 
-char itemName = {"test1","test1","test3"};
+// 	"weapon_baseball_bat",
+// 	"weapon_cricket_bat",
+// 	"weapon_crowbar",
+// 	"weapon_electric_guitar",
+// 	"weapon_fireaxe",
+// 	"weapon_frying_pan",
+// 	"weapon_golfclub",
+// 	"weapon_katana",
+// 	"weapon_machete",
+// 	"weapon_tonfa",
+// 	"weapon_knife",
 
+// 	"weapon_chainsaw",
+
+// 	"weapon_adrenaline",
+// 	"weapon_defibrillator",
+// 	"weapon_first_aid_kit",
+// 	"weapon_pain_pills",
+
+// 	"weapon_fireworkcrate",
+// 	"weapon_gascan",
+// 	"weapon_oxygentank",
+// 	"weapon_propanetank",
+
+// 	"weapon_molotov",
+// 	"weapon_pipe_bomb",
+// 	"weapon_vomitjar",
+
+// 	"weapon_ammo_spawn",
+// 	"weapon_upgradepack_explosive",
+// 	"weapon_upgradepack_incendiary",
+
+// 	"weapon_gnome",
+// 	"weapon_cola_bottles"
+// };
+
+static char g_sWeapons[MAX_WEAPONS][] =
+{
+	"weapon_rifle",
+	"weapon_autoshotgun",
+	"weapon_hunting_rifle",
+	"weapon_smg",
+	"weapon_pumpshotgun",
+	"weapon_pistol",
+	"weapon_molotov",
+	"weapon_pipe_bomb",
+	"weapon_first_aid_kit",
+	"weapon_pain_pills"
+};
 
 public OnPluginStart() {
 	//CheckPlayerConnections();
@@ -571,7 +640,18 @@ public Action:Timer_Skill_Null_Ready(Handle:timer, any:client) {
 //------------------------------------//
 //--------------steal-----------------//
 const int WEAPON_TYPE_NUM = 5;
-public int  ForceWeaponDrop(client)
+
+public int ForceWeaponDropByType(client, type)
+{
+	int weapon = GetPlayerWeaponSlot(client, type);
+	if (weapon > 0)
+	{
+		RemoveEntity(weapon);
+	}
+	return weapon;
+}
+
+public int ForceWeaponDrop(client)
 {
 	new weapon = GetNowWeapon(client);
 	if (weapon > 0)
@@ -588,11 +668,8 @@ public int GetNowWeapon(client)
 
 	for (new i = 0; i < WEAPON_TYPE_NUM; i++)
 	{
-		if (GetPlayerWeaponSlot(client, i) > 0)
-		{
-			weapon = GetPlayerWeaponSlot(client, i);
-			break;
-		}
+		weapon = GetPlayerWeaponSlot(client, i);
+		if (weapon > 0) break;
 	}
 	return weapon;
 }
@@ -600,6 +677,7 @@ public int GetNowWeapon(client)
 public SetItemToPlayer(client, char[] item)
 {
 	// char weapon[MAXCMD] = "weapon_autoshotgun"; //TODO: get random item
+	PrintToChatAll("4444444 %s", item);
 	new wq = CreateEntityByName(item);
 	DispatchSpawn(wq);
 	EquipPlayerWeapon(client, wq);
@@ -609,38 +687,53 @@ public Skill_Steal(client)
 {
 	// 1. Read the type and coordinates of the object aimed by the player
 	new entityId = GetClientAimTarget(client, false);//return Entity
-	new String:item[MAXCMD];
+	char item[MAXCMD];
+	char target[MAXCMD];
 
 	if (entityId >= 0)
 	{
-		GetEdictClassname(entityId, item, MAXCMD);
-		PrintToChatAll("%N - test %d %s", client, entityId, item);
-		if ((IsClientInGame(client) == true) &&
-			(IsPlayerAlive(client) == true) &&
-			(GetClientTeam(client) != 3))
-		{
-			// 2. If the player has aimed another client, check the item they are currently holding
-			//    Randomly select one item from the client and remove it from their inventory
-			int weaponIdx = ForceWeaponDrop(entityId);
-			if (weaponIdx > 0)
-			{
-				GetEdictClassname(weaponIdx, item, MAXCMD);
-				SetItemToPlayer(client, item);
-				PrintToChatAll("%N - steal %S from %N", client, item, entityId);
-			}
-			else
-			{
-				PrintToChatAll("%N no item", entityId);
-			}
-		}
-		else //if (IsAliveInf(entityId))
+		GetEdictClassname(entityId, target, MAXCMD);
+		PrintToChatAll("entityId %s", target);
+
+		if (IsAliveInf(entityId))
 		{
 			// 3. If the player has aimed a zombie, randomly choose an item from the item table
 			//    The chance of obtaining an item can be based on a predetermined percentage set in the table
 			// todo
-			char[] item = "weapon_autoshotgun";
-			SetItemToPlayer(client, item);
-			PrintToChatAll("%N - steal %S from %N", client, item, entityId);
+			int weaponIdx = GetRandomInt(0, MAX_WEAPONS-1);
+			PrintToChatAll("gggggggggggggg %d", weaponIdx);
+			PrintToChatAll("222222222222 %s", g_sWeapons[5]);
+			PrintToChatAll("3333333333 %s", g_sWeapons[weaponIdx]);
+			PrintToChatAll("%N - steal", client);
+			PrintToChatAll("sssssssssssss %s - steal", g_sWeapons[weaponIdx]);
+			PrintToChatAll("ttttttttttt %s - steal", g_sWeapons[weaponIdx]);
+			PrintToChatAll("%N - steal %S from %s", client, g_sWeapons[weaponIdx], target);
+			SetItemToPlayer(client, g_sWeapons[weaponIdx]);
+		}
+		else if ((StrEqual(target, "player")) &&
+				 (IsPlayerAlive(entityId) == true) &&
+				 (GetClientTeam(entityId) != 3))
+		{
+			// 2. If the player has aimed another client, check the item they are currently holding
+			//    Randomly select one item from the client and remove it from their inventory
+
+			// int weaponIdx = ForceWeaponDrop(entityId);
+			
+			int weaponType = GetRandomInt(0, WEAPON_TYPE_NUM - 1);
+			int weaponIdx = ForceWeaponDropByType(entityId, weaponType);
+			PrintToChatAll("weaponType %d", weaponType);
+			PrintToChatAll("weaponIdx %d", weaponIdx);
+			if (weaponIdx > 0 && weaponIdx<400)
+			{
+				GetEdictClassname(weaponIdx, item, MAXCMD);
+				SetItemToPlayer(client, item);
+				PrintToChatAll("%N - steal %S from %N", client, item, entityId);
+				PrintToChatAll("item %S", item);
+			}
+			else
+			{
+				PrintToChatAll("%N - steal failed from %N", client, entityId);
+			}
 		}
 	}
 	else
@@ -660,7 +753,6 @@ public Action:Timer_Skill_Explosion_Start(Handle:timer, any:client) {
 	// //ExExplodeAim(client, 0.3);
 	// PrintToChatAll("%N - EXPLOSION!", client);
 
-	PrintToChatAll("%N - test", client);
 	Skill_Steal(client);
 	return Plugin_Stop;
 }
