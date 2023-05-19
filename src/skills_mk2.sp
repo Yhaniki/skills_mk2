@@ -77,7 +77,7 @@ public Plugin:MyInfo = {
 	version = "",
 	url = ""
 }
-#define MAX_WEAPONS 10
+#define MAX_WEAPONS 13
 // static char g_sWeaponNames[MAX_WEAPONS][] = 
 // {
 // 	"weapon_autoshotgun",
@@ -147,7 +147,10 @@ static char g_sWeapons[MAX_WEAPONS][] =
 	"weapon_molotov",
 	"weapon_pipe_bomb",
 	"weapon_first_aid_kit",
-	"weapon_pain_pills"
+	"weapon_pain_pills",
+	"weapon_katana",
+	"weapon_pistol" ,
+	"weapon_pistol_magnum"
 };
 
 public OnPluginStart() {
@@ -644,9 +647,15 @@ const int WEAPON_TYPE_NUM = 5;
 public int ForceWeaponDropByType(client, type)
 {
 	int weapon = GetPlayerWeaponSlot(client, type);
+	
 	if (weapon > 0)
 	{
-		RemoveEntity(weapon);
+		char item[MAXCMD];
+		GetEdictClassname(weapon, item, MAXCMD);
+		if(StrEqual(item, "weapon_melee")==false)
+			RemoveEntity(weapon);
+		else
+			weapon = -1;
 	}
 	return weapon;
 }
@@ -654,10 +663,16 @@ public int ForceWeaponDropByType(client, type)
 public int ForceWeaponDrop(client)
 {
 	new weapon = GetNowWeapon(client);
-	if (weapon > 0)
+	char item[MAXCMD];
+	if (weapon >0)
 	{
-		RemoveEntity(weapon);
-		// SDKHooks_DropWeapon(client, weapon, NULL_VECTOR, NULL_VECTOR);
+		GetEdictClassname(weapon, item, MAXCMD);
+		PrintToChatAll("weapon %d", weapon);
+		if(StrEqual(item, "weapon_melee")==false)
+			RemoveEntity(weapon);
+			// SDKHooks_DropWeapon(client, weapon, NULL_VECTOR, NULL_VECTOR);
+		else
+			weapon = -1;
 	}
 	return weapon;
 }
@@ -677,10 +692,12 @@ public int GetNowWeapon(client)
 public SetItemToPlayer(client, char[] item)
 {
 	// char weapon[MAXCMD] = "weapon_autoshotgun"; //TODO: get random item
-	PrintToChatAll("4444444 %s", item);
 	new wq = CreateEntityByName(item);
-	DispatchSpawn(wq);
-	EquipPlayerWeapon(client, wq);
+	if(wq>0)
+	{
+		DispatchSpawn(wq);
+		EquipPlayerWeapon(client, wq);
+	}
 }
 
 public Skill_Steal(client)
@@ -701,13 +718,7 @@ public Skill_Steal(client)
 			//    The chance of obtaining an item can be based on a predetermined percentage set in the table
 			// todo
 			int weaponIdx = GetRandomInt(0, MAX_WEAPONS-1);
-			PrintToChatAll("gggggggggggggg %d", weaponIdx);
-			PrintToChatAll("222222222222 %s", g_sWeapons[5]);
-			PrintToChatAll("3333333333 %s", g_sWeapons[weaponIdx]);
-			PrintToChatAll("%N - steal", client);
-			PrintToChatAll("sssssssssssss %s - steal", g_sWeapons[weaponIdx]);
-			PrintToChatAll("ttttttttttt %s - steal", g_sWeapons[weaponIdx]);
-			PrintToChatAll("%N - steal %S from %s", client, g_sWeapons[weaponIdx], target);
+			PrintToChatAll("%N - steal %s from %s", client, g_sWeapons[weaponIdx], target);
 			SetItemToPlayer(client, g_sWeapons[weaponIdx]);
 		}
 		else if ((StrEqual(target, "player")) &&
@@ -723,12 +734,11 @@ public Skill_Steal(client)
 			int weaponIdx = ForceWeaponDropByType(entityId, weaponType);
 			PrintToChatAll("weaponType %d", weaponType);
 			PrintToChatAll("weaponIdx %d", weaponIdx);
-			if (weaponIdx > 0 && weaponIdx<400)
+			if (weaponIdx > 0)
 			{
 				GetEdictClassname(weaponIdx, item, MAXCMD);
 				SetItemToPlayer(client, item);
-				PrintToChatAll("%N - steal %S from %N", client, item, entityId);
-				PrintToChatAll("item %S", item);
+				PrintToChatAll("%N - steal %s from %N", client, item, entityId);
 			}
 			else
 			{
