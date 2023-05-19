@@ -77,7 +77,7 @@ public Plugin:MyInfo = {
 	version = "",
 	url = ""
 }
-#define MAX_WEAPONS 13
+#define MAX_WEAPONS 12
 // static char g_sWeaponNames[MAX_WEAPONS][] = 
 // {
 // 	"weapon_autoshotgun",
@@ -148,7 +148,7 @@ static char g_sWeapons[MAX_WEAPONS][] =
 	"weapon_pipe_bomb",
 	"weapon_first_aid_kit",
 	"weapon_pain_pills",
-	"weapon_katana",
+	// "weapon_katana",
 	"weapon_pistol" ,
 	"weapon_pistol_magnum"
 };
@@ -160,7 +160,8 @@ public OnPluginStart() {
 	RegisterSkill("Explosion 爆裂" ,Timer_Skill_Explosion_Start, Timer_Skill_Null_End, Timer_Skill_Null_Ready, 1.0, 2.0, 30.0);
 	RegisterSkill("Mana Shield 魔心護盾" ,Timer_Skill_ManaShield_Start, Timer_Skill_ManaShield_End, Timer_Skill_Null_Ready, 0.0, -1.0, 0.0);
 	RegisterSkill("Eagle Eye 鷹眼" ,Timer_Skill_EagleEye_Start, Timer_Skill_Null_End, Timer_Skill_Null_Ready, 5.0, 2.0, 40.0);
-	//RegisterSkill("Find Item 第六感" ,Timer_Skill_EagleEye_Start, Timer_Skill_EagleEye_End, Timer_Skill_Null_Ready, 10.0, 60.0, 80.0);
+	RegisterSkill("Steal 偷竊" ,Timer_Skill_Steal_Start, Timer_Skill_Null_End, Timer_Skill_Null_Ready, 5.0, 2.0, 40.0);// Float:skill_duration, Float:skill_cooldown, Float:skill_mpcost
+	//RegisterSkill("Sixth Sense 第六感" ,Timer_Skill_EagleEye_Start, Timer_Skill_EagleEye_End, Timer_Skill_Null_Ready, 10.0, 60.0, 80.0);
 
 	//Function: OnClientConnected
 	HookEvent("player_disconnect",		Event_StateTransition);
@@ -643,6 +644,14 @@ public Action:Timer_Skill_Null_Ready(Handle:timer, any:client) {
 //------------------------------------//
 //--------------steal-----------------//
 const int WEAPON_TYPE_NUM = 5;
+public Action:Timer_Skill_Steal_Start(Handle:timer, any:client) {
+	//PrepareAndEmitSoundtoAll("skills\\eagleeye.mp3", .entity = client, .volume = 1.0);
+	
+	GlowForSecs(client, 0, 100, 0, 10.0);
+	Skill_Steal(client);
+	
+	return Plugin_Stop;
+}
 
 public int ForceWeaponDropByType(client, type)
 {
@@ -691,7 +700,9 @@ public int GetNowWeapon(client)
 
 public SetItemToPlayer(client, char[] item)
 {
-	// char weapon[MAXCMD] = "weapon_autoshotgun"; //TODO: get random item
+	// char weapon[MAXCMD] = "weapon_katana"; //TODO: get random item
+	// new wq = CreateEntityByName(weapon);
+
 	new wq = CreateEntityByName(item);
 	if(wq>0)
 	{
@@ -710,7 +721,7 @@ public Skill_Steal(client)
 	if (entityId >= 0)
 	{
 		GetEdictClassname(entityId, target, MAXCMD);
-		PrintToChatAll("entityId %s", target);
+		// PrintToChatAll("entityId %s", target);
 
 		if (IsAliveInf(entityId))
 		{
@@ -728,12 +739,12 @@ public Skill_Steal(client)
 			// 2. If the player has aimed another client, check the item they are currently holding
 			//    Randomly select one item from the client and remove it from their inventory
 
-			// int weaponIdx = ForceWeaponDrop(entityId);
+			int weaponIdx = ForceWeaponDrop(entityId);
 			
-			int weaponType = GetRandomInt(0, WEAPON_TYPE_NUM - 1);
-			int weaponIdx = ForceWeaponDropByType(entityId, weaponType);
-			PrintToChatAll("weaponType %d", weaponType);
-			PrintToChatAll("weaponIdx %d", weaponIdx);
+			// int weaponType = GetRandomInt(0, WEAPON_TYPE_NUM - 1);
+			// int weaponIdx = ForceWeaponDropByType(entityId, weaponType);
+			// PrintToChatAll("weaponType %d", weaponType);
+			// PrintToChatAll("weaponIdx %d", weaponIdx);
 			if (weaponIdx > 0)
 			{
 				GetEdictClassname(weaponIdx, item, MAXCMD);
@@ -755,15 +766,15 @@ public Skill_Steal(client)
 //------------------------------------//
 //----------Explosion (爆裂)----------//
 public Action:Timer_Skill_Explosion_Start(Handle:timer, any:client) {
-	// PrepareAndEmitSoundtoAll("skills\\explosion.mp3", .entity = client, .volume = 1.0);
+	PrepareAndEmitSoundtoAll("skills\\explosion.mp3", .entity = client, .volume = 1.0);
 	
-	// GlowForSecs(client, 100, 0, 0, 1.5);
-	// ExplodeAim(client, 1.5);
+	GlowForSecs(client, 100, 0, 0, 1.5);
+	ExplodeAim(client, 1.5);
 
-	// //ExExplodeAim(client, 0.3);
-	// PrintToChatAll("%N - EXPLOSION!", client);
+	//ExExplodeAim(client, 0.3);
+	PrintToChatAll("%N - EXPLOSION!", client);
 
-	Skill_Steal(client);
+	// Skill_Steal(client);
 	return Plugin_Stop;
 }
 //----------Mana Shield (魔心護盾)----------//
@@ -985,7 +996,7 @@ public bool:IsAliveInf(client) {
 }
 
 public bool:IsAliveSpecialInf(client) {
-	if (client > GetMaxClients() || client <= 0) 
+	if (client > MaxClients || client <= 0) 
 	return false;
 	return (IsClientInGame(client) == true)
 	&& (IsPlayerAlive(client) == true)
@@ -999,7 +1010,7 @@ public bool:IsInf(client) {
 }
 
 public bool:IsSpecialInf(client) {
-	if (client > GetMaxClients() || client <= 0) return false;
+	if (client > MaxClients || client <= 0) return false;
 	return (IsClientInGame(client) == true)
 	&& (GetClientTeam(client) == 3);
 }
@@ -1045,7 +1056,7 @@ public GetAimOrigin(client, Float:hOrigin[3], Float:back_offset) {
 }
 
 public bool:TraceEntityFilterPlayer(entity, contentsMask) {
-	if (entity > GetMaxClients()) {
+	if (entity > MaxClients) {
 		return true;
 	} else {
 		return IsAliveSpecialInf(entity);
