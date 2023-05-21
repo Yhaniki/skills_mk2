@@ -160,7 +160,7 @@ public OnPluginStart() {
 	RegisterSkill("Explosion 爆裂" ,Timer_Skill_Explosion_Start, Timer_Skill_Null_End, Timer_Skill_Null_Ready, 1.0, 2.0, 30.0);
 	RegisterSkill("Mana Shield 魔心護盾" ,Timer_Skill_ManaShield_Start, Timer_Skill_ManaShield_End, Timer_Skill_Null_Ready, 0.0, -1.0, 0.0);
 	RegisterSkill("Eagle Eye 鷹眼" ,Timer_Skill_EagleEye_Start, Timer_Skill_Null_End, Timer_Skill_Null_Ready, 5.0, 2.0, 40.0);
-	RegisterSkill("Steal 偷竊" ,Timer_Skill_Steal_Start, Timer_Skill_Null_End, Timer_Skill_Null_Ready, 5.0, 2.0, 40.0);// Float:skill_duration, Float:skill_cooldown, Float:skill_mpcost
+	RegisterSkill("Steal 偷竊" ,Timer_Skill_Steal_Start, Timer_Skill_Null_End, Timer_Skill_Null_Ready, 0.5, 2.0, 20.0);// Float:skill_duration, Float:skill_cooldown, Float:skill_mpcost
 	//RegisterSkill("Sixth Sense 第六感" ,Timer_Skill_EagleEye_Start, Timer_Skill_EagleEye_End, Timer_Skill_Null_Ready, 10.0, 60.0, 80.0);
 
 	//Function: OnClientConnected
@@ -184,13 +184,13 @@ public OnPluginStart() {
 	
 	RegConsoleCmd("skill1",					Event_SkillStateTransition);
 	RegConsoleCmd("change_skill",			Event_SkillStateTransition);
-	
+	RegConsoleCmd("drop",					Event_SkillStateTransition);
 	//HookEvent("player_hurt", 			Event_DmgInflicted);
 	//HookEvent("infected_hurt", 			Event_DmgInflicted);
 }
 
 public CheckPlayerConnections() {
-	for (new i = 1; i < 33; i++) {
+	for (new i = 1; i < MaxClients; i++) {
 		if (IsClientInGame(i)) OnClientConnected(i);
 	}
 }
@@ -462,6 +462,11 @@ public Action:Event_SkillStateTransition(client, args) {
 		}
 	} else if (StrEqual(cmd, "change_skill")) {
 		Skill_Change_Menu(client);
+	}else if(StrEqual(cmd, "drop"))
+	{
+		int weapon = GetNowWeapon(client);
+		if (weapon > 0)
+			SDKHooks_DropWeapon(client, weapon, NULL_VECTOR, NULL_VECTOR);
 	}
 	
 	TriggerTimer(Skill_Notify_Timer[client], true);
@@ -469,7 +474,7 @@ public Action:Event_SkillStateTransition(client, args) {
 }
 
 public Action:Skill_Notify(Handle:timer, any:client) {
-	if (State_Transition[client] || (State_Player[client] == PLAYER_DEAD)) return;
+	if (State_Transition[client] || (State_Player[client] == PLAYER_DEAD) || !IsClientInGame(client)) return;
 	
 	new String:str[MAXCMD] = "";
 	new skill_using = Skill[client];
@@ -644,6 +649,14 @@ public Action:Timer_Skill_Null_Ready(Handle:timer, any:client) {
 //------------------------------------//
 //--------------steal-----------------//
 const int WEAPON_TYPE_NUM = 5;
+const int MAX_STEAL_AMMO = 350;
+const int MIN_STEAL_AMMO = 50;
+
+stock Weapon_GetPrimaryAmmoType(weapon)
+{
+	return GetEntProp(weapon, Prop_Data, "m_iPrimaryAmmoType");
+}
+
 public Action:Timer_Skill_Steal_Start(Handle:timer, any:client) {
 	//PrepareAndEmitSoundtoAll("skills\\eagleeye.mp3", .entity = client, .volume = 1.0);
 	
@@ -676,10 +689,21 @@ public int ForceWeaponDrop(client)
 	if (weapon >0)
 	{
 		GetEdictClassname(weapon, item, MAXCMD);
-		PrintToChatAll("weapon %d", weapon);
+		// PrintToChatAll("weapon %d", weapon);
 		if(StrEqual(item, "weapon_melee")==false)
-			RemoveEntity(weapon);
-			// SDKHooks_DropWeapon(client, weapon, NULL_VECTOR, NULL_VECTOR);
+		{
+			int activeweapon = GetEntPropEnt(client, Prop_Send, "m_hActiveWeapon");
+			if (GetEntProp(activeweapon, Prop_Send, "m_isDualWielding") && StrEqual(item, "weapon_pistol"))
+			{
+				RemoveEntity(weapon);
+				SetItemToPlayer(client, "weapon_pistol");
+			}
+			else
+			{
+				// SDKHooks_DropWeapon(client, weapon, NULL_VECTOR, NULL_VECTOR);
+				RemoveEntity(weapon);
+			}
+		}
 		else
 			weapon = -1;
 	}
@@ -707,7 +731,33 @@ public SetItemToPlayer(client, char[] item)
 	if(wq>0)
 	{
 		DispatchSpawn(wq);
-		EquipPlayerWeapon(client, wq);
+		// EquipPlayerWeapon(client, wq);
+		
+//----------------
+		if (StrEqual(item, "weapon_pistol"))
+		{
+			int activeweapon = GetEntPropEnt(client, Prop_Send, "m_hActiveWeapon");
+			if (activeweapon>0 && GetEntProp(activeweapon, Prop_Send, "m_isDualWielding"))
+			{
+				GivePlayerItem(client, "weapon_pistol");
+			}
+			else
+			{
+				PrintToChatAll("1234");
+			}
+			AcceptEntityInput(wq, "use", client);
+		}
+		else
+		{
+			EquipPlayerWeapon(client, wq);
+		}
+//----------------
+		int weapon = GetPlayerWeaponSlot(client, 0);
+		if (weapon == wq)
+		{
+			int ammoAmount = GetRandomInt(MIN_STEAL_AMMO, MAX_STEAL_AMMO);
+			GivePlayerAmmo(client, ammoAmount, Weapon_GetPrimaryAmmoType(weapon), true);
+		}
 	}
 }
 
@@ -723,24 +773,15 @@ public Skill_Steal(client)
 		GetEdictClassname(entityId, target, MAXCMD);
 		// PrintToChatAll("entityId %s", target);
 
-		if (IsAliveInf(entityId))
-		{
-			// 3. If the player has aimed a zombie, randomly choose an item from the item table
-			//    The chance of obtaining an item can be based on a predetermined percentage set in the table
-			// todo
-			int weaponIdx = GetRandomInt(0, MAX_WEAPONS-1);
-			PrintToChatAll("%N - steal %s from %s", client, g_sWeapons[weaponIdx], target);
-			SetItemToPlayer(client, g_sWeapons[weaponIdx]);
-		}
-		else if ((StrEqual(target, "player")) &&
-				 (IsPlayerAlive(entityId) == true) &&
-				 (GetClientTeam(entityId) != 3))
+		if ((StrEqual(target, "player")) &&
+			(IsPlayerAlive(entityId) == true) &&
+			(GetClientTeam(entityId) != 3))
 		{
 			// 2. If the player has aimed another client, check the item they are currently holding
 			//    Randomly select one item from the client and remove it from their inventory
 
 			int weaponIdx = ForceWeaponDrop(entityId);
-			
+
 			// int weaponType = GetRandomInt(0, WEAPON_TYPE_NUM - 1);
 			// int weaponIdx = ForceWeaponDropByType(entityId, weaponType);
 			// PrintToChatAll("weaponType %d", weaponType);
@@ -755,6 +796,19 @@ public Skill_Steal(client)
 			{
 				PrintToChatAll("%N - steal failed from %N", client, entityId);
 			}
+		}
+		else if (IsAliveInf(entityId) || IsAliveSpecialInf(entityId))
+		{
+			// 3. If the player has aimed a zombie, randomly choose an item from the item table
+			//    The chance of obtaining an item can be based on a predetermined percentage set in the table
+			// todo
+			int weaponIdx = GetRandomInt(0, MAX_WEAPONS - 1);
+			PrintToChatAll("%N - steal %s from %s", client, g_sWeapons[weaponIdx], target);
+			SetItemToPlayer(client, g_sWeapons[weaponIdx]);
+		}
+		else
+		{
+			PrintToChatAll("%N - steal failed", client);
 		}
 	}
 	else
