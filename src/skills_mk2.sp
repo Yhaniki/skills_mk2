@@ -2,7 +2,6 @@
 #include <sourcemod>
 #include <sdktools>
 #include <sdkhooks>
-
 #include "resourcemanager.sp"
 #include "damage.sp"
 
@@ -464,9 +463,10 @@ public Action:Event_SkillStateTransition(client, args) {
 		Skill_Change_Menu(client);
 	}else if(StrEqual(cmd, "drop"))
 	{
-		int weapon = GetNowWeapon(client);
-		if (weapon > 0)
-			SDKHooks_DropWeapon(client, weapon, NULL_VECTOR, NULL_VECTOR);
+		// int weapon = GetNowWeapon(client);
+		int activeweapon = GetEntPropEnt(client, Prop_Send, "m_hActiveWeapon");
+		if (activeweapon > 0)
+			SDKHooks_DropWeapon(client, activeweapon, NULL_VECTOR, NULL_VECTOR);
 	}
 	
 	TriggerTimer(Skill_Notify_Timer[client], true);
@@ -659,8 +659,8 @@ stock Weapon_GetPrimaryAmmoType(weapon)
 
 public Action:Timer_Skill_Steal_Start(Handle:timer, any:client) {
 	//PrepareAndEmitSoundtoAll("skills\\eagleeye.mp3", .entity = client, .volume = 1.0);
-	
-	GlowForSecs(client, 0, 100, 0, 10.0);
+	// FakeClientCommand(client, "give katana");
+	GlowForSecs(client, 0, 100, 0, 1.0);//rgb sec
 	Skill_Steal(client);
 	
 	return Plugin_Stop;
@@ -669,7 +669,7 @@ public Action:Timer_Skill_Steal_Start(Handle:timer, any:client) {
 public int ForceWeaponDropByType(client, type)
 {
 	int weapon = GetPlayerWeaponSlot(client, type);
-	
+
 	if (weapon > 0)
 	{
 		char item[MAXCMD];
@@ -712,13 +712,14 @@ public int ForceWeaponDrop(client)
 
 public int GetNowWeapon(client)
 {
-	int weapon = 0;
+	int weapon = -1;
 
-	for (new i = 0; i < WEAPON_TYPE_NUM; i++)
-	{
-		weapon = GetPlayerWeaponSlot(client, i);
-		if (weapon > 0) break;
-	}
+	weapon = GetEntPropEnt(client, Prop_Send, "m_hActiveWeapon");
+	// for (new i = 0; i < WEAPON_TYPE_NUM; i++)
+	// {
+	// 	weapon = GetPlayerWeaponSlot(client, i);
+	// 	if (weapon > 0) break;
+	// }
 	return weapon;
 }
 
@@ -728,22 +729,17 @@ public SetItemToPlayer(client, char[] item)
 	// new wq = CreateEntityByName(weapon);
 
 	new wq = CreateEntityByName(item);
-	if(wq>0)
+	if (wq > 0)
 	{
 		DispatchSpawn(wq);
 		// EquipPlayerWeapon(client, wq);
-		
-//----------------
+		//----------------
 		if (StrEqual(item, "weapon_pistol"))
 		{
 			int activeweapon = GetEntPropEnt(client, Prop_Send, "m_hActiveWeapon");
-			if (activeweapon>0 && GetEntProp(activeweapon, Prop_Send, "m_isDualWielding"))
+			if (activeweapon > 0 && GetEntProp(activeweapon, Prop_Send, "m_isDualWielding"))
 			{
 				GivePlayerItem(client, "weapon_pistol");
-			}
-			else
-			{
-				PrintToChatAll("1234");
 			}
 			AcceptEntityInput(wq, "use", client);
 		}
@@ -751,7 +747,7 @@ public SetItemToPlayer(client, char[] item)
 		{
 			EquipPlayerWeapon(client, wq);
 		}
-//----------------
+		//----------------
 		int weapon = GetPlayerWeaponSlot(client, 0);
 		if (weapon == wq)
 		{
