@@ -1,4 +1,4 @@
-#define SKILL_DEBUG       (true)
+#define SKILL_DEBUG       (false)
 #include <sourcemod>
 #include <sdktools>
 #include <sdkhooks>
@@ -295,7 +295,6 @@ public OnClientConnected(client) {
 	State_ManaShield[client] = false;
 
 	Init_Skill(client);
-
 	PrintPlayerState("connect", client);
 }
 
@@ -357,7 +356,8 @@ public Init_Skill(client) {
 	Skill_Notify_Ani_Timer[client] = CreateTimer(0.5, Skill_Notify_Ani, client, TIMER_REPEAT);
 	Skill_MPrecover_Timer[client] = CreateTimer(1.0, Skill_MPrecover, client, TIMER_REPEAT);
 	PrintToChatAll("Timer for %N created!", client);
-	Skill[client] = 0;
+	if(Skill[client]<0||Skill[client]>skill_num-1)
+		Skill[client] = 0;
 	Skill_MP[client] = 50.0;
 	Skill_Trigger(client);
 }
@@ -466,7 +466,7 @@ public Interrupt_Skill(client) {
 public Action:Event_SkillStateTransition(client, args) {
 	new String:cmd[MAXCMD];
 	GetCmdArg(0, cmd, MAXCMD);
-	
+
 	if (State_Transition[client] || (State_Player[client] == PLAYER_DEAD)) return Plugin_Handled;
 	
 	new skill_using = Skill[client];
