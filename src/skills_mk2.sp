@@ -12,6 +12,11 @@ const MAXSKILLNAME = 64;
 const MAXSKILLS = 64;
 const MAXENTITIES = 4096;
 const Float:MP_INC_PERSEC = 0.5;
+const Float:MP_BAR_SIZE = 25.0;
+const Float:MP_MAX = 100.0;
+const int WEAPON_TYPE_NUM = 5;
+const int MAX_STEAL_AMMO = 350;
+const int MIN_STEAL_AMMO = 50;
 
 #define PARTICLE_EXPLOSION				"Skill_Explosion"
 #define PARTICLE_EAGLEEYE				"Skill_EagleEye"
@@ -153,7 +158,8 @@ static char g_sWeapons[MAX_WEAPONS][] =
 };
 
 public OnPluginStart() {
-	//CheckPlayerConnections();
+	PrintToServer("=============Plugin Start===============");
+
 	//Setup_Materials();
 
 	RegisterSkill("Explosion 爆裂" ,Timer_Skill_Explosion_Start, Timer_Skill_Null_End, Timer_Skill_Null_Ready, 1.0, 2.0, 30.0);
@@ -176,7 +182,7 @@ public OnPluginStart() {
 	HookEvent("heal_success",				Event_MPGain);
 	HookEvent("adrenaline_used",			Event_MPGain);
 	HookEvent("pills_used",					Event_MPGain);
-	
+
 	HookEvent("player_hurt", 				Event_DmgReducedByManaShield);
 	
 	HookEvent("player_death", 				Event_DeathUnglow);
@@ -186,6 +192,7 @@ public OnPluginStart() {
 	RegConsoleCmd("drop",					Event_SkillStateTransition);
 	//HookEvent("player_hurt", 			Event_DmgInflicted);
 	//HookEvent("infected_hurt", 			Event_DmgInflicted);
+	CheckPlayerConnections();
 }
 
 public CheckPlayerConnections() {
@@ -240,11 +247,11 @@ public Action:PrecacheParticle(String:particlename[]) {
 		ActivateEntity(particle);
 		AcceptEntityInput(particle, "start");
 		CreateTimer(0.1, DeleteParticles, particle, TIMER_FLAG_NO_MAPCHANGE);
-	}  
+	}
 }
 
 public Action:DeleteParticles(Handle:timer, any:particle) {
-   if (IsValidEntity(particle)) {
+	if (IsValidEntity(particle)) {
 		new String:classname[64];
 		GetEdictClassname(particle, classname, sizeof(classname));
 		if (StrEqual(classname, "info_particle_system", false)) {
@@ -276,15 +283,17 @@ public Action:CreateParticle(String:particlename[], Float:time, Float:Pos[3]) {
 
 public OnClientConnected(client) {
 	if (State_Connection[client]) Delete_Skill(client);
-
 	if (!IsPlayer(client)) return;
 	State_Connection[client] = true;
 	State_Transition[client] = false;
 	State_Player[client] = PLAYER_DEAD;
-	
+	if ((IsClientInGame(client) == true) &&
+		(IsFakeClient(client) == false) &&
+		(IsPlayerAlive(client) == true))
+		State_Player[client] = PLAYER_ALIVE;
 	State_Adrenaline_Boost[client] = false;
 	State_ManaShield[client] = false;
-	
+
 	Init_Skill(client);
 
 	PrintPlayerState("connect", client);
@@ -292,12 +301,20 @@ public OnClientConnected(client) {
 
 public Event_StateTransition(Handle:event, const String:name[], bool:dontBroadcast) {
 	new client = 0;
-	if (StrEqual(name, "player_disconnect") || StrEqual(name, "player_spawn") || StrEqual(name, "player_death") || StrEqual(name, "player_incapacitated") || StrEqual(name, "player_transitioned")) {
+
+	if (StrEqual(name, "player_disconnect") ||
+		StrEqual(name, "player_spawn") ||
+		StrEqual(name, "player_death") ||
+		StrEqual(name, "player_incapacitated") ||
+		StrEqual(name, "player_transitioned"))
+	{
 		client = GetClientOfUserId(GetEventInt(event, "userid"));
-	} else if (StrEqual(name, "revive_success")) {
+	}
+	else if (StrEqual(name, "revive_success"))
+	{
 		client = GetClientOfUserId(GetEventInt(event, "subject"));
 	}
-	
+
 	if (!IsPlayer(client)) return;
 	
 	if (StrEqual(name, "player_disconnect")) {
@@ -329,6 +346,12 @@ public Event_StateTransition(Handle:event, const String:name[], bool:dontBroadca
 //===========================================================
 
 public Init_Skill(client) {
+	if(Skill_Notify_Timer[client]!=null)
+		delete Skill_Notify_Timer[client];
+	if(Skill_Notify_Ani_Timer[client]!=null)
+		delete Skill_Notify_Ani_Timer[client];
+	if(Skill_MPrecover_Timer[client]!=null)
+		delete Skill_MPrecover_Timer[client];
 	Skill_Notify_Timer[client] = CreateTimer(0.5, Skill_Notify, client, TIMER_REPEAT);
 	Skill_Notify_Ani_State[client] = 0;
 	Skill_Notify_Ani_Timer[client] = CreateTimer(0.5, Skill_Notify_Ani, client, TIMER_REPEAT);
@@ -340,10 +363,17 @@ public Init_Skill(client) {
 }
 
 public Delete_Skill(client) {
-	delete Skill_Notify_Timer[client];
-	delete Skill_Notify_Ani_Timer[client];
-	delete Skill_MPrecover_Timer[client];
-	
+	if(Skill_Notify_Timer[client]!=null)
+		delete Skill_Notify_Timer[client];
+	if(Skill_Notify_Ani_Timer[client]!=null)
+		delete Skill_Notify_Ani_Timer[client];
+	if(Skill_MPrecover_Timer[client]!=null)
+		delete Skill_MPrecover_Timer[client];
+
+	// if(Skill_Cooldown_Timer[client]!=null)
+	// 	delete Skill_Cooldown_Timer[client];
+	// if(Skill_Duration_Timer[client]!=null)
+	// 	delete Skill_Duration_Timer[client];
 	Interrupt_Skill(client);
 }
 
@@ -352,7 +382,6 @@ public Skill_Trigger(client) {
 
 	Skill_State[client] = SKILL_ACT;
 	Skill_LastUseTime[client] = GetGameTime();
-
 	Skill_Cooldown_Timer[client] = CreateTimer(Skill_Cooldown[skill_using] + Skill_Duration[skill_using], Timer:Timer_Skill_Ready[skill_using], client);
 	Skill_Duration_Timer[client] = CreateTimer(Skill_Duration[skill_using], Timer:Timer_Skill_End[skill_using], client);
 }
@@ -409,7 +438,6 @@ public Skill_Change(client, skill) {
 	}
 
 	Skill[client] = skill;
-	
 	skill_using = Skill[client];
 
 	switch (Skill_Type[skill_using]) {
@@ -509,7 +537,8 @@ public Action:Skill_Notify(Handle:timer, any:client) {
 public Skill_Notify_MPbar(const String:str[], client) {
 	new String:bar[MAXCMD] = "";
 	new String:dot[MAXCMD] = "";
-	new bar_amount = RoundToFloor(Skill_MP[client] * 0.25);
+	float resolution = MP_BAR_SIZE/MP_MAX;
+	new bar_amount = RoundToFloor(Skill_MP[client] * resolution);
 	for (new i = 0; i < bar_amount; i++) {
 		if (State_Adrenaline_Boost[client]) {
 			Format(dot, MAXCMD, "%s/", dot);
@@ -520,7 +549,7 @@ public Skill_Notify_MPbar(const String:str[], client) {
 	if (State_ManaShield[client]) {
 		Format(dot, MAXCMD, "%s) ", dot);
 	}
-	for (new i = 0; i < 25 - bar_amount; i++) {
+	for (new i = 0; i < MP_BAR_SIZE - bar_amount; i++) {
 		if (State_ManaShield[client]) {
 			Format(dot, MAXCMD, "%s ", dot);
 		} else {
@@ -558,7 +587,7 @@ public MP_Increase(client, Float:mp) {
 	} else {
 		Skill_MP[client] += mp;
 	}
-	if (Skill_MP[client] > 100.0) Skill_MP[client] = 100.0;
+	if (Skill_MP[client] > MP_MAX) Skill_MP[client] = MP_MAX;
 	TriggerTimer(Skill_Notify_Timer[client], true);
 }
 
@@ -648,10 +677,6 @@ public Action:Timer_Skill_Null_Ready(Handle:timer, any:client) {
 }
 //------------------------------------//
 //--------------steal-----------------//
-const int WEAPON_TYPE_NUM = 5;
-const int MAX_STEAL_AMMO = 350;
-const int MIN_STEAL_AMMO = 50;
-
 stock Weapon_GetPrimaryAmmoType(weapon)
 {
 	return GetEntProp(weapon, Prop_Data, "m_iPrimaryAmmoType");
@@ -1299,4 +1324,4 @@ public ShowSpriteOnClient(client) {
 		AcceptEntityInput(sprite, "FireUser1"); 
 		*/
 	} 
-}  
+}
