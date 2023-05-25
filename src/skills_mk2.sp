@@ -192,6 +192,8 @@ public OnPluginStart() {
 	RegConsoleCmd("drop",					Event_SkillStateTransition);
 	//HookEvent("player_hurt", 			Event_DmgInflicted);
 	//HookEvent("infected_hurt", 			Event_DmgInflicted);
+	HookEvent("gameinstructor_nodraw", Event_NoDraw, EventHookMode_PostNoCopy);
+	HookEvent("gameinstructor_draw", Event_Draw, EventHookMode_PostNoCopy);
 	CheckPlayerConnections();
 }
 
@@ -298,6 +300,20 @@ public OnClientConnected(client) {
 	PrintPlayerState("connect", client);
 }
 
+public void Event_Draw(Event event, const char[] name, bool dontBroadcast)
+{
+	for (new i = 1; i < MaxClients; i++) {
+		State_Transition[i] = false;
+	}
+}
+
+public void Event_NoDraw(Event event, const char[] name, bool dontBroadcast)
+{
+	for (new i = 1; i < MaxClients; i++) {
+		State_Transition[i] = true;
+	}
+}
+
 public Event_StateTransition(Handle:event, const String:name[], bool:dontBroadcast) {
 	new client = 0;
 
@@ -322,7 +338,7 @@ public Event_StateTransition(Handle:event, const String:name[], bool:dontBroadca
 	} else if (StrEqual(name, "map_transition")) {
 		for (new i = 0; i < MAXPLAYERS + 1; i++) {
 			State_Transition[i] = true;
-			Interrupt_Skill(client);
+			Interrupt_Skill(i);
 		}
 	} else if (StrEqual(name, "player_transitioned")) {
 		State_Transition[client] = false;
@@ -502,7 +518,7 @@ public Action:Event_SkillStateTransition(client, args) {
 }
 
 public Action:Skill_Notify(Handle:timer, any:client) {
-	if (State_Transition[client] || (State_Player[client] == PLAYER_DEAD) || !IsClientInGame(client)) return;
+	if (State_Transition[client] || (State_Player[client] == PLAYER_DEAD) || !IsClientInGame(client) || !IsPlayer(client)) return;
 	
 	new String:str[MAXCMD] = "";
 	new skill_using = Skill[client];
@@ -1095,6 +1111,11 @@ public bool:IsAliveHumanPlayer(client) {
 	&& (IsFakeClient(client) == false)
 	&& (IsPlayerAlive(client) == true)
 	&& (GetClientTeam(client) == 2);
+}
+
+bool IsIncapped(int client)
+{
+	return view_as<bool>(GetEntProp(client, Prop_Send, "m_isIncapacitated"));
 }
 
 public GetAimOrigin(client, Float:hOrigin[3], Float:back_offset) {
