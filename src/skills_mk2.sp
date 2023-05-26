@@ -1,4 +1,4 @@
-#define SKILL_DEBUG       (false)
+#define SKILL_DEBUG       (true)
 #include <sourcemod>
 #include <sdktools>
 #include <sdkhooks>
@@ -159,9 +159,8 @@ static char g_sWeapons[MAX_WEAPONS][] =
 
 public OnPluginStart() {
 	PrintToServer("=============Plugin Start===============");
-
+	
 	//Setup_Materials();
-
 	RegisterSkill("Explosion 爆裂" ,Timer_Skill_Explosion_Start, Timer_Skill_Null_End, Timer_Skill_Null_Ready, 1.0, 2.0, 30.0);
 	RegisterSkill("Mana Shield 魔心護盾" ,Timer_Skill_ManaShield_Start, Timer_Skill_ManaShield_End, Timer_Skill_Null_Ready, 0.0, -1.0, 0.0);
 	RegisterSkill("Eagle Eye 鷹眼" ,Timer_Skill_EagleEye_Start, Timer_Skill_Null_End, Timer_Skill_Null_Ready, 5.0, 2.0, 40.0);
@@ -336,10 +335,12 @@ public Event_StateTransition(Handle:event, const String:name[], bool:dontBroadca
 		State_Connection[client] = false; 
 		Delete_Skill(client);
 	} else if (StrEqual(name, "map_transition")) {
-		for (new i = 0; i < MAXPLAYERS + 1; i++) {
-			State_Transition[i] = true;
-			Interrupt_Skill(i);
-		}
+		State_Transition[client] = true;
+		Interrupt_Skill(client);
+		// for (new i = 0; i < MAXPLAYERS + 1; i++) {
+		// 	State_Transition[i] = true;
+		// 	Interrupt_Skill(client);
+		// }
 	} else if (StrEqual(name, "player_transitioned")) {
 		State_Transition[client] = false;
 		Setup_Materials();
@@ -572,6 +573,7 @@ public Skill_Notify_MPbar(const String:str[], client) {
 			Format(dot, MAXCMD, "%s ", dot);
 		}
 	}
+
 	PrintHintText(client, "%s\n[%s%s] MP %d", str, bar, dot, RoundToFloor(Skill_MP[client]));
 }
 
@@ -734,7 +736,7 @@ public int ForceWeaponDrop(client)
 		if(StrEqual(item, "weapon_melee")==false)
 		{
 			int activeweapon = GetEntPropEnt(client, Prop_Send, "m_hActiveWeapon");
-			if (GetEntProp(activeweapon, Prop_Send, "m_isDualWielding") && StrEqual(item, "weapon_pistol"))
+			if (StrEqual(item, "weapon_pistol")&&GetEntProp(activeweapon, Prop_Send, "m_isDualWielding"))
 			{
 				RemoveEntity(weapon);
 				SetItemToPlayer(client, "weapon_pistol");
@@ -854,11 +856,12 @@ public Skill_Steal(client)
 		PrintToChatAll("%N - steal failed", client);
 	}
 }
+
 //------------------------------------//
 //----------Explosion (爆裂)----------//
 public Action:Timer_Skill_Explosion_Start(Handle:timer, any:client) {
 	PrepareAndEmitSoundtoAll("skills\\explosion.mp3", .entity = client, .volume = 1.0);
-	
+
 	GlowForSecs(client, 100, 0, 0, 1.5);
 	ExplodeAim(client, 1.5);
 
@@ -868,8 +871,8 @@ public Action:Timer_Skill_Explosion_Start(Handle:timer, any:client) {
 	// Skill_Steal(client);
 	return Plugin_Stop;
 }
-//----------Mana Shield (魔心護盾)----------//
 
+//----------Mana Shield (魔心護盾)----------//
 public Action:Timer_Skill_ManaShield_Start(Handle:timer, any:client) {
 	GlowForSecs(client, 0, 0, 100, 10.0);
 	
