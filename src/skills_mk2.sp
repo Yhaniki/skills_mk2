@@ -1,4 +1,4 @@
-#define SKILL_DEBUG       (true)
+#define SKILL_DEBUG       (false)
 #include <sourcemod>
 #include <sdktools>
 #include <sdkhooks>
@@ -483,7 +483,6 @@ public Interrupt_Skill(client) {
 public Action:Event_SkillStateTransition(client, args) {
 	new String:cmd[MAXCMD];
 	GetCmdArg(0, cmd, MAXCMD);
-
 	if (State_Transition[client] || (State_Player[client] == PLAYER_DEAD)) return Plugin_Handled;
 	
 	new skill_using = Skill[client];
@@ -1074,7 +1073,7 @@ public Action:Timer_Unslow(Handle:timer, any:client) {
 
 public bool:IsPlayer(client) {
 	if ((client < 1) || (client > MAXPLAYERS)) return false;
-	if (IsFakeClient(client)) return false;
+	if (client>0&&IsClientInGame(client)&&IsFakeClient(client)) return false;
 	return true;
 }
 
