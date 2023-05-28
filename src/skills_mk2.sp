@@ -332,7 +332,8 @@ public Event_StateTransition(Handle:event, const String:name[], bool:dontBroadca
 	if (!IsPlayer(client)) return;
 	
 	if (StrEqual(name, "player_disconnect")) {
-		State_Connection[client] = false; 
+		State_Connection[client] = false;
+		State_Player[client] = PLAYER_DEAD;
 		Delete_Skill(client);
 	} else if (StrEqual(name, "map_transition")) {
 		State_Transition[client] = true;
@@ -353,7 +354,7 @@ public Event_StateTransition(Handle:event, const String:name[], bool:dontBroadca
 		Interrupt_Skill(client);
 	}
 	
-	if (!StrEqual(name, "player_disconnect")) TriggerTimer(Skill_Notify_Timer[client], true);
+	//if (!StrEqual(name, "player_disconnect")) TriggerTimer(Skill_Notify_Timer[client], true);
 	PrintPlayerState(name, client);
 }
 
@@ -401,6 +402,7 @@ public Skill_Trigger(client) {
 	Skill_LastUseTime[client] = GetGameTime();
 	Skill_Cooldown_Timer[client] = CreateTimer(Skill_Cooldown[skill_using] + Skill_Duration[skill_using], Timer:Timer_Skill_Ready[skill_using], client);
 	Skill_Duration_Timer[client] = CreateTimer(Skill_Duration[skill_using], Timer:Timer_Skill_End[skill_using], client);
+	TriggerTimer(Skill_Notify_Timer[client], true);
 }
 
 public int Skill_Change_Menu_Handler(Menu menu, MenuAction action, int param1, int param2) {
@@ -1073,7 +1075,7 @@ public Action:Timer_Unslow(Handle:timer, any:client) {
 
 public bool:IsPlayer(client) {
 	if ((client < 1) || (client > MAXPLAYERS)) return false;
-	if (client>0&&IsClientInGame(client)&&IsFakeClient(client)) return false;
+	if (client>0&&IsFakeClient(client)) return false;
 	return true;
 }
 
