@@ -1074,7 +1074,7 @@ public Action:Timer_Unslow(Handle:timer, any:client) {
 //===========================================================
 
 public bool:IsPlayer(client) {
-	if ((client < 1) || (client > MAXPLAYERS)) return false;
+	if ((client < 1) || (client > MAXPLAYERS) || !IsClientInGame(client)) return false;
 	if (client>0&&IsFakeClient(client)) return false;
 	return true;
 }
