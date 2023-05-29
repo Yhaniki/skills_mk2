@@ -737,15 +737,18 @@ public int ForceWeaponDrop(client)
 		if(StrEqual(item, "weapon_melee")==false)
 		{
 			int activeweapon = GetEntPropEnt(client, Prop_Send, "m_hActiveWeapon");
-			if (StrEqual(item, "weapon_pistol")&&GetEntProp(activeweapon, Prop_Send, "m_isDualWielding"))
+			if(activeweapon>0)
 			{
-				RemoveEntity(weapon);
-				SetItemToPlayer(client, "weapon_pistol");
-			}
-			else
-			{
-				// SDKHooks_DropWeapon(client, weapon, NULL_VECTOR, NULL_VECTOR);
-				RemoveEntity(weapon);
+				if (StrEqual(item, "weapon_pistol")&&GetEntProp(activeweapon, Prop_Send, "m_isDualWielding"))
+				{
+					RemoveEntity(weapon);
+					SetItemToPlayer(client, "weapon_pistol");
+				}
+				else
+				{
+					// SDKHooks_DropWeapon(client, weapon, NULL_VECTOR, NULL_VECTOR);
+					RemoveEntity(weapon);
+				}
 			}
 		}
 		else
@@ -1074,7 +1077,7 @@ public Action:Timer_Unslow(Handle:timer, any:client) {
 //===========================================================
 
 public bool:IsPlayer(client) {
-	if ((client < 1) || (client > MAXPLAYERS) || !IsClientInGame(client)) return false;
+	if ((client < 1) || (client > MAXPLAYERS)) return false;
 	if (client>0&&IsFakeClient(client)) return false;
 	return true;
 }
