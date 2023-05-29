@@ -189,6 +189,7 @@ public OnPluginStart() {
 	RegConsoleCmd("skill1",					Event_SkillStateTransition);
 	RegConsoleCmd("change_skill",			Event_SkillStateTransition);
 	RegConsoleCmd("drop",					Event_SkillStateTransition);
+	RegConsoleCmd("fix",					Event_SkillStateTransition);
 	//HookEvent("player_hurt", 			Event_DmgInflicted);
 	//HookEvent("infected_hurt", 			Event_DmgInflicted);
 	HookEvent("gameinstructor_nodraw", Event_NoDraw, EventHookMode_PostNoCopy);
@@ -397,11 +398,22 @@ public Delete_Skill(client) {
 
 public Skill_Trigger(client) {
 	new skill_using = Skill[client];
+	switch (Skill_Type[skill_using])
+	{
+		case TYPE_NORMAL:
+		{
+			Skill_State[client] = SKILL_ACT;
+			Skill_LastUseTime[client] = GetGameTime();
+			Skill_Cooldown_Timer[client] = CreateTimer(Skill_Cooldown[skill_using] + Skill_Duration[skill_using], Timer: Timer_Skill_Ready[skill_using], client);
+			Skill_Duration_Timer[client] = CreateTimer(Skill_Duration[skill_using], Timer: Timer_Skill_End[skill_using], client);
+		}
+		case TYPE_PASSIVE:
+		{
+			Skill_State[client] = SKILL_ACT;
+			CreateTimer(0.0, Timer: Timer_Skill_Start[skill_using], client);
+		}
+	}
 
-	Skill_State[client] = SKILL_ACT;
-	Skill_LastUseTime[client] = GetGameTime();
-	Skill_Cooldown_Timer[client] = CreateTimer(Skill_Cooldown[skill_using] + Skill_Duration[skill_using], Timer:Timer_Skill_Ready[skill_using], client);
-	Skill_Duration_Timer[client] = CreateTimer(Skill_Duration[skill_using], Timer:Timer_Skill_End[skill_using], client);
 	TriggerTimer(Skill_Notify_Timer[client], true);
 }
 
@@ -475,8 +487,12 @@ public Skill_Change(client, skill) {
 
 public Interrupt_Skill(client) {
 	//Delete timers
-	if ((Skill_State[client] == SKILL_CD) || (Skill_State[client] == SKILL_ACT)) TriggerTimer(Skill_Cooldown_Timer[client]);
-	if (Skill_State[client] == SKILL_ACT) TriggerTimer(Skill_Duration_Timer[client]);
+	new skill_using = Skill[client];
+	if (Skill_Type[skill_using]==TYPE_NORMAL)
+	{
+		if ((Skill_State[client] == SKILL_CD) || (Skill_State[client] == SKILL_ACT)) TriggerTimer(Skill_Cooldown_Timer[client]);
+		if (Skill_State[client] == SKILL_ACT) TriggerTimer(Skill_Duration_Timer[client]);
+	}
 	if (State_Adrenaline_Boost[client]) TriggerTimer(Skill_Adrenaline_Boost_Timer[client]);
 	
 	Skill_State[client] = SKILL_RDY;
@@ -505,16 +521,24 @@ public Action:Event_SkillStateTransition(client, args) {
 				PrintToChat(client, "Skill is not ready yet.");
 			}
 		}
-	} else if (StrEqual(cmd, "change_skill")) {
+	}
+	else if (StrEqual(cmd, "change_skill"))
+	{
 		Skill_Change_Menu(client);
-	}else if(StrEqual(cmd, "drop"))
+	}
+	else if (StrEqual(cmd, "drop"))
 	{
 		// int weapon = GetNowWeapon(client);
 		int activeweapon = GetEntPropEnt(client, Prop_Send, "m_hActiveWeapon");
 		if (activeweapon > 0)
 			SDKHooks_DropWeapon(client, activeweapon, NULL_VECTOR, NULL_VECTOR);
 	}
-	
+	else if (StrEqual(cmd, "fix"))
+	{
+		PrintToChat(client, "Correction Mana Bar");
+		OnClientConnected(client);
+	}
+
 	TriggerTimer(Skill_Notify_Timer[client], true);
 	return Plugin_Handled;
 }
@@ -672,6 +696,9 @@ public RegisterSkill(String:skill_name[MAXSKILLNAME], Function:timer_skill_start
 	
 	if (skill_cooldown <= 0.0) {
 		Skill_Type[skill_num] = TYPE_PASSIVE;
+		Skill_Duration[skill_num] = 0.0;
+		Skill_Cooldown[skill_num] = 0.0;
+		Skill_MPcost[skill_num] = 0.0;
 	} else {
 		Skill_Type[skill_num] = TYPE_NORMAL;
 		Skill_Duration[skill_num] = skill_duration;
@@ -980,8 +1007,8 @@ public Action:Event_DmgInflicted(Handle:event, const String:name[], bool:dontBro
 //===========================================================
 
 public GlowForSecs(client, r, g, b, Float:time) {
-	if (State_Glow[client]) KillTimer(Glow_Timer[client]);
-	
+	if (State_Glow[client]&&Glow_Timer[client]!=null) KillTimer(Glow_Timer[client]);
+	if(client<0||!IsClientInGame(client))return;
 	State_Glow[client] = true;
 
 	new glowcolor = r + g * 256 + b * 65536;
@@ -1045,7 +1072,7 @@ public Action:Timer_Unfreeze(Handle:timer, any:client) {
 //===========================================================
 
 public SlowForSecs(Float:time, client) {
-	if (State_Slow) KillTimer(Slow_Timer);
+	if (State_Slow&&Slow_Timer!=null)KillTimer(Slow_Timer);
 	
 	State_Slow = true;
 	
@@ -1294,8 +1321,6 @@ public Action:Timer_ExExplodeAimDelay(Handle:timer, DataPack:DP) {
 	
 	return Plugin_Stop;
 }
-
-
 
 public PropaneAtPos(Float:Pos[3]) {
 	new prop = CreateEntityByName("prop_physics");
