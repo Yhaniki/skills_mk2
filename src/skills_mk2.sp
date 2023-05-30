@@ -1007,14 +1007,14 @@ public Action:Event_DmgInflicted(Handle:event, const String:name[], bool:dontBro
 //===========================================================
 
 public GlowForSecs(client, r, g, b, Float:time) {
+	if(!IsValidEntity(client))return;
 	if (State_Glow[client]&&Glow_Timer[client]!=null) KillTimer(Glow_Timer[client]);
-	if(client<0||!IsClientInGame(client))return;
 	State_Glow[client] = true;
 
-	new glowcolor = r + g * 256 + b * 65536;
+	// new glowcolor = r + g * 256 + b * 65536;
+	int glowcolor = r | (g << 8) | (b << 16);
 	SetEntProp(client, Prop_Send, "m_glowColorOverride", glowcolor);
 	SetEntProp(client, Prop_Send, "m_iGlowType", 3);
-	
 	Glow_Timer[client] = CreateTimer(time, Timer:Timer_Unglow, client);
 }
 
@@ -1022,7 +1022,7 @@ public Action:Timer_Unglow(Handle:timer, any:client) {
 	State_Glow[client] = false;
 
 	if (!IsValidEntity(client)) return Plugin_Stop;
-	if (!(IsPlayer(client) || IsInf(client) || IsSpecialInf(client))) return Plugin_Stop;
+	// if (!(IsPlayer(client) || IsInf(client) || IsSpecialInf(client))) return Plugin_Stop;
 	SetEntProp(client, Prop_Send, "m_glowColorOverride", 0);
 	SetEntProp(client, Prop_Send, "m_iGlowType", 0);	
 
