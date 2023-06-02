@@ -1,7 +1,9 @@
 #define SKILL_DEBUG       (false)
+#define GAMEDATA          ("l4d2_melee_range")
 #include <sourcemod>
 #include <sdktools>
 #include <sdkhooks>
+#include <dhooks>
 #include "resourcemanager.sp"
 #include "damage.sp"
 
@@ -73,6 +75,7 @@ new Float:Skill_Cooldown[MAXSKILLS];
 new Float:Skill_Duration[MAXSKILLS];
 new Float:Skill_MPcost[MAXSKILLS];
 new skill_num = 0;
+Handle g_hDetour;
 
 public Plugin:MyInfo = {
 	name = "Skills",
@@ -156,10 +159,55 @@ static char g_sWeapons[MAX_WEAPONS][] =
 	"weapon_pistol" ,
 	"weapon_pistol_magnum"
 };
+ConVar g_hCvarMeleeRange;
+int g_iStockRange;
+MRESReturn TestMeleeSwingCollisionPre(int pThis, Handle hReturn)
+{
+	if( IsValidEntity(pThis) )
+	{
+		int owner = GetEntPropEnt(pThis, Prop_Send, "m_hOwnerEntity");
+		if(StrEqual(Skill_Name[Skill[owner]], "Mana Shield"))
+		{
+			g_hCvarMeleeRange.SetInt(1);
+		}
+		else
+			g_hCvarMeleeRange.SetInt(g_iStockRange);
+	}
+
+	return MRES_Ignored;
+}
+
+MRESReturn TestMeleeSwingCollisionPost(int pThis, Handle hReturn)
+{
+	g_hCvarMeleeRange.SetInt(g_iStockRange);
+	return MRES_Ignored;
+}
 
 public OnPluginStart() {
 	PrintToServer("=============Plugin Start===============");
-	
+//------------------------------
+	char sPath[PLATFORM_MAX_PATH];
+	BuildPath(Path_SM, sPath, sizeof(sPath), "gamedata/%s.txt", GAMEDATA);
+	if( FileExists(sPath) == false ) SetFailState("\n==========\nMissing required file: \"%s\".\nRead installation instructions again.\n==========", sPath);
+
+	Handle hGameData = LoadGameConfigFile(GAMEDATA);
+	if( hGameData == null ) SetFailState("Failed to load \"%s.txt\" gamedata.", GAMEDATA);
+
+	g_hDetour = DHookCreateFromConf(hGameData, "CTerrorMeleeWeapon::TestMeleeSwingCollision");
+	delete hGameData;
+
+	if( !g_hDetour )
+		SetFailState("Failed to find \"CTerrorMeleeWeapon::GetPrimaryAttackActivity\" signature.");
+
+	if( !DHookEnableDetour(g_hDetour, false, TestMeleeSwingCollisionPre) )
+		SetFailState("Failed to detour pre \"CTerrorMeleeWeapon::TestMeleeSwingCollision\".");
+
+	if( !DHookEnableDetour(g_hDetour, true, TestMeleeSwingCollisionPost) )
+		SetFailState("Failed to detour post \"CTerrorMeleeWeapon::TestMeleeSwingCollision\".");
+
+	g_hCvarMeleeRange = FindConVar("melee_range");
+	g_iStockRange = g_hCvarMeleeRange.IntValue;
+//------------------------------
 	//Setup_Materials();
 	RegisterSkill("Explosion 爆裂" ,Timer_Skill_Explosion_Start, Timer_Skill_Null_End, Timer_Skill_Null_Ready, 1.0, 2.0, 30.0);
 	RegisterSkill("Mana Shield 魔心護盾" ,Timer_Skill_ManaShield_Start, Timer_Skill_ManaShield_End, Timer_Skill_Null_Ready, 0.0, -1.0, 0.0);
@@ -497,7 +545,17 @@ public Interrupt_Skill(client) {
 	
 	Skill_State[client] = SKILL_RDY;
 }
-
+public test()
+{
+	new entity = -1;
+	PrintToServer("1test");
+	while( (entity = FindEntityByClassname(entity, "infected")) != INVALID_ENT_REFERENCE )
+	{
+		SetEntProp(entity, Prop_Send, "m_glowColorOverride", 0);
+		SetEntProp(entity, Prop_Send, "m_iGlowType", 0);	
+	}
+	PrintToServer("end");
+}
 public Action:Event_SkillStateTransition(client, args) {
 	new String:cmd[MAXCMD];
 	GetCmdArg(0, cmd, MAXCMD);
@@ -531,12 +589,13 @@ public Action:Event_SkillStateTransition(client, args) {
 		// int weapon = GetNowWeapon(client);
 		int activeweapon = GetEntPropEnt(client, Prop_Send, "m_hActiveWeapon");
 		if (activeweapon > 0)
-			SDKHooks_DropWeapon(client, activeweapon, NULL_VECTOR, NULL_VECTOR);
+				SDKHooks_DropWeapon(client, activeweapon, NULL_VECTOR, NULL_VECTOR);
 	}
 	else if (StrEqual(cmd, "fix"))
 	{
-		PrintToChat(client, "Correction Mana Bar");
-		OnClientConnected(client);
+		// PrintToChat(client, "Correction Mana Bar");
+		// OnClientConnected(client);
+		test();
 	}
 
 	TriggerTimer(Skill_Notify_Timer[client], true);
