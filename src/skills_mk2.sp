@@ -166,10 +166,8 @@ MRESReturn TestMeleeSwingCollisionPre(int pThis, Handle hReturn)
 	if( IsValidEntity(pThis) )
 	{
 		int owner = GetEntPropEnt(pThis, Prop_Send, "m_hOwnerEntity");
-		if(StrEqual(Skill_Name[Skill[owner]], "Mana Shield"))
-		{
-			g_hCvarMeleeRange.SetInt(1);
-		}
+		if(StrEqual(Skill_Name[Skill[owner]], "Mana Shield 魔心護盾"))
+			g_hCvarMeleeRange.SetInt(10);
 		else
 			g_hCvarMeleeRange.SetInt(g_iStockRange);
 	}
@@ -770,14 +768,16 @@ public RegisterSkill(String:skill_name[MAXSKILLNAME], Function:timer_skill_start
 
 public Action:Timer_Skill_Null_End(Handle:timer, any:client) {
 	Skill_State[client] = SKILL_CD;
-	TriggerTimer(Skill_Notify_Timer[client]);
+	if(Skill_Notify_Timer[client]!=null)
+		TriggerTimer(Skill_Notify_Timer[client]);
 	return Plugin_Stop;
 }
 
 public Action:Timer_Skill_Null_Ready(Handle:timer, any:client) {
 	Skill_State[client] = SKILL_RDY;
 	//PrepareAndEmitSoundToClient("skills\\explosion.mp3", .entity = client, .volume = 1.0);
-	TriggerTimer(Skill_Notify_Timer[client]);
+	if(Skill_Notify_Timer[client]!=null)
+		TriggerTimer(Skill_Notify_Timer[client]);
 	return Plugin_Handled;
 }
 //------------------------------------//
