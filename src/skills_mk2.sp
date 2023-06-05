@@ -1,11 +1,13 @@
-#define SKILL_DEBUG       (false)
-#define GAMEDATA          ("l4d2_melee_range")
+#define SKILL_DEBUG       (true)
+#define GAMEDATA_MELEE    ("l4d2_melee_range")
+#define MAX_WEAPONS       (12)
 #include <sourcemod>
 #include <sdktools>
 #include <sdkhooks>
 #include <dhooks>
 #include "resourcemanager.sp"
-#include "damage.sp"
+// #include "damage.sp"
+#include "l4d_dissolve_infected.sp"
 
 const ITEMNAME = 64;
 const ITEMNUM = 64;
@@ -84,7 +86,7 @@ public Plugin:MyInfo = {
 	version = "",
 	url = ""
 }
-#define MAX_WEAPONS 12
+
 // static char g_sWeaponNames[MAX_WEAPONS][] = 
 // {
 // 	"weapon_autoshotgun",
@@ -185,11 +187,11 @@ public OnPluginStart() {
 	PrintToServer("=============Plugin Start===============");
 //------------------------------
 	char sPath[PLATFORM_MAX_PATH];
-	BuildPath(Path_SM, sPath, sizeof(sPath), "gamedata/%s.txt", GAMEDATA);
+	BuildPath(Path_SM, sPath, sizeof(sPath), "gamedata/%s.txt", GAMEDATA_MELEE);
 	if( FileExists(sPath) == false ) SetFailState("\n==========\nMissing required file: \"%s\".\nRead installation instructions again.\n==========", sPath);
 
-	Handle hGameData = LoadGameConfigFile(GAMEDATA);
-	if( hGameData == null ) SetFailState("Failed to load \"%s.txt\" gamedata.", GAMEDATA);
+	Handle hGameData = LoadGameConfigFile(GAMEDATA_MELEE);
+	if( hGameData == null ) SetFailState("Failed to load \"%s.txt\" gamedata.", GAMEDATA_MELEE);
 
 	g_hDetour = DHookCreateFromConf(hGameData, "CTerrorMeleeWeapon::TestMeleeSwingCollision");
 	delete hGameData;
@@ -211,6 +213,7 @@ public OnPluginStart() {
 	RegisterSkill("Mana Shield 魔心護盾" ,Timer_Skill_ManaShield_Start, Timer_Skill_ManaShield_End, Timer_Skill_Null_Ready, 0.0, -1.0, 0.0);
 	RegisterSkill("Eagle Eye 鷹眼" ,Timer_Skill_EagleEye_Start, Timer_Skill_Null_End, Timer_Skill_Null_Ready, 5.0, 2.0, 40.0);
 	RegisterSkill("Steal 偷竊" ,Timer_Skill_Steal_Start, Timer_Skill_Null_End, Timer_Skill_Null_Ready, 0.5, 2.0, 20.0);// Float:skill_duration, Float:skill_cooldown, Float:skill_mpcost
+	RegisterSkill("Turn Undead 淨化" , Timer_Skill_TurnUndead_Start, Timer_Skill_Null_End, Timer_Skill_Null_Ready, 1.0, 2.0, 50.0);
 	//RegisterSkill("Sixth Sense 第六感" ,Timer_Skill_EagleEye_Start, Timer_Skill_EagleEye_End, Timer_Skill_Null_Ready, 10.0, 60.0, 80.0);
 
 	//Function: OnClientConnected
@@ -240,6 +243,7 @@ public OnPluginStart() {
 	//HookEvent("infected_hurt", 			Event_DmgInflicted);
 	HookEvent("gameinstructor_nodraw", Event_NoDraw, EventHookMode_PostNoCopy);
 	HookEvent("gameinstructor_draw", Event_Draw, EventHookMode_PostNoCopy);
+	TurnUndeadInit();
 	CheckPlayerConnections();
 }
 
@@ -251,6 +255,7 @@ public CheckPlayerConnections() {
 
 public OnMapStart() {
 	Setup_Materials();
+	TrunUndeadMapStart();
 }
 
 public Setup_Materials() {
@@ -781,6 +786,100 @@ public Action:Timer_Skill_Null_Ready(Handle:timer, any:client) {
 	return Plugin_Handled;
 }
 //------------------------------------//
+//------------trun undead-------------//
+public Action:Timer_UndeadRushEnd(Handle:timer, DataPack:DP) {
+	DP.Reset();
+	new client = DP.ReadCell();
+	FakeClientCommand(client, "director_panic_forever 0");
+	PrintToServer("rush end");
+}
+public Action:Timer_UndeadRush(Handle:timer, DataPack:DP) {
+	DP.Reset();
+	new client = DP.ReadCell();
+	FakeClientCommand(client, "director_force_panic_event");
+	FakeClientCommand(client, "director_panic_forever 1");
+	DataPack DP2 = new DataPack();
+	DP2.WriteCell(client);
+	CreateTimer(120.0, Timer:Timer_UndeadRushEnd, DP2);
+	PrintToServer("rush");
+}
+public Action:Timer_TurnUndeadAimDelay(Handle:timer, DataPack:DP) {
+	DP.Reset();
+	new client = DP.ReadCell();
+	new Float:Pos[3];
+	Pos[0] = DP.ReadCell();
+	Pos[1] = DP.ReadCell();
+	Pos[2] = DP.ReadCell();
+
+	for (new i = 1; i < MAXPLAYERS; i++) {
+		if (IsAliveSpecialInf(i)) {
+			new Float:distance = GetEntityPosDistance(i, Pos);
+			if (distance <= 300.0) {
+				// DealDamage(i, 500 * RoundToNearest(300.0 - distance) / 300, client, DMG_BURN);
+				Turn_Undead(i, client);
+			}
+		}
+	}
+	
+	new entity = -1;
+	while ((entity = FindEntityByClassname(entity, "infected")) != INVALID_ENT_REFERENCE) {
+		new health = GetEntProp(entity, Prop_Data, "m_iHealth");
+		if (health > 0) {
+			if (GetEntityPosDistance(entity, Pos) <= 300.0) {
+				// DealDamage(entity, 1, client, DMG_BURN);
+				Turn_Undead(entity, client);
+			}
+		}
+	}
+	while ((entity = FindEntityByClassname(entity, "witch")) != INVALID_ENT_REFERENCE) {
+		new health = GetEntProp(entity, Prop_Data, "m_iHealth");
+		if (health > 0) {
+			if (GetEntityPosDistance(entity, Pos) <= 300.0) {
+				// DealDamage(entity, 1, client, DMG_BURN);
+				Turn_Undead(entity, client);
+			}
+		}
+	}
+
+	DataPack DP2 = new DataPack();
+	DP2.WriteCell(client);
+	CreateTimer(3.0, Timer:Timer_UndeadRush, DP2);
+	// PropaneAtPos(Pos);
+	
+	return Plugin_Stop;
+}
+public TurnUndeadAim(client, Float:delay) {
+	new Float:Pos[3];
+	if (GetAimOrigin(client, Pos, 10.0) == 0) return;
+
+	// CreateParticle(PARTICLE_EXPLOSION, delay + 1.0, Pos);
+	
+	new stage = 5;
+	
+	new entity = -1;
+	while ((entity = FindEntityByClassname(entity, "infected")) != INVALID_ENT_REFERENCE) {
+		if (GetEntityPosDistance(entity, Pos) <= 1000.0) break;
+	}
+	
+	DataPack DP = new DataPack();
+	DP.WriteCell(client);
+	DP.WriteCell(Pos[0]);
+	DP.WriteCell(Pos[1]);
+	DP.WriteCell(Pos[2]);
+	DP.WriteCell(entity);
+	DP.WriteCell(stage);
+
+	CreateTimer(delay, Timer:Timer_TurnUndeadAimDelay, DP);
+}
+public Action:Timer_Skill_TurnUndead_Start(Handle:timer, any:client) {
+	GlowForSecs(client, 100, 0, 0, 1.5);
+
+	TurnUndeadAim(client, 0.3);
+	PrintToChatAll("%N - 淨化!", client);
+
+	return Plugin_Stop;
+}
+//------------------------------------//
 //--------------steal-----------------//
 stock Weapon_GetPrimaryAmmoType(weapon)
 {
@@ -788,7 +887,6 @@ stock Weapon_GetPrimaryAmmoType(weapon)
 }
 
 public Action:Timer_Skill_Steal_Start(Handle:timer, any:client) {
-	//PrepareAndEmitSoundtoAll("skills\\eagleeye.mp3", .entity = client, .volume = 1.0);
 	// FakeClientCommand(client, "give katana");
 	GlowForSecs(client, 0, 100, 0, 1.0);//rgb sec
 	Skill_Steal(client);
@@ -958,7 +1056,6 @@ public Action:Timer_Skill_Explosion_Start(Handle:timer, any:client) {
 	//ExExplodeAim(client, 0.3);
 	PrintToChatAll("%N - EXPLOSION!", client);
 
-	// Skill_Steal(client);
 	return Plugin_Stop;
 }
 
