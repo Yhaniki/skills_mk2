@@ -1,6 +1,28 @@
-#define SKILL_DEBUG       (true)
-#define GAMEDATA_MELEE    ("l4d2_melee_range")
-#define MAX_WEAPONS       (12)
+#define SKILL_DEBUG                     (false)
+#define GAMEDATA_MELEE                  ("l4d2_melee_range")
+#define TURN_UNDEAD_DIST                (2000.0)
+#define EXPLOSION_DIST                  (300.0)
+#define MAX_WEAPONS                     (12)
+#define WEAPON_TYPE_NUM                 (5)
+#define MP_INC_PERSEC                   (0.5)
+#define MP_BAR_SIZE                     (25.0)
+#define MP_MAX                          (100.0)
+#define MAX_STEAL_AMMO                  (350)
+#define MIN_STEAL_AMMO                  (50)
+#define ITEMNAME                        (64)
+#define ITEMNUM                         (64)
+#define MAXCMD                          (64)
+#define MAXSKILLNAME                    (64)
+#define MAXSKILLS                       (64)
+#define MAXENTITIES                     (4096)
+#define PANIC_SEC                       (120.0)
+#define PARTICLE_EXPLOSION              ("Skill_Explosion")
+#define PARTICLE_EAGLEEYE               ("Skill_EagleEye")
+#define PARTICLE_FX_AFTER_EXPLOSION     ("fx_after_explosion")
+#define PARTICLE_FX_EXPLOSION_RING      ("fx_explosion_ring")
+//#define PARTICLE_ELEC                  ("electrical_arc_01_parent")
+//#define PARTICLE_WARP                  ("electrical_arc_01_system")
+
 #include <sourcemod>
 #include <sdktools>
 #include <sdkhooks>
@@ -8,26 +30,6 @@
 #include "resourcemanager.sp"
 // #include "damage.sp"
 #include "l4d_dissolve_infected.sp"
-
-const ITEMNAME = 64;
-const ITEMNUM = 64;
-const MAXCMD = 64;
-const MAXSKILLNAME = 64;
-const MAXSKILLS = 64;
-const MAXENTITIES = 4096;
-const Float:MP_INC_PERSEC = 0.5;
-const Float:MP_BAR_SIZE = 25.0;
-const Float:MP_MAX = 100.0;
-const int WEAPON_TYPE_NUM = 5;
-const int MAX_STEAL_AMMO = 350;
-const int MIN_STEAL_AMMO = 50;
-
-#define PARTICLE_EXPLOSION				"Skill_Explosion"
-#define PARTICLE_EAGLEEYE				"Skill_EagleEye"
-#define PARTICLE_FX_AFTER_EXPLOSION	"fx_after_explosion"
-#define PARTICLE_FX_EXPLOSION_RING	"fx_explosion_ring"
-//#define PARTICLE_ELEC		"electrical_arc_01_parent"
-//#define PARTICLE_WARP		"electrical_arc_01_system"
 
 enum player_state { PLAYER_ALIVE = 2, PLAYER_INCAP = 1, PLAYER_DEAD = 0 }
 
@@ -57,13 +59,14 @@ new Handle:Skill_Adrenaline_Boost_Timer[MAXPLAYERS + 1];
 
 new bool:State_Glow[MAXENTITIES];
 new Handle:Glow_Timer[MAXENTITIES];
-
 new bool:State_Freeze[MAXENTITIES];
 new Handle:Freeze_Timer[MAXENTITIES];
 
 new Slow_Ent;
 new bool:State_Slow;
 new Handle:Slow_Timer;
+bool State_TurnUndead;
+new Handle:TurnUndead_Timer;
 
 enum skill_type { TYPE_NORMAL = 0, TYPE_PASSIVE = 1 }
 
@@ -161,7 +164,7 @@ static char g_sWeapons[MAX_WEAPONS][] =
 	"weapon_pistol" ,
 	"weapon_pistol_magnum"
 };
-ConVar g_hCvarMeleeRange;
+ConVar g_hCvarMeleeRange, g_hCvarPanicForever;
 int g_iStockRange;
 MRESReturn TestMeleeSwingCollisionPre(int pThis, Handle hReturn)
 {
@@ -206,14 +209,17 @@ public OnPluginStart() {
 		SetFailState("Failed to detour post \"CTerrorMeleeWeapon::TestMeleeSwingCollision\".");
 
 	g_hCvarMeleeRange = FindConVar("melee_range");
+	g_hCvarPanicForever = FindConVar("director_panic_forever");
+	g_hCvarPanicForever.SetBool(false, false, false);
 	g_iStockRange = g_hCvarMeleeRange.IntValue;
+	State_TurnUndead = false;
 //------------------------------
 	//Setup_Materials();
 	RegisterSkill("Explosion 爆裂" ,Timer_Skill_Explosion_Start, Timer_Skill_Null_End, Timer_Skill_Null_Ready, 1.0, 2.0, 30.0);
 	RegisterSkill("Mana Shield 魔心護盾" ,Timer_Skill_ManaShield_Start, Timer_Skill_ManaShield_End, Timer_Skill_Null_Ready, 0.0, -1.0, 0.0);
 	RegisterSkill("Eagle Eye 鷹眼" ,Timer_Skill_EagleEye_Start, Timer_Skill_Null_End, Timer_Skill_Null_Ready, 5.0, 2.0, 40.0);
 	RegisterSkill("Steal 偷竊" ,Timer_Skill_Steal_Start, Timer_Skill_Null_End, Timer_Skill_Null_Ready, 0.5, 2.0, 20.0);// Float:skill_duration, Float:skill_cooldown, Float:skill_mpcost
-	RegisterSkill("Turn Undead 淨化" , Timer_Skill_TurnUndead_Start, Timer_Skill_Null_End, Timer_Skill_Null_Ready, 1.0, 2.0, 50.0);
+	RegisterSkill("Sacred Turn Undead 淨化" , Timer_Skill_TurnUndead_Start, Timer_Skill_Null_End, Timer_Skill_Null_Ready, 1.0, 2.0, 50.0);
 	//RegisterSkill("Sixth Sense 第六感" ,Timer_Skill_EagleEye_Start, Timer_Skill_EagleEye_End, Timer_Skill_Null_Ready, 10.0, 60.0, 80.0);
 
 	//Function: OnClientConnected
@@ -787,21 +793,32 @@ public Action:Timer_Skill_Null_Ready(Handle:timer, any:client) {
 }
 //------------------------------------//
 //------------trun undead-------------//
-public Action:Timer_UndeadRushEnd(Handle:timer, DataPack:DP) {
-	DP.Reset();
-	new client = DP.ReadCell();
-	FakeClientCommand(client, "director_panic_forever 0");
-	PrintToServer("rush end");
+public Action:Timer_UndeadRushEnd(Handle:timer) {
+	State_TurnUndead = false;
+	g_hCvarPanicForever.SetBool(false, false, false);
+	PrintToChatAll("\x03[致命感染] \x01屍潮結束");
 }
 public Action:Timer_UndeadRush(Handle:timer, DataPack:DP) {
 	DP.Reset();
 	new client = DP.ReadCell();
+	new flags3 = GetCommandFlags("z_spawn_old");
+	new flags4 = GetCommandFlags("director_force_panic_event");
+	SetCommandFlags("z_spawn_old", flags3 & ~FCVAR_CHEAT);
+	SetCommandFlags("director_force_panic_event", flags4 & ~FCVAR_CHEAT);
 	FakeClientCommand(client, "director_force_panic_event");
-	FakeClientCommand(client, "director_panic_forever 1");
-	DataPack DP2 = new DataPack();
-	DP2.WriteCell(client);
-	CreateTimer(120.0, Timer:Timer_UndeadRushEnd, DP2);
-	PrintToServer("rush");
+	SetCommandFlags("z_spawn_old", flags3|FCVAR_CHEAT);
+	SetCommandFlags("director_force_panic_event", flags4|FCVAR_CHEAT);
+	
+	g_hCvarPanicForever.SetBool(true, false, false);
+	// DataPack DP2 = new DataPack();
+	// DP2.WriteCell(client);
+	if (State_TurnUndead&&TurnUndead_Timer != null)
+	{
+		KillTimer(TurnUndead_Timer);
+	}
+	State_TurnUndead = true;
+	TurnUndead_Timer = CreateTimer(PANIC_SEC, Timer:Timer_UndeadRushEnd);
+	PrintToChatAll("\x03[致命感染]\x04 %N \x01施放淨化引來屍潮！", client);
 }
 public Action:Timer_TurnUndeadAimDelay(Handle:timer, DataPack:DP) {
 	DP.Reset();
@@ -814,7 +831,7 @@ public Action:Timer_TurnUndeadAimDelay(Handle:timer, DataPack:DP) {
 	for (new i = 1; i < MAXPLAYERS; i++) {
 		if (IsAliveSpecialInf(i)) {
 			new Float:distance = GetEntityPosDistance(i, Pos);
-			if (distance <= 300.0) {
+			if (distance <= TURN_UNDEAD_DIST) {
 				// DealDamage(i, 500 * RoundToNearest(300.0 - distance) / 300, client, DMG_BURN);
 				Turn_Undead(i, client);
 			}
@@ -825,7 +842,7 @@ public Action:Timer_TurnUndeadAimDelay(Handle:timer, DataPack:DP) {
 	while ((entity = FindEntityByClassname(entity, "infected")) != INVALID_ENT_REFERENCE) {
 		new health = GetEntProp(entity, Prop_Data, "m_iHealth");
 		if (health > 0) {
-			if (GetEntityPosDistance(entity, Pos) <= 300.0) {
+			if (GetEntityPosDistance(entity, Pos) <= TURN_UNDEAD_DIST) {
 				// DealDamage(entity, 1, client, DMG_BURN);
 				Turn_Undead(entity, client);
 			}
@@ -834,7 +851,7 @@ public Action:Timer_TurnUndeadAimDelay(Handle:timer, DataPack:DP) {
 	while ((entity = FindEntityByClassname(entity, "witch")) != INVALID_ENT_REFERENCE) {
 		new health = GetEntProp(entity, Prop_Data, "m_iHealth");
 		if (health > 0) {
-			if (GetEntityPosDistance(entity, Pos) <= 300.0) {
+			if (GetEntityPosDistance(entity, Pos) <= TURN_UNDEAD_DIST) {
 				// DealDamage(entity, 1, client, DMG_BURN);
 				Turn_Undead(entity, client);
 			}
@@ -853,26 +870,17 @@ public TurnUndeadAim(client, Float:delay) {
 	if (GetAimOrigin(client, Pos, 10.0) == 0) return;
 
 	// CreateParticle(PARTICLE_EXPLOSION, delay + 1.0, Pos);
-	
-	new stage = 5;
-	
-	new entity = -1;
-	while ((entity = FindEntityByClassname(entity, "infected")) != INVALID_ENT_REFERENCE) {
-		if (GetEntityPosDistance(entity, Pos) <= 1000.0) break;
-	}
-	
+
 	DataPack DP = new DataPack();
 	DP.WriteCell(client);
 	DP.WriteCell(Pos[0]);
 	DP.WriteCell(Pos[1]);
 	DP.WriteCell(Pos[2]);
-	DP.WriteCell(entity);
-	DP.WriteCell(stage);
 
 	CreateTimer(delay, Timer:Timer_TurnUndeadAimDelay, DP);
 }
 public Action:Timer_Skill_TurnUndead_Start(Handle:timer, any:client) {
-	GlowForSecs(client, 100, 0, 0, 1.5);
+	GlowForSecs(client, 0, 0, 100, 1.5);
 
 	TurnUndeadAim(client, 0.3);
 	PrintToChatAll("%N - 淨化!", client);
@@ -1389,6 +1397,13 @@ public ExExplodeAim(client, Float:delay) {
 	CreateTimer(delay, Timer:Timer_ExExplodeAimDelay, DP);
 }
 
+int ComputeExploDmg(float dist)
+{
+	const float weight = 500.0;
+	int dmg = (weight * RoundToNearest(EXPLOSION_DIST - dist) / EXPLOSION_DIST);
+	return dmg;
+}
+
 public Action:Timer_ExplodeAimDelay(Handle:timer, DataPack:DP) {
 	DP.Reset();
 	new client = DP.ReadCell();
@@ -1399,9 +1414,10 @@ public Action:Timer_ExplodeAimDelay(Handle:timer, DataPack:DP) {
 
 	for (new i = 1; i < MAXPLAYERS; i++) {
 		if (IsAliveSpecialInf(i)) {
-			new Float:distance = GetEntityPosDistance(i, Pos);
-			if (distance <= 300.0) {
-				DealDamage(i, 500 * RoundToNearest(300.0 - distance) / 300, client, DMG_BURN);
+			float distance = GetEntityPosDistance(i, Pos);
+			if (distance <= EXPLOSION_DIST) {
+				int dmg =  ComputeExploDmg(distance);
+				DealDamage(i, dmg, client, DMG_BURN);
 			}
 		}
 	}
@@ -1410,7 +1426,7 @@ public Action:Timer_ExplodeAimDelay(Handle:timer, DataPack:DP) {
 	while ((entity = FindEntityByClassname(entity, "infected")) != INVALID_ENT_REFERENCE) {
 		new health = GetEntProp(entity, Prop_Data, "m_iHealth");
 		if (health > 0) {
-			if (GetEntityPosDistance(entity, Pos) <= 300.0) {
+			if (GetEntityPosDistance(entity, Pos) <= EXPLOSION_DIST) {
 				DealDamage(entity, 1, client, DMG_BURN);
 			}
 		}
@@ -1441,8 +1457,8 @@ public Action:Timer_ExExplodeAimDelay(Handle:timer, DataPack:DP) {
 	for (new i = 1; i < MAXPLAYERS; i++) {
 		if (IsAliveSpecialInf(i)) {
 			new Float:distance = GetEntityPosDistance(i, Pos);
-			if (distance <= 300.0) {
-				DealDamage(i, 500 * RoundToNearest(300.0 - distance) / 300, client, DMG_BURN);
+			if (distance <= EXPLOSION_DIST) {
+				DealDamage(i, ComputeExploDmg(distance), client, DMG_BURN);
 			}
 		}
 	}
@@ -1451,7 +1467,7 @@ public Action:Timer_ExExplodeAimDelay(Handle:timer, DataPack:DP) {
 	while ((entity = FindEntityByClassname(entity, "infected")) != INVALID_ENT_REFERENCE) {
 		new health = GetEntProp(entity, Prop_Data, "m_iHealth");
 		if (health > 0) {
-			if (GetEntityPosDistance(entity, Pos) <= 300.0) {
+			if (GetEntityPosDistance(entity, Pos) <= EXPLOSION_DIST) {
 				DealDamage(entity, 1, client, DMG_BURN);
 			}
 		}
