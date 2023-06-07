@@ -1,8 +1,9 @@
 #define SKILL_DEBUG                     (false)
 #define GAMEDATA_MELEE                  ("l4d2_melee_range")
-#define TURN_UNDEAD_DIST                (2000.0)
+#define TURN_UNDEAD_DIST                (1000.0)
 #define EXPLOSION_DIST                  (300.0)
 #define MAX_WEAPONS                     (12)
+#define ALL_WEAPONS                     (47)
 #define WEAPON_TYPE_NUM                 (5)
 #define MP_INC_PERSEC                   (0.5)
 #define MP_BAR_SIZE                     (25.0)
@@ -90,63 +91,121 @@ public Plugin:MyInfo = {
 	url = ""
 }
 
-// static char g_sWeaponNames[MAX_WEAPONS][] = 
-// {
-// 	"weapon_autoshotgun",
-// 	"weapon_grenade_launcher" ,
-// 	"weapon_hunting_rifle",
-// 	"weapon_pistol" ,
-// 	"weapon_pistol_magnum" ,
-// 	"weapon_pumpshotgun" ,
-// 	"weapon_rifle" ,
-// 	"weapon_rifle_ak47" ,
-// 	"weapon_rifle_desert" ,
-// 	"weapon_rifle_m60" ,
-// 	"weapon_rifle_sg552" ,
-// 	"weapon_shotgun_chrome",
-// 	"weapon_shotgun_spas" ,
-// 	"weapon_smg" ,
-// 	"weapon_smg_mp5" ,
-// 	"weapon_smg_silenced" ,
-// 	"weapon_sniper_awp",
-// 	"weapon_sniper_military" ,
-// 	"weapon_sniper_scout" ,
+static char g_sWeaponNames[ALL_WEAPONS][] = 
+{
+	"weapon_autoshotgun",
+	"weapon_grenade_launcher" ,
+	"weapon_hunting_rifle",
+	"weapon_pistol" ,
+	"weapon_pistol_magnum" ,
+	"weapon_pumpshotgun" ,
+	"weapon_rifle" ,
+	"weapon_rifle_ak47" ,
+	"weapon_rifle_desert" ,
+	"weapon_rifle_m60" ,
+	"weapon_rifle_sg552" ,
+	"weapon_shotgun_chrome",
+	"weapon_shotgun_spas" ,
+	"weapon_smg" ,
+	"weapon_smg_mp5" ,
+	"weapon_smg_silenced" ,
+	"weapon_sniper_awp",
+	"weapon_sniper_military" ,
+	"weapon_sniper_scout" ,
 
-// 	"weapon_baseball_bat",
-// 	"weapon_cricket_bat",
-// 	"weapon_crowbar",
-// 	"weapon_electric_guitar",
-// 	"weapon_fireaxe",
-// 	"weapon_frying_pan",
-// 	"weapon_golfclub",
-// 	"weapon_katana",
-// 	"weapon_machete",
-// 	"weapon_tonfa",
-// 	"weapon_knife",
+	"weapon_baseball_bat",
+	"weapon_cricket_bat",
+	"weapon_crowbar",
+	"weapon_electric_guitar",
+	"weapon_fireaxe",
+	"weapon_frying_pan",
+	"weapon_golfclub",
+	"weapon_katana",
+	"weapon_machete",
+	"weapon_tonfa",
+	"weapon_knife",
 
-// 	"weapon_chainsaw",
+	"weapon_chainsaw",
 
-// 	"weapon_adrenaline",
-// 	"weapon_defibrillator",
-// 	"weapon_first_aid_kit",
-// 	"weapon_pain_pills",
+	"weapon_adrenaline",
+	"weapon_defibrillator",
+	"weapon_first_aid_kit",
+	"weapon_pain_pills",
 
-// 	"weapon_fireworkcrate",
-// 	"weapon_gascan",
-// 	"weapon_oxygentank",
-// 	"weapon_propanetank",
+	"weapon_fireworkcrate",
+	"weapon_gascan",
+	"weapon_oxygentank",
+	"weapon_propanetank",
 
-// 	"weapon_molotov",
-// 	"weapon_pipe_bomb",
-// 	"weapon_vomitjar",
+	"weapon_molotov",
+	"weapon_pipe_bomb",
+	"weapon_vomitjar",
 
-// 	"weapon_ammo_spawn",
-// 	"weapon_upgradepack_explosive",
-// 	"weapon_upgradepack_incendiary",
+	"weapon_ammo_spawn",
+	"weapon_upgradepack_explosive",
+	"weapon_upgradepack_incendiary",
 
-// 	"weapon_gnome",
-// 	"weapon_cola_bottles"
-// };
+	"weapon_gnome",
+	"weapon_cola_bottles"
+};
+
+static char g_sWeaponTranslate[ALL_WEAPONS][] = 
+{
+	"連發霰彈槍",
+	"榴彈發射器 " ,
+	"連狙",
+	"手槍" ,
+	"沙漠之鷹" ,
+	"單發霰彈槍" ,
+	"M16步槍" ,
+	"AK47步槍" ,
+	"SCAR步槍" ,
+	"M60機槍" ,
+	"SG552步槍" ,
+	"單發霰彈槍",
+	"連發霰彈槍" ,
+	"小型衝鋒槍" ,
+	"MP5衝鋒槍" ,
+	"消音衝鋒槍" ,
+	"麥格農狙擊槍",
+	"連狙" ,
+	"小型狙擊槍" ,
+
+	"球棒",
+	"板球棒",
+	"鐵撬",
+	"電吉他",
+	"消防斧",
+	"平底鍋",
+	"高爾夫球棒",
+	"武士刀",
+	"砍刀",
+	"警棍",
+	"小刀",
+
+	"電鋸",
+
+	"腎上腺素",
+	"電震儀器",
+	"醫藥包",
+	"藥丸",
+
+	"煙火",
+	"瓦斯桶",
+	"氧氣瓶",
+	"煤氣罐",
+
+	"weapon_molotov",
+	"weapon_pipe_bomb",
+	"weapon_vomitjar",
+
+	"weapon_ammo_spawn",
+	"weapon_upgradepack_explosive",
+	"weapon_upgradepack_incendiary",
+
+	"weapon_gnome",
+	"weapon_cola_bottles"
+};
 
 static char g_sWeapons[MAX_WEAPONS][] =
 {
@@ -218,8 +277,8 @@ public OnPluginStart() {
 	RegisterSkill("Explosion 爆裂" ,Timer_Skill_Explosion_Start, Timer_Skill_Null_End, Timer_Skill_Null_Ready, 1.0, 2.0, 30.0);
 	RegisterSkill("Mana Shield 魔心護盾" ,Timer_Skill_ManaShield_Start, Timer_Skill_ManaShield_End, Timer_Skill_Null_Ready, 0.0, -1.0, 0.0);
 	RegisterSkill("Eagle Eye 鷹眼" ,Timer_Skill_EagleEye_Start, Timer_Skill_Null_End, Timer_Skill_Null_Ready, 5.0, 2.0, 40.0);
-	RegisterSkill("Steal 偷竊" ,Timer_Skill_Steal_Start, Timer_Skill_Null_End, Timer_Skill_Null_Ready, 0.5, 2.0, 20.0);// Float:skill_duration, Float:skill_cooldown, Float:skill_mpcost
-	RegisterSkill("Sacred Turn Undead 淨化" , Timer_Skill_TurnUndead_Start, Timer_Skill_Null_End, Timer_Skill_Null_Ready, 1.0, 2.0, 50.0);
+	RegisterSkill("Steal 偷竊" ,Timer_Skill_Steal_Start, Timer_Skill_Null_End, Timer_Skill_Null_Ready, 7.0, 2.0, 20.0);// Float:skill_duration, Float:skill_cooldown, Float:skill_mpcost
+	RegisterSkill("Sacred Turn Undead 淨化" , Timer_Skill_TurnUndead_Start, Timer_Skill_Null_End, Timer_Skill_Null_Ready, 3.5, 2.0, 50.0);
 	//RegisterSkill("Sixth Sense 第六感" ,Timer_Skill_EagleEye_Start, Timer_Skill_EagleEye_End, Timer_Skill_Null_Ready, 10.0, 60.0, 80.0);
 
 	//Function: OnClientConnected
@@ -431,7 +490,7 @@ public Init_Skill(client) {
 	Skill_Notify_Ani_State[client] = 0;
 	Skill_Notify_Ani_Timer[client] = CreateTimer(0.5, Skill_Notify_Ani, client, TIMER_REPEAT);
 	Skill_MPrecover_Timer[client] = CreateTimer(1.0, Skill_MPrecover, client, TIMER_REPEAT);
-	PrintToChatAll("Timer for %N created!", client);
+	// PrintToChatAll("Timer for %N created!", client);
 	if(Skill[client]<0||Skill[client]>skill_num-1)
 		Skill[client] = 0;
 	Skill_MP[client] = 50.0;
@@ -866,6 +925,7 @@ public Action:Timer_TurnUndeadAimDelay(Handle:timer, DataPack:DP) {
 	return Plugin_Stop;
 }
 public TurnUndeadAim(client, Float:delay) {
+	PrepareAndEmitSoundtoAll("skills\\turn_undead.mp3", .entity = client, .volume = 1.0);
 	new Float:Pos[3];
 	if (GetAimOrigin(client, Pos, 10.0) == 0) return;
 
@@ -880,10 +940,9 @@ public TurnUndeadAim(client, Float:delay) {
 	CreateTimer(delay, Timer:Timer_TurnUndeadAimDelay, DP);
 }
 public Action:Timer_Skill_TurnUndead_Start(Handle:timer, any:client) {
-	GlowForSecs(client, 0, 0, 100, 1.5);
-
-	TurnUndeadAim(client, 0.3);
-	PrintToChatAll("%N - 淨化!", client);
+	GlowForSecs(client, 0, 0, 100, 3.5);
+	TurnUndeadAim(client, 2.5);
+	PrintToChatAll("\x04%N - \x01淨化!", client);
 
 	return Plugin_Stop;
 }
@@ -896,9 +955,14 @@ stock Weapon_GetPrimaryAmmoType(weapon)
 
 public Action:Timer_Skill_Steal_Start(Handle:timer, any:client) {
 	// FakeClientCommand(client, "give katana");
-	GlowForSecs(client, 0, 100, 0, 1.0);//rgb sec
-	Skill_Steal(client);
-	
+	PrepareAndEmitSoundtoAll("skills\\steal.mp3", .entity = client, .volume = 1.0);
+	GlowForSecs(client, 0, 100, 0, 6.0);//rgb sec
+	// Skill_Steal(client);
+	new entityId = GetClientAimTarget(client, false);//return Entity
+	DataPack DP = new DataPack();
+	DP.WriteCell(client);
+	DP.WriteCell(entityId);
+	CreateTimer(5.2, Timer:Skill_Steal, DP);
 	return Plugin_Stop;
 }
 
@@ -934,7 +998,10 @@ public int ForceWeaponDrop(client)
 				if (StrEqual(item, "weapon_pistol")&&GetEntProp(activeweapon, Prop_Send, "m_isDualWielding"))
 				{
 					RemoveEntity(weapon);
-					SetItemToPlayer(client, "weapon_pistol");
+					// SetItemToPlayer(client, "weapon_pistol");
+					new wq = CreateEntityByName("weapon_pistol");
+					DispatchSpawn(wq);
+					EquipPlayerWeapon(client, wq);
 				}
 				else
 				{
@@ -995,11 +1062,40 @@ public SetItemToPlayer(client, char[] item)
 		}
 	}
 }
-
-public Skill_Steal(client)
+int GetItemTranslateIdx(char item[MAXCMD])
 {
+	int rst = -1;
+	for(int i=0; i<ALL_WEAPONS; i++)
+	{
+		if(StrEqual(item, g_sWeaponNames[i]))
+		{
+			rst = i;
+			break;
+		}
+	}
+	return rst;
+}
+int GetItemIdx(int idx)
+{
+	int rst = -1;
+	for(int i=0; i<ALL_WEAPONS; i++)
+	{
+		if(StrEqual(g_sWeapons[idx], g_sWeaponNames[i]))
+		{
+			rst = i;
+			break;
+		}
+	}
+	return rst;
+}
+// public Skill_Steal(client)
+public Skill_Steal(Handle:timer, DataPack:DP)
+{
+	DP.Reset();
+	new client = DP.ReadCell();
+	new entityId = DP.ReadCell();
 	// 1. Read the type and coordinates of the object aimed by the player
-	new entityId = GetClientAimTarget(client, false);//return Entity
+	// new entityId = GetClientAimTarget(client, false);//return Entity
 	char item[MAXCMD];
 	char target[MAXCMD];
 
@@ -1025,11 +1121,19 @@ public Skill_Steal(client)
 			{
 				GetEdictClassname(weaponIdx, item, MAXCMD);
 				SetItemToPlayer(client, item);
-				PrintToChatAll("%N - steal %s from %N", client, item, entityId);
+				int idx = GetItemTranslateIdx(item);
+				if (idx >= 0)
+				{
+					PrintToChatAll("\x04%N \x01從 \x04%N \x01身上偷了 \x04%s", client, entityId, g_sWeaponTranslate[idx]);
+				}
+				else
+				{
+					PrintToChatAll("\x04%N \x01從 \x04%N \x01身上偷了 \x04%s", client, entityId, g_sWeaponNames[idx]);
+				}
 			}
 			else
 			{
-				PrintToChatAll("%N - steal failed from %N", client, entityId);
+				PrintToChatAll("\x04%N \x01偷竊失敗", client);
 			}
 		}
 		else if (IsAliveInf(entityId) || IsAliveSpecialInf(entityId))
@@ -1038,18 +1142,27 @@ public Skill_Steal(client)
 			//    The chance of obtaining an item can be based on a predetermined percentage set in the table
 			// todo
 			int weaponIdx = GetRandomInt(0, MAX_WEAPONS - 1);
-			PrintToChatAll("%N - steal %s from %s", client, g_sWeapons[weaponIdx], target);
+			int idx = GetItemIdx(weaponIdx);
+			if (idx >= 0)
+			{
+				PrintToChatAll("\x04%N \x01從 \x04殭屍 \x01身上偷了 \x04%s", client, g_sWeaponTranslate[idx]);
+			}
+			else
+			{
+				PrintToChatAll("\x04%N \x01從 \x04殭屍 \x01身上偷了 \x04%s", client, g_sWeapons[weaponIdx]);
+			}
+			// PrintToChatAll("\x04%N \x01從殭屍身上偷了 %s", client, g_sWeapons[weaponIdx]);
 			SetItemToPlayer(client, g_sWeapons[weaponIdx]);
 		}
 		else
 		{
-			PrintToChatAll("%N - steal failed", client);
+			PrintToChatAll("\x04%N \x01偷竊失敗", client);
 		}
 	}
 	else
 	{
 		// 4. If the player hasn't aimed at any person, return a failed status
-		PrintToChatAll("%N - steal failed", client);
+		PrintToChatAll("\x04%N \x01偷竊失敗", client);
 	}
 }
 
