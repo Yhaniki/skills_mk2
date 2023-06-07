@@ -942,7 +942,7 @@ public TurnUndeadAim(client, Float:delay) {
 public Action:Timer_Skill_TurnUndead_Start(Handle:timer, any:client) {
 	GlowForSecs(client, 0, 0, 100, 3.5);
 	TurnUndeadAim(client, 2.5);
-	PrintToChatAll("\x04%N - \x01淨化!", client);
+	PrintToChatAll("\x04%N \x01淨化!", client);
 
 	return Plugin_Stop;
 }
@@ -956,6 +956,7 @@ stock Weapon_GetPrimaryAmmoType(weapon)
 public Action:Timer_Skill_Steal_Start(Handle:timer, any:client) {
 	// FakeClientCommand(client, "give katana");
 	PrepareAndEmitSoundtoAll("skills\\steal.mp3", .entity = client, .volume = 1.0);
+	PrintToChatAll("\x04%N \x01STEAL!", client);
 	GlowForSecs(client, 0, 100, 0, 6.0);//rgb sec
 	// Skill_Steal(client);
 	new entityId = GetClientAimTarget(client, false);//return Entity
@@ -1175,7 +1176,7 @@ public Action:Timer_Skill_Explosion_Start(Handle:timer, any:client) {
 	ExplodeAim(client, 1.5);
 
 	//ExExplodeAim(client, 0.3);
-	PrintToChatAll("%N - EXPLOSION!", client);
+	PrintToChatAll("\x04%N \x01EXPLOSION!", client);
 
 	return Plugin_Stop;
 }
@@ -1228,7 +1229,7 @@ public Action:Timer_Skill_EagleEye_Start(Handle:timer, any:client) {
 	
 	GlowForSecs(client, 0, 100, 0, 10.0);
 	EagleEye(client);
-	PrintToChatAll("%N - Eagle Eye!", client);
+	PrintToChatAll("\x04%N \x01Eagle Eye!", client);
 	
 	return Plugin_Stop;
 }
