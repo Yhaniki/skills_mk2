@@ -186,8 +186,8 @@ static char g_sWeaponTranslate[ALL_WEAPONS][] =
 	"電鋸",
 
 	"腎上腺素",
-	"電震儀器",
-	"醫藥包",
+	"電擊器",
+	"醫療包",
 	"藥丸",
 
 	"煙火",
@@ -195,16 +195,16 @@ static char g_sWeaponTranslate[ALL_WEAPONS][] =
 	"氧氣瓶",
 	"煤氣罐",
 
-	"weapon_molotov",
-	"weapon_pipe_bomb",
-	"weapon_vomitjar",
+	"火焰瓶",
+	"土製炸彈",
+	"膽汁罐",
 
-	"weapon_ammo_spawn",
-	"weapon_upgradepack_explosive",
-	"weapon_upgradepack_incendiary",
+	"彈藥",
+	"高爆彈藥",
+	"燃燒彈藥",
 
-	"weapon_gnome",
-	"weapon_cola_bottles"
+	"小矮人",
+	"可樂"
 };
 
 static char g_sWeapons[MAX_WEAPONS][] =
@@ -557,7 +557,8 @@ public Skill_Change_Menu(client) {
 }
 
 public Skill_Change(client, skill) {
-	
+	SetEntProp(client, Prop_Send, "m_glowColorOverride", 0);
+	SetEntProp(client, Prop_Send, "m_iGlowType", 0);
 	new skill_using = Skill[client];
 	
 	if (skill == skill_using) return;
@@ -840,6 +841,8 @@ public Action:Timer_Skill_Null_End(Handle:timer, any:client) {
 	Skill_State[client] = SKILL_CD;
 	if(Skill_Notify_Timer[client]!=null)
 		TriggerTimer(Skill_Notify_Timer[client]);
+	else
+		OnClientConnected(client);
 	return Plugin_Stop;
 }
 
@@ -848,6 +851,8 @@ public Action:Timer_Skill_Null_Ready(Handle:timer, any:client) {
 	//PrepareAndEmitSoundToClient("skills\\explosion.mp3", .entity = client, .volume = 1.0);
 	if(Skill_Notify_Timer[client]!=null)
 		TriggerTimer(Skill_Notify_Timer[client]);
+	else
+		OnClientConnected(client);
 	return Plugin_Handled;
 }
 //------------------------------------//
@@ -952,7 +957,27 @@ stock Weapon_GetPrimaryAmmoType(weapon)
 {
 	return GetEntProp(weapon, Prop_Data, "m_iPrimaryAmmoType");
 }
-
+int CheckStealType(int entityId)
+{
+	char target[MAXCMD];
+	int result = -1;
+	GetEdictClassname(entityId, target, MAXCMD);
+	if (entityId < 0)
+	{
+		result = -1;
+	}
+	else if ((StrEqual(target, "player")) &&
+			 (IsPlayerAlive(entityId) == true) &&
+			 (GetClientTeam(entityId) != 3))
+	{
+		result = 0;
+	}
+	else if (IsAliveInf(entityId) || IsAliveSpecialInf(entityId))
+	{
+		result = 1;
+	}
+	return result;
+}
 public Action:Timer_Skill_Steal_Start(Handle:timer, any:client) {
 	// FakeClientCommand(client, "give katana");
 	PrepareAndEmitSoundtoAll("skills\\steal.mp3", .entity = client, .volume = 1.0);
@@ -963,6 +988,7 @@ public Action:Timer_Skill_Steal_Start(Handle:timer, any:client) {
 	DataPack DP = new DataPack();
 	DP.WriteCell(client);
 	DP.WriteCell(entityId);
+	DP.WriteCell(CheckStealType(entityId));
 	CreateTimer(5.2, Timer:Skill_Steal, DP);
 	return Plugin_Stop;
 }
@@ -1102,34 +1128,40 @@ public Skill_Steal(Handle:timer, DataPack:DP)
 
 	if (entityId >= 0)
 	{
-		GetEdictClassname(entityId, target, MAXCMD);
 		// PrintToChatAll("entityId %s", target);
-
-		if ((StrEqual(target, "player")) &&
-			(IsPlayerAlive(entityId) == true) &&
-			(GetClientTeam(entityId) != 3))
+		if (type==0)
 		{
-			// 2. If the player has aimed another client, check the item they are currently holding
-			//    Randomly select one item from the client and remove it from their inventory
-
-			int weaponIdx = ForceWeaponDrop(entityId);
-
-			// int weaponType = GetRandomInt(0, WEAPON_TYPE_NUM - 1);
-			// int weaponIdx = ForceWeaponDropByType(entityId, weaponType);
-			// PrintToChatAll("weaponType %d", weaponType);
-			// PrintToChatAll("weaponIdx %d", weaponIdx);
-			if (weaponIdx > 0)
+			GetEdictClassname(entityId, target, MAXCMD);
+			if ((StrEqual(target, "player")) &&
+				(IsPlayerAlive(entityId) == true) &&
+				(GetClientTeam(entityId) != 3))
 			{
-				GetEdictClassname(weaponIdx, item, MAXCMD);
-				SetItemToPlayer(client, item);
-				int idx = GetItemTranslateIdx(item);
-				if (idx >= 0)
+				// 2. If the player has aimed another client, check the item they are currently holding
+				//    Randomly select one item from the client and remove it from their inventory
+
+				int weaponIdx = ForceWeaponDrop(entityId);
+
+				// int weaponType = GetRandomInt(0, WEAPON_TYPE_NUM - 1);
+				// int weaponIdx = ForceWeaponDropByType(entityId, weaponType);
+				// PrintToChatAll("weaponType %d", weaponType);
+				// PrintToChatAll("weaponIdx %d", weaponIdx);
+				if (weaponIdx > 0)
 				{
-					PrintToChatAll("\x04%N \x01從 \x04%N \x01身上偷了 \x04%s", client, entityId, g_sWeaponTranslate[idx]);
+					GetEdictClassname(weaponIdx, item, MAXCMD);
+					SetItemToPlayer(client, item);
+					int idx = GetItemTranslateIdx(item);
+					if (idx >= 0)
+					{
+						PrintToChatAll("\x04%N \x01從 \x04%N \x01身上偷了 \x04%s", client, entityId, g_sWeaponTranslate[idx]);
+					}
+					else
+					{
+						PrintToChatAll("\x04%N \x01從 \x04%N \x01身上偷了 \x04%s", client, entityId, g_sWeaponNames[idx]);
+					}
 				}
 				else
 				{
-					PrintToChatAll("\x04%N \x01從 \x04%N \x01身上偷了 \x04%s", client, entityId, g_sWeaponNames[idx]);
+					PrintToChatAll("\x04%N \x01偷竊失敗", client);
 				}
 			}
 			else
@@ -1137,7 +1169,7 @@ public Skill_Steal(Handle:timer, DataPack:DP)
 				PrintToChatAll("\x04%N \x01偷竊失敗", client);
 			}
 		}
-		else if (IsAliveInf(entityId) || IsAliveSpecialInf(entityId))
+		else if (type==1)
 		{
 			// 3. If the player has aimed a zombie, randomly choose an item from the item table
 			//    The chance of obtaining an item can be based on a predetermined percentage set in the table
@@ -1183,7 +1215,10 @@ public Action:Timer_Skill_Explosion_Start(Handle:timer, any:client) {
 
 //----------Mana Shield (魔心護盾)----------//
 public Action:Timer_Skill_ManaShield_Start(Handle:timer, any:client) {
-	GlowForSecs(client, 0, 0, 100, 10.0);
+	// GlowForSecs(client, 100, 100, 0, 10.0);
+	int glowcolor = 100 | (100 << 8) | (0 << 16);
+	SetEntProp(client, Prop_Send, "m_glowColorOverride", glowcolor);
+	SetEntProp(client, Prop_Send, "m_iGlowType", 3);
 	
 	State_ManaShield[client] = true;
 	//PrintToChatAll("%N - Mana Shield!", client);
@@ -1218,7 +1253,10 @@ public Action:Event_DmgReducedByManaShield(Handle:event, const String:name[], bo
 		*/	
 		SetEntProp(client, Prop_Data, "m_iHealth", hp);
 	}
-	TriggerTimer(Skill_Notify_Timer[client]);
+	if(Skill_Notify_Timer[client]!=null)
+		TriggerTimer(Skill_Notify_Timer[client]);
+	else
+		OnClientConnected(client);
 	return Plugin_Continue;
 }
 
@@ -1302,7 +1340,7 @@ public Action:Timer_Unglow(Handle:timer, any:client) {
 	if (!IsValidEntity(client)) return Plugin_Stop;
 	// if (!(IsPlayer(client) || IsInf(client) || IsSpecialInf(client))) return Plugin_Stop;
 	SetEntProp(client, Prop_Send, "m_glowColorOverride", 0);
-	SetEntProp(client, Prop_Send, "m_iGlowType", 0);	
+	SetEntProp(client, Prop_Send, "m_iGlowType", 0);
 
 	return Plugin_Stop;
 }
@@ -1513,8 +1551,8 @@ public ExExplodeAim(client, Float:delay) {
 
 int ComputeExploDmg(float dist)
 {
-	const float weight = 500.0;
-	int dmg = (weight * RoundToNearest(EXPLOSION_DIST - dist) / EXPLOSION_DIST);
+	const int weight = 500;
+	int dmg = RoundToNearest(weight * RoundToNearest(EXPLOSION_DIST - dist) / EXPLOSION_DIST);
 	return dmg;
 }
 
