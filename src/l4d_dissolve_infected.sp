@@ -574,7 +574,8 @@ void Turn_Undead(int target, int client)
 				int clone = AttachFakeRagdoll(target);
 				if( clone > 0)
 				{
-					DealDamage(target, 10000, client, DMG_CLUB);
+					int hp = GetEntProp(target, Prop_Data, "m_iHealth")+5;
+					DealDamage(target, hp, client, DMG_CLUB);
 					SetEntityRenderMode(clone, RENDER_NONE); // Hide and dissolve clone - method to show more particles
 					DissolveTarget(index, clone, class == 3 ? 0 : target); // Exclude boomer to producer gibs
 					SetEntityRenderFx(target, RENDERFX_FADE_FAST);
