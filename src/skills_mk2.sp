@@ -961,20 +961,28 @@ int CheckStealType(int entityId)
 {
 	char target[MAXCMD];
 	int result = -1;
-	GetEdictClassname(entityId, target, MAXCMD);
-	if (entityId < 0)
+
+	if (entityId < 0 || !IsValidEntity(entityId))
 	{
 		result = -1;
 	}
-	else if ((StrEqual(target, "player")) &&
-			 (IsPlayerAlive(entityId) == true) &&
-			 (GetClientTeam(entityId) != 3))
+	else
 	{
-		result = 0;
-	}
-	else if (IsAliveInf(entityId) || IsAliveSpecialInf(entityId))
-	{
-		result = 1;
+		GetEdictClassname(entityId, target, MAXCMD);
+		if ((StrEqual(target, "player")) &&
+			(IsPlayerAlive(entityId) == true) &&
+			(GetClientTeam(entityId) != 3))
+		{
+			result = 0;
+		}
+		else if (IsAliveInf(entityId) || IsAliveSpecialInf(entityId))
+		{
+			result = 1;
+		}
+		else
+		{
+			result = -1;
+		}
 	}
 	return result;
 }
@@ -1115,6 +1123,7 @@ int GetItemIdx(int idx)
 	}
 	return rst;
 }
+
 // public Skill_Steal(client)
 public Skill_Steal(Handle:timer, DataPack:DP)
 {
