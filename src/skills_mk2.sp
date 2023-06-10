@@ -151,25 +151,25 @@ static char g_sWeaponNames[ALL_WEAPONS][] =
 
 static char g_sWeaponTranslate[ALL_WEAPONS][] = 
 {
-	"連發霰彈槍",
-	"榴彈發射器 " ,
-	"連狙",
+	"自動霰彈槍",
+	"榴彈發射器" ,
+	"獵槍",
 	"手槍" ,
-	"沙漠之鷹" ,
-	"單發霰彈槍" ,
-	"M16步槍" ,
-	"AK47步槍" ,
-	"SCAR步槍" ,
+	"麥格農手槍" ,
+	"泵式霰彈槍" ,
+	"M-16突擊步槍" ,
+	"AK47" ,
+	"戰鬥步槍" ,
 	"M60機槍" ,
 	"SG552步槍" ,
-	"單發霰彈槍",
-	"連發霰彈槍" ,
+	"鉻管霰彈槍",
+	"戰鬥霰彈槍" ,
 	"小型衝鋒槍" ,
 	"MP5衝鋒槍" ,
-	"消音衝鋒槍" ,
+	"滅音衝鋒槍" ,
 	"麥格農狙擊槍",
-	"連狙" ,
-	"小型狙擊槍" ,
+	"狙擊步槍" ,
+	"斯泰爾斥侯步槍" ,
 
 	"球棒",
 	"板球棒",
@@ -187,15 +187,15 @@ static char g_sWeaponTranslate[ALL_WEAPONS][] =
 
 	"腎上腺素",
 	"電擊器",
-	"醫療包",
-	"藥丸",
+	"急救包",
+	"止痛藥",
 
 	"煙火",
 	"瓦斯桶",
 	"氧氣瓶",
 	"煤氣罐",
 
-	"火焰瓶",
+	"汽油彈",
 	"土製炸彈",
 	"膽汁罐",
 
@@ -867,12 +867,15 @@ public Action:Timer_UndeadRush(Handle:timer, DataPack:DP) {
 	new client = DP.ReadCell();
 	new flags3 = GetCommandFlags("z_spawn_old");
 	new flags4 = GetCommandFlags("director_force_panic_event");
-	SetCommandFlags("z_spawn_old", flags3 & ~FCVAR_CHEAT);
+
 	SetCommandFlags("director_force_panic_event", flags4 & ~FCVAR_CHEAT);
 	FakeClientCommand(client, "director_force_panic_event");
-	SetCommandFlags("z_spawn_old", flags3|FCVAR_CHEAT);
 	SetCommandFlags("director_force_panic_event", flags4|FCVAR_CHEAT);
-	
+
+	SetCommandFlags("z_spawn_old", flags3 & ~FCVAR_CHEAT);
+	FakeClientCommand(client, "z_spawn_old mob");
+	SetCommandFlags("z_spawn_old", flags3|FCVAR_CHEAT);
+
 	g_hCvarPanicForever.SetBool(true, false, false);
 	// DataPack DP2 = new DataPack();
 	// DP2.WriteCell(client);
