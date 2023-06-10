@@ -1130,6 +1130,7 @@ public Skill_Steal(Handle:timer, DataPack:DP)
 	DP.Reset();
 	new client = DP.ReadCell();
 	new entityId = DP.ReadCell();
+	int type = DP.ReadCell();
 	// 1. Read the type and coordinates of the object aimed by the player
 	// new entityId = GetClientAimTarget(client, false);//return Entity
 	char item[MAXCMD];

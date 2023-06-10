@@ -611,7 +611,9 @@ void Turn_Undead(int target, int client)
 				{
 					if( bWitch )
 					{
-						DealDamage(target, 10000, client, DMG_CLUB);
+						int hp = GetEntProp(target, Prop_Data, "m_iHealth")+5;
+						DealDamage(target, hp, client, DMG_CLUB);
+						// DealDamage(target, 10000, client, DMG_CLUB);
 						SetEntityRenderFx(target, RENDERFX_FADE_FAST);
 						DissolveTarget(index, target, 0);
 					} else {
@@ -628,7 +630,9 @@ void Turn_Undead(int target, int client)
 					
 				}else
 				{
-					DealDamage(target, 10000, client, DMG_CLUB);
+					// DealDamage(target, 10000, client, DMG_CLUB);
+					int hp = GetEntProp(target, Prop_Data, "m_iHealth")+5;
+					DealDamage(target, hp, client, DMG_CLUB);
 					SetEntityRenderFx(target, RENDERFX_FADE_FAST);
 				}
 			}
