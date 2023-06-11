@@ -159,12 +159,12 @@ static char g_sWeaponTranslate[ALL_WEAPONS][] =
 	"泵式霰彈槍" ,
 	"M-16突擊步槍" ,
 	"AK47" ,
-	"戰鬥步槍" ,
+	"SCAR戰術步槍" ,
 	"M60機槍" ,
 	"SG552步槍" ,
 	"鉻管霰彈槍",
-	"戰鬥霰彈槍" ,
-	"小型衝鋒槍" ,
+	"戰術霰彈槍" ,
+	"烏茲衝鋒槍" ,
 	"MP5衝鋒槍" ,
 	"滅音衝鋒槍" ,
 	"麥格農狙擊槍",
@@ -336,7 +336,13 @@ public Setup_Materials() {
 	
 	SetupMaterial("sound\\skills\\slomo_end.mp3");
 	SetupSound("skills\\slomo_end.mp3", true);
-	
+
+	SetupMaterial("sound\\skills\\steal.mp3");
+	SetupSound("skills\\steal.mp3", true);
+
+	SetupMaterial("sound\\skills\\turn_undead.mp3");
+	SetupSound("skills\\turn_undead.mp3", true);
+
 	SetupMaterial("particles\\skill_fx.pcf");
 	PrecacheParticle(PARTICLE_EXPLOSION);
 	PrecacheParticle(PARTICLE_EAGLEEYE);
@@ -934,16 +940,16 @@ public Action:Timer_TurnUndeadAimDelay(Handle:timer, DataPack:DP) {
 }
 public TurnUndeadAim(client, Float:delay) {
 	PrepareAndEmitSoundtoAll("skills\\turn_undead.mp3", .entity = client, .volume = 1.0);
-	new Float:Pos[3];
-	if (GetAimOrigin(client, Pos, 10.0) == 0) return;
-
+	float pos[3];
+	GetClientAbsOrigin(client, pos);
+	// if (GetAimOrigin(client, Pos, 10.0) == 0) return;
 	// CreateParticle(PARTICLE_EXPLOSION, delay + 1.0, Pos);
 
 	DataPack DP = new DataPack();
 	DP.WriteCell(client);
-	DP.WriteCell(Pos[0]);
-	DP.WriteCell(Pos[1]);
-	DP.WriteCell(Pos[2]);
+	DP.WriteCell(pos[0]);
+	DP.WriteCell(pos[1]);
+	DP.WriteCell(pos[2]);
 
 	CreateTimer(delay, Timer:Timer_TurnUndeadAimDelay, DP);
 }
@@ -1259,7 +1265,7 @@ public Action:Event_DmgReducedByManaShield(Handle:event, const String:name[], bo
 		//new maxhp = GetEntProp(client, Prop_Data, "m_iMaxHealth");
 
 		if (MP_Decrease(client, dmg_health * 4.0))
-			hp += RoundToCeil(dmg_health * 0.5);
+			hp += dmg_health;
 		/*	
 		if (hp > maxhp) 
 			hp = maxhp;
@@ -1335,25 +1341,26 @@ public Action:Event_DmgInflicted(Handle:event, const String:name[], bool:dontBro
 //========================== Glow ===========================
 //===========================================================
 
-public GlowForSecs(client, r, g, b, Float:time) {
-	if(!IsValidEntity(client))return;
-	if (State_Glow[client]&&Glow_Timer[client]!=null) KillTimer(Glow_Timer[client]);
-	State_Glow[client] = true;
+public GlowForSecs(entity, r, g, b, Float:time) {
+	if(!IsValidEntity(entity))return;
+	if (State_Glow[entity]&&Glow_Timer[entity]!=null) KillTimer(Glow_Timer[entity]);
+	State_Glow[entity] = true;
 
 	// new glowcolor = r + g * 256 + b * 65536;
 	int glowcolor = r | (g << 8) | (b << 16);
-	SetEntProp(client, Prop_Send, "m_glowColorOverride", glowcolor);
-	SetEntProp(client, Prop_Send, "m_iGlowType", 3);
-	Glow_Timer[client] = CreateTimer(time, Timer:Timer_Unglow, client);
+	SetEntProp(entity, Prop_Send, "m_glowColorOverride", glowcolor);
+	SetEntProp(entity, Prop_Send, "m_iGlowType", 3);
+	Glow_Timer[entity] = CreateTimer(time, Timer:Timer_Unglow, entity);
 }
 
-public Action:Timer_Unglow(Handle:timer, any:client) {
-	State_Glow[client] = false;
+public Action:Timer_Unglow(Handle:timer, any:entity) {
+	State_Glow[entity] = false;
 
-	if (!IsValidEntity(client)) return Plugin_Stop;
-	// if (!(IsPlayer(client) || IsInf(client) || IsSpecialInf(client))) return Plugin_Stop;
-	SetEntProp(client, Prop_Send, "m_glowColorOverride", 0);
-	SetEntProp(client, Prop_Send, "m_iGlowType", 0);
+	if (!IsValidEntity(entity)) return Plugin_Stop;
+	// if (!(IsPlayer(entity) || IsInf(entity) || IsSpecialInf(entity))) return Plugin_Stop;
+	if (!HasEntProp(entity, Prop_Send, "m_glowColorOverride")) return Plugin_Stop;
+	SetEntProp(entity, Prop_Send, "m_glowColorOverride", 0);
+	SetEntProp(entity, Prop_Send, "m_iGlowType", 0);
 
 	return Plugin_Stop;
 }
