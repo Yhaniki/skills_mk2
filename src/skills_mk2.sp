@@ -19,6 +19,7 @@
 #define PANIC_SEC                       (120.0)
 #define PARTICLE_EXPLOSION              ("Skill_Explosion")
 #define PARTICLE_EAGLEEYE               ("Skill_EagleEye")
+#define PARTICLE_TURNUNDEAD             ("Skill_Turn_Undead")
 #define PARTICLE_FX_AFTER_EXPLOSION     ("fx_after_explosion")
 #define PARTICLE_FX_EXPLOSION_RING      ("fx_explosion_ring")
 //#define PARTICLE_ELEC                  ("electrical_arc_01_parent")
@@ -271,6 +272,10 @@ public OnPluginStart() {
 	g_hCvarPanicForever = FindConVar("director_panic_forever");
 	g_hCvarPanicForever.SetBool(false, false, false);
 	g_iStockRange = g_hCvarMeleeRange.IntValue;
+	if (State_TurnUndead && TurnUndead_Timer != null)
+	{
+		KillTimer(TurnUndead_Timer);
+	}
 	State_TurnUndead = false;
 //------------------------------
 	//Setup_Materials();
@@ -321,6 +326,10 @@ public CheckPlayerConnections() {
 public OnMapStart() {
 	Setup_Materials();
 	TrunUndeadMapStart();
+	if (State_TurnUndead && TurnUndead_Timer != null)
+	{
+		KillTimer(TurnUndead_Timer);
+	}
 }
 
 public Setup_Materials() {
@@ -644,14 +653,14 @@ public Action:Event_SkillStateTransition(client, args) {
 					CreateTimer(0.0, Timer:Timer_Skill_Start[skill_using], client);
 					Skill_Trigger(client);
 				} else {
-					PrintToChat(client, "Not enough mana.");
+					PrintToChat(client, "魔力不足");
 				}
 			}
 			case SKILL_ACT: {
-				PrintToChat(client, "Skill is already activated.");
+				PrintToChat(client, "技能施放中");
 			}
 			case SKILL_CD: {
-				PrintToChat(client, "Skill is not ready yet.");
+				PrintToChat(client, "技能冷卻中");
 			}
 		}
 	}
@@ -868,23 +877,34 @@ public Action:Timer_UndeadRushEnd(Handle:timer) {
 	g_hCvarPanicForever.SetBool(false, false, false);
 	PrintToChatAll("\x03[致命感染] \x01屍潮結束");
 }
+StripAndExecuteClientCommand(client, const String:command[], const String:arguments[]) {
+	new flags = GetCommandFlags(command);
+	SetCommandFlags(command, flags & ~FCVAR_CHEAT);
+	FakeClientCommand(client, "%s %s", command, arguments);
+	SetCommandFlags(command, flags);
+}
 public Action:Timer_UndeadRush(Handle:timer, DataPack:DP) {
 	DP.Reset();
 	new client = DP.ReadCell();
-	new flags3 = GetCommandFlags("z_spawn_old");
-	new flags4 = GetCommandFlags("director_force_panic_event");
 
-	SetCommandFlags("director_force_panic_event", flags4 & ~FCVAR_CHEAT);
-	FakeClientCommand(client, "director_force_panic_event");
-	SetCommandFlags("director_force_panic_event", flags4|FCVAR_CHEAT);
+	g_hCvarPanicForever.SetBool(false, false, false);
+	StripAndExecuteClientCommand(client, "z_spawn_old", "mob");
+	static int director = INVALID_ENT_REFERENCE;
 
-	SetCommandFlags("z_spawn_old", flags3 & ~FCVAR_CHEAT);
-	FakeClientCommand(client, "z_spawn_old mob");
-	SetCommandFlags("z_spawn_old", flags3|FCVAR_CHEAT);
+	if (director == INVALID_ENT_REFERENCE || EntRefToEntIndex(director) == INVALID_ENT_REFERENCE)
+	{
+		director = FindEntityByClassname(-1, "info_director");
+		if (director != INVALID_ENT_REFERENCE)
+		{
+			director = EntIndexToEntRef(director);
+		}
+	}
 
+	if (director != INVALID_ENT_REFERENCE)
+	{
+		AcceptEntityInput(director, "ForcePanicEvent");
+	}
 	g_hCvarPanicForever.SetBool(true, false, false);
-	// DataPack DP2 = new DataPack();
-	// DP2.WriteCell(client);
 	if (State_TurnUndead&&TurnUndead_Timer != null)
 	{
 		KillTimer(TurnUndead_Timer);
@@ -900,7 +920,7 @@ public Action:Timer_TurnUndeadAimDelay(Handle:timer, DataPack:DP) {
 	Pos[0] = DP.ReadCell();
 	Pos[1] = DP.ReadCell();
 	Pos[2] = DP.ReadCell();
-
+	CreateParticle(PARTICLE_TURNUNDEAD, 1.0, Pos);
 	for (new i = 1; i < MAXPLAYERS; i++) {
 		if (IsAliveSpecialInf(i)) {
 			new Float:distance = GetEntityPosDistance(i, Pos);
@@ -940,16 +960,16 @@ public Action:Timer_TurnUndeadAimDelay(Handle:timer, DataPack:DP) {
 }
 public TurnUndeadAim(client, Float:delay) {
 	PrepareAndEmitSoundtoAll("skills\\turn_undead.mp3", .entity = client, .volume = 1.0);
-	float pos[3];
-	GetClientAbsOrigin(client, pos);
+	float Pos[3];
+	GetAimOrigin(client, Pos, 0.1);
+	Pos[2] += 10;
 	// if (GetAimOrigin(client, Pos, 10.0) == 0) return;
-	// CreateParticle(PARTICLE_EXPLOSION, delay + 1.0, Pos);
 
 	DataPack DP = new DataPack();
 	DP.WriteCell(client);
-	DP.WriteCell(pos[0]);
-	DP.WriteCell(pos[1]);
-	DP.WriteCell(pos[2]);
+	DP.WriteCell(Pos[0]);
+	DP.WriteCell(Pos[1]);
+	DP.WriteCell(Pos[2]);
 
 	CreateTimer(delay, Timer:Timer_TurnUndeadAimDelay, DP);
 }
@@ -984,7 +1004,7 @@ int CheckStealType(int entityId)
 		{
 			result = 0;
 		}
-		else if (IsAliveInf(entityId) || IsAliveSpecialInf(entityId))
+		else if (IsAliveInf(entityId) || IsAliveSpecialInf(entityId)||IsWitch(entityId))
 		{
 			result = 1;
 		}
@@ -1235,9 +1255,9 @@ public Action:Timer_Skill_Explosion_Start(Handle:timer, any:client) {
 //----------Mana Shield (魔心護盾)----------//
 public Action:Timer_Skill_ManaShield_Start(Handle:timer, any:client) {
 	// GlowForSecs(client, 100, 100, 0, 10.0);
-	int glowcolor = 100 | (100 << 8) | (0 << 16);
-	SetEntProp(client, Prop_Send, "m_glowColorOverride", glowcolor);
-	SetEntProp(client, Prop_Send, "m_iGlowType", 3);
+	// int glowcolor = 100 | (100 << 8) | (0 << 16);
+	// SetEntProp(client, Prop_Send, "m_glowColorOverride", glowcolor);
+	// SetEntProp(client, Prop_Send, "m_iGlowType", 3);
 	
 	State_ManaShield[client] = true;
 	//PrintToChatAll("%N - Mana Shield!", client);
@@ -1451,9 +1471,18 @@ public PrintPlayerState(const String:name[], client) {
 }
 
 public bool:IsAliveInf(client) {
+	if(!IsValidEntity(client))return false;
 	new String:str[MAXCMD];
 	GetEdictClassname(client, str, MAXCMD);
-	return StrEqual(str, "infected") && IsValidEntity(client);
+	return StrEqual(str, "infected");
+}
+
+public bool IsWitch(int entity)
+{
+	if(!IsValidEntity(entity))return false;
+	new String:str[MAXCMD];
+	GetEdictClassname(entity, str, MAXCMD);
+	return StrEqual(str, "witch");
 }
 
 public bool:IsAliveSpecialInf(client) {
