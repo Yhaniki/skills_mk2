@@ -905,7 +905,9 @@ public Action:Timer_UndeadRush(Handle:timer, DataPack:DP) {
 		AcceptEntityInput(director, "ForcePanicEvent");
 	}
 	g_hCvarPanicForever.SetBool(true, false, false);
-	if (State_TurnUndead&&TurnUndead_Timer != null)
+	if (State_TurnUndead &&
+		TurnUndead_Timer != null &&
+		TurnUndead_Timer != INVALID_HANDLE)
 	{
 		KillTimer(TurnUndead_Timer);
 	}
@@ -1285,11 +1287,9 @@ public Action:Event_DmgReducedByManaShield(Handle:event, const String:name[], bo
 		//new maxhp = GetEntProp(client, Prop_Data, "m_iMaxHealth");
 
 		if (MP_Decrease(client, dmg_health * 4.0))
-			hp += dmg_health;
-		/*	
-		if (hp > maxhp) 
-			hp = maxhp;
-		*/	
+			hp += RoundToFloor(dmg_health);
+		if (hp > 100) 
+			hp = 100;
 		SetEntProp(client, Prop_Data, "m_iHealth", hp);
 	}
 	if(Skill_Notify_Timer[client]!=null)
