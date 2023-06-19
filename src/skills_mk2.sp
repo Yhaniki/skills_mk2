@@ -629,17 +629,7 @@ public Interrupt_Skill(client) {
 	
 	Skill_State[client] = SKILL_RDY;
 }
-public test()
-{
-	new entity = -1;
-	PrintToServer("1test");
-	while( (entity = FindEntityByClassname(entity, "infected")) != INVALID_ENT_REFERENCE )
-	{
-		SetEntProp(entity, Prop_Send, "m_glowColorOverride", 0);
-		SetEntProp(entity, Prop_Send, "m_iGlowType", 0);	
-	}
-	PrintToServer("end");
-}
+
 public Action:Event_SkillStateTransition(client, args) {
 	new String:cmd[MAXCMD];
 	GetCmdArg(0, cmd, MAXCMD);
@@ -677,9 +667,8 @@ public Action:Event_SkillStateTransition(client, args) {
 	}
 	else if (StrEqual(cmd, "fix"))
 	{
-		// PrintToChat(client, "Correction Mana Bar");
-		// OnClientConnected(client);
-		test();
+		PrintToChat(client, "Correction Mana Bar");
+		OnClientConnected(client);
 	}
 
 	TriggerTimer(Skill_Notify_Timer[client], true);
