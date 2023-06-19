@@ -1287,9 +1287,9 @@ public Action:Event_DmgReducedByManaShield(Handle:event, const String:name[], bo
 		//new maxhp = GetEntProp(client, Prop_Data, "m_iMaxHealth");
 
 		if (MP_Decrease(client, dmg_health * 4.0))
-			hp += RoundToFloor(dmg_health);
-		if (hp > 100) 
-			hp = 100;
+			hp += (RoundToFloor(dmg_health)-1);
+		// if (hp > 100) 
+		// 	hp = 100;
 		SetEntProp(client, Prop_Data, "m_iHealth", hp);
 	}
 	if(Skill_Notify_Timer[client]!=null)
