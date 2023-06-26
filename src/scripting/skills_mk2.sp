@@ -22,6 +22,8 @@
 #define PARTICLE_TURNUNDEAD             ("Skill_Turn_Undead")
 #define PARTICLE_FX_AFTER_EXPLOSION     ("fx_after_explosion")
 #define PARTICLE_FX_EXPLOSION_RING      ("fx_explosion_ring")
+#define PARTICLE_EX_GLOW                ("b_glow_2")
+#define PARTICLE_EX_LIGHT               ("fire_glow_01")
 //#define PARTICLE_ELEC                  ("electrical_arc_01_parent")
 //#define PARTICLE_WARP                  ("electrical_arc_01_system")
 
@@ -29,6 +31,7 @@
 #include <sdktools>
 #include <sdkhooks>
 #include <dhooks>
+#include <left4dhooks>
 #include "resourcemanager.sp"
 // #include "damage.sp"
 #include "l4d_dissolve_infected.sp"
@@ -62,7 +65,7 @@ new bool:State_Glow[MAXENTITIES];
 new Handle:Glow_Timer[MAXENTITIES];
 new bool:State_Freeze[MAXENTITIES];
 new Handle:Freeze_Timer[MAXENTITIES];
-
+bool Invulnerable[MAXENTITIES];
 new Slow_Ent;
 new bool:State_Slow;
 new Handle:Slow_Timer;
@@ -81,6 +84,7 @@ new Float:Skill_Cooldown[MAXSKILLS];
 new Float:Skill_Duration[MAXSKILLS];
 new Float:Skill_MPcost[MAXSKILLS];
 new skill_num = 0;
+float explosion_ex_delay_secs = 25.0;
 Handle g_hDetour;
 
 public Plugin:MyInfo = {
@@ -244,7 +248,7 @@ MRESReturn TestMeleeSwingCollisionPost(int pThis, Handle hReturn)
 	g_hCvarMeleeRange.SetInt(g_iStockRange);
 	return MRES_Ignored;
 }
-
+Handle g_hSDKUnVomit;
 public OnPluginStart() {
 	PrintToServer("=============Plugin Start===============");
 //------------------------------
@@ -257,6 +261,16 @@ public OnPluginStart() {
 
 	g_hDetour = DHookCreateFromConf(hGameData, "CTerrorMeleeWeapon::TestMeleeSwingCollision");
 	delete hGameData;
+
+	GameData hGameData2 = new GameData("l4d_unvomit");
+	if( hGameData2 == null ) SetFailState("Failed to load gamedata: l4d_unvomit.txt");
+	StartPrepSDKCall(SDKCall_Player);
+	if( PrepSDKCall_SetFromConf(hGameData2, SDKConf_Signature, "CTerrorPlayer::OnITExpired") == false ) SetFailState("Failed to find signature: CTerrorPlayer::OnITExpired");
+	g_hSDKUnVomit = EndPrepSDKCall();
+	if( g_hSDKUnVomit == null ) SetFailState("Failed to create SDKCall: CTerrorPlayer::OnITExpired");
+
+	delete hGameData2;
+
 
 	if( !g_hDetour )
 		SetFailState("Failed to find \"CTerrorMeleeWeapon::GetPrimaryAttackActivity\" signature.");
@@ -276,6 +290,13 @@ public OnPluginStart() {
 		KillTimer(TurnUndead_Timer);
 	}
 	State_TurnUndead = false;
+	State_Slow = false;
+	for(int i=0; i<MAXENTITIES; i++)
+	{
+		State_Glow[i]=false;
+		State_Freeze[i]=false;
+		Invulnerable[i]=false;
+	}
 //------------------------------
 	//Setup_Materials();
 	RegisterSkill("Explosion 爆裂" ,Timer_Skill_Explosion_Start, Timer_Skill_Null_End, Timer_Skill_Null_Ready, 1.0, 2.0, 30.0);
@@ -283,6 +304,7 @@ public OnPluginStart() {
 	RegisterSkill("Eagle Eye 鷹眼" ,Timer_Skill_EagleEye_Start, Timer_Skill_Null_End, Timer_Skill_Null_Ready, 5.0, 2.0, 40.0);
 	RegisterSkill("Steal 偷竊" ,Timer_Skill_Steal_Start, Timer_Skill_Null_End, Timer_Skill_Null_Ready, 7.0, 2.0, 20.0);// Float:skill_duration, Float:skill_cooldown, Float:skill_mpcost
 	RegisterSkill("Sacred Turn Undead 淨化" , Timer_Skill_TurnUndead_Start, Timer_Skill_Null_End, Timer_Skill_Null_Ready, 3.5, 2.0, 50.0);
+	RegisterSkill("爆裂ex" , Timer_Skill_EX_Start, Timer_Skill_EX_End, Timer_Skill_Null_Ready, explosion_ex_delay_secs, 2.0, 1.0);
 	//RegisterSkill("Sixth Sense 第六感" ,Timer_Skill_EagleEye_Start, Timer_Skill_EagleEye_End, Timer_Skill_Null_Ready, 10.0, 60.0, 80.0);
 
 	//Function: OnClientConnected
@@ -351,11 +373,20 @@ public Setup_Materials() {
 	SetupMaterial("sound\\skills\\turn_undead.mp3");
 	SetupSound("skills\\turn_undead.mp3", true);
 
+	SetupMaterial("sound\\skills\\explosion_full.mp3");
+	SetupSound("skills\\explosion_full.mp3", true);
+
 	SetupMaterial("particles\\skill_fx.pcf");
+	SetupMaterial("particles\\ex.pcf");
+
 	PrecacheParticle(PARTICLE_EXPLOSION);
 	PrecacheParticle(PARTICLE_EAGLEEYE);
 	PrecacheParticle(PARTICLE_FX_AFTER_EXPLOSION);
 	PrecacheParticle(PARTICLE_FX_EXPLOSION_RING);
+	PrecacheParticle(PARTICLE_TURNUNDEAD);
+	PrecacheParticle(PARTICLE_EX_GLOW);
+	PrecacheParticle(PARTICLE_EX_LIGHT);
+
 	PrintToServer("===========Material Setup End===========");
 }
 
@@ -508,7 +539,7 @@ public Init_Skill(client) {
 	if(Skill[client]<0||Skill[client]>skill_num-1)
 		Skill[client] = 0;
 	Skill_MP[client] = 50.0;
-	Skill_Trigger(client);
+	// Skill_Trigger(client);
 }
 
 public Delete_Skill(client) {
@@ -563,7 +594,7 @@ public int Skill_Change_Menu_Handler(Menu menu, MenuAction action, int param1, i
 public Skill_Change_Menu(client) {
 	Menu menu = new Menu(Skill_Change_Menu_Handler);
 	menu.SetTitle("Choose a Skill...");
-	for (new i = 0; i < skill_num; ++i) {
+	for (new i = 0; i < skill_num; ++i) {//TODO: hidden explosion full option
 		new String:skill_msg[MAXCMD] = "";
 		Format(skill_msg, MAXCMD, "  %s", Skill_Name[i]);
 		menu.AddItem("", skill_msg);
@@ -631,11 +662,22 @@ public Interrupt_Skill(client) {
 	Skill_State[client] = SKILL_RDY;
 }
 
+public bool CheckExplosion(int client)
+{
+	bool result = false;
+	if (Skill_MP[client] == 100.0 &&
+		StrEqual(Skill_Name[Skill[client]], "Explosion 爆裂"))
+	{
+		result = true;
+	}
+	return result;
+}
+
 public Action:Event_SkillStateTransition(client, args) {
 	new String:cmd[MAXCMD];
 	GetCmdArg(0, cmd, MAXCMD);
 	if (State_Transition[client] || (State_Player[client] == PLAYER_DEAD)) return Plugin_Handled;
-	
+
 	new skill_using = Skill[client];
 	if (StrEqual(cmd, "skill1")) {
 		switch (Skill_State[client]) {
@@ -764,7 +806,15 @@ public MP_Increase(client, Float:mp) {
 		Skill_MP[client] += mp;
 	}
 	if (Skill_MP[client] > MP_MAX) Skill_MP[client] = MP_MAX;
-	TriggerTimer(Skill_Notify_Timer[client], true);
+	if (Skill_Notify_Timer[client] != null &&
+		Skill_Notify_Timer[client] != INVALID_HANDLE)
+	{
+		TriggerTimer(Skill_Notify_Timer[client], true);
+	}
+	else
+	{
+		OnClientConnected(client);
+	}
 }
 
 public Action:Skill_MPrecover(Handle:timer, any:client) {
@@ -866,6 +916,32 @@ public Action:Timer_Skill_Null_Ready(Handle:timer, any:client) {
 	return Plugin_Handled;
 }
 //------------------------------------//
+//------------隱藏版爆裂---------------//
+public Action:Timer_Skill_EX_End(Handle:timer, any:client)
+{
+	if (IsAliveHumanPlayer(client) &&
+		!IsIncapped(client))
+	{
+		int hp = GetEntProp(client, Prop_Data, "m_iHealth");
+		DealDamage(client, hp, client, DMG_BURN);
+	}
+	Invulnerable[client]=false;
+	return Plugin_Stop;
+}
+public Action:Timer_Skill_EX_Start(Handle:timer, any:client) {
+	PrintToChatAll("\x04%N \x01エクスプロージョン!", client);
+	new Float:Pos[3];
+	GetClientAbsOrigin(client, Pos);
+	CreateParticle(PARTICLE_EX_GLOW, explosion_ex_delay_secs, Pos);
+	CreateParticle(PARTICLE_EX_LIGHT, explosion_ex_delay_secs, Pos);
+	PrepareAndEmitSoundtoAll("skills\\explosion_full.mp3", .entity = client, .volume = 1.0);
+	GlowForSecs(client, 255, 0, 0, explosion_ex_delay_secs);
+	SlowForSecs(explosion_ex_delay_secs, client);
+	FreezeForSecs(client, explosion_ex_delay_secs);
+	Invulnerable[client]=true;
+	return Plugin_Stop;
+}
+//------------------------------------//
 //------------trun undead-------------//
 public Action:Timer_UndeadRushEnd(Handle:timer) {
 	State_TurnUndead = false;
@@ -899,6 +975,8 @@ public Action:Timer_UndeadRush(Handle:timer, DataPack:DP) {
 	{
 		AcceptEntityInput(director, "ForcePanicEvent");
 	}
+	L4D_CTerrorPlayer_OnVomitedUpon(client, client);
+	SDKCall(g_hSDKUnVomit, client);
 	g_hCvarPanicForever.SetBool(true, false, false);
 	if (State_TurnUndead &&
 		TurnUndead_Timer != null &&
@@ -1272,9 +1350,9 @@ public Action:Timer_Skill_ManaShield_End(Handle:timer, any:client) {
 }
 
 public Action:Event_DmgReducedByManaShield(Handle:event, const String:name[], bool:dontBroadcast) {
-	new Float:dmg_health = GetEventFloat(event, "dmg_health");
+	int dmg_health = GetEventInt(event, "dmg_health");
 	new client = GetClientOfUserId(GetEventInt(event, "userid"));
-	
+	if(Invulnerable[client]) return Plugin_Handled;
 	if (!State_ManaShield[client]) return Plugin_Continue;
 	
 	if (IsAliveHumanPlayer(client)) {
@@ -1282,7 +1360,7 @@ public Action:Event_DmgReducedByManaShield(Handle:event, const String:name[], bo
 		//new maxhp = GetEntProp(client, Prop_Data, "m_iMaxHealth");
 
 		if (MP_Decrease(client, dmg_health * 4.0))
-			hp += (RoundToFloor(dmg_health)-1);
+			hp += dmg_health;
 		// if (hp > 100) 
 		// 	hp = 100;
 		SetEntProp(client, Prop_Data, "m_iHealth", hp);
@@ -1395,16 +1473,17 @@ public Action:Event_DeathUnglow(Handle:event, const String:name[], bool:dontBroa
 //===========================================================
 
 public FreezeForSecs(client, Float:time) {
-	//if (State_Freeze[client]) KillTimer(Freeze_Timer[client]);
-	
-	//State_Freeze[client] = true;
+	if (State_Freeze[client] &&
+		Freeze_Timer[client] != null &&
+		Freeze_Timer[client] != INVALID_HANDLE)
+		KillTimer(Freeze_Timer[client]);
 
-	new tick = GetEntProp(client, Prop_Data, "m_nNextThinkTick");
-	SetEntProp(client, Prop_Data, "m_nNextThinkTick", tick + RoundToFloor(time * 30.0));
-	
+	State_Freeze[client] = true;
+	SetEntPropFloat(client, Prop_Data, "m_flLaggedMovementValue", 0.0);
+	// float speed = GetEntPropFloat(client, Prop_Data, "m_flLaggedMovementValue");
+	// PrintToChatAll("FREEZE! %f\n",speed);
+
 	Freeze_Timer[client] = CreateTimer(time, Timer:Timer_Unfreeze, client);
-	
-	//PrintToChatAll("FREEZE!");
 }
 
 public Action:Timer_Unfreeze(Handle:timer, any:client) {
@@ -1412,7 +1491,7 @@ public Action:Timer_Unfreeze(Handle:timer, any:client) {
 
 	if (!IsValidEntity(client)) return Plugin_Stop;
 	if (!(IsPlayer(client) || IsInf(client) || IsSpecialInf(client))) return Plugin_Stop;
-	
+	SetEntPropFloat(client, Prop_Data, "m_flLaggedMovementValue", 1.0);
 	//AcceptEntityInput(client, "");
 	
 	return Plugin_Stop;
@@ -1507,7 +1586,7 @@ public bool:IsAliveHumanPlayer(client) {
 	&& (GetClientTeam(client) == 2);
 }
 
-bool IsIncapped(int client)
+public bool IsIncapped(int client)
 {
 	return view_as<bool>(GetEntProp(client, Prop_Send, "m_isIncapacitated"));
 }
@@ -1713,36 +1792,104 @@ public Float:GetEntityPosDistance(entity, Float:pos[3]) {
 	return GetVectorDistance(Pos1, pos);
 }
 
-public ShowSpriteOnClient(client) { 
-	new sprite = CreateEntityByName("env_sprite"); 
+public
+Action L4D_OnGrabWithTongue(int victim, int attacker)
+{
+	if(Invulnerable[victim])
+		return Plugin_Handled;
+	else
+		return Plugin_Continue;
+}
 
-	if(sprite != -1) { 
-		DispatchKeyValue(sprite, "spawnflags", "0");
-		DispatchKeyValue(sprite, "scale", "0.1");
-		DispatchKeyValue(sprite, "rendermode", "5");
-		DispatchKeyValue(sprite, "rendercolor", "255 255 255");
-		DispatchKeyValue(sprite, "renderamt", "255");
-		
-		DispatchKeyValue(sprite, "spawnflags", "0"); 
-		DispatchKeyValue(sprite, "scale", "2.0"); 
-		DispatchKeyValue(sprite, "model", "ads\\burger_off.vmt"); 
-		
-		new Float:pos[3]; 
-		GetClientAbsOrigin(client, pos); 
-		
-		DispatchKeyValueVector(sprite, "origin", pos);
-		
-		if (DispatchSpawn(sprite)) PrintToChatAll("PIC!");
-		AcceptEntityInput(sprite, "ShowSprite");
-		/*
-		SetVariantString("!activator"); 
-		AcceptEntityInput(sprite, "SetParent", client); 
+public
+Action L4D_OnPouncedOnSurvivor(int victim, int attacker)
+{
+	if(Invulnerable[victim])
+		return Plugin_Handled;
+	else
+		return Plugin_Continue;
+}
 
-		new String:AddOutput[100] 
-		Format(AddOutput, sizeof(AddOutput), "OnUser1 !self:kill::%0.2f:-1", 5.0); 
-		SetVariantString(AddOutput); 
-		AcceptEntityInput(sprite, "AddOutput"); 
-		AcceptEntityInput(sprite, "FireUser1"); 
-		*/
-	} 
+public
+Action L4D2_OnJockeyRide(int victim, int attacker)
+{
+	if(Invulnerable[victim])
+		return Plugin_Handled;
+	else
+		return Plugin_Continue;
+}
+
+public
+Action L4D2_OnStartCarryingVictim(int victim, int attacker)
+{
+	if(Invulnerable[victim])
+		return Plugin_Handled;
+	else
+		return Plugin_Continue;
+}
+
+public
+Action L4D2_OnPummelVictim(int attacker, int victim)
+{
+	// from "left4dhooks_test.sp"
+	if(Invulnerable[victim])
+	{
+		DataPack pack = new DataPack();
+		RequestFrame(OnPummelTeleport, pack);
+		pack.WriteCell(GetClientUserId(victim));
+		pack.WriteCell(GetClientUserId(attacker));
+
+		// To block the stumble animation, uncomment and use the following 2 lines:
+		AnimHookEnable(victim, OnPummelOnAnimPre, INVALID_FUNCTION);
+		CreateTimer(0.3, Timer_OnPummelResetAnim, GetClientUserId(victim));
+
+		return Plugin_Handled;
+	}
+	else
+		return Plugin_Continue;
+}
+
+// To fix getting stuck use this:
+void OnPummelTeleport(DataPack pack)
+{
+	pack.Reset();
+	int victim = pack.ReadCell();
+	int attacker = pack.ReadCell();
+	delete pack;
+
+	victim = GetClientOfUserId(victim);
+	if (!victim || !IsClientInGame(victim)) return;
+
+	attacker = GetClientOfUserId(attacker);
+	if (!attacker || !IsClientInGame(attacker)) return;
+
+	SetVariantString("!activator");
+	AcceptEntityInput(victim, "SetParent", attacker);
+	TeleportEntity(victim, view_as<float>({50.0, 0.0, 0.0}), NULL_VECTOR, NULL_VECTOR);
+	AcceptEntityInput(victim, "ClearParent");
+}
+
+// To block the stumble animation use the next two functions:
+Action OnPummelOnAnimPre(int client, int &anim)
+{
+	if(Invulnerable[client])
+	{
+		if (anim == L4D2_ACT_TERROR_SLAMMED_WALL || anim == L4D2_ACT_TERROR_SLAMMED_GROUND)
+		{
+			anim = L4D2_ACT_STAND;
+			return Plugin_Changed;
+		}
+	}
+
+	return Plugin_Continue;
+}
+
+Action Timer_OnPummelResetAnim(Handle timer, int client)
+{
+	// Don't need client userID since 
+	// it's not going to be validated just removed
+	// if ((client = GetClientOfUserId(client)))
+	AnimHookDisable(client, OnPummelOnAnimPre);
+
+	return Plugin_Continue;
 }
