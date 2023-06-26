@@ -135,8 +135,8 @@ native int LMC_GetEntityOverlayModel(int iEntity);
 
 Handle sdkDissolveCreate;
 ConVar g_hCvarAllow, g_hCvarChance, g_hCvarInfected, g_hCvarMPGameMode, g_hCvarModes, g_hCvarModesOff, g_hCvarModesTog, g_hCvarTime, g_hCvarTimeMin, g_hCvarTimeMax;
-int g_iCvarChance, g_iCvarInfected, g_iPlayerSpawn, g_iRoundStart, g_iDissolvers[MAX_DISSOLVE]; // g_iRagdollFader
-bool g_bCanDiss, g_bCvarAllow, g_bMapStarted, g_bLeft4Dead2;
+int /*g_iCvarChance,*/ g_iCvarInfected, g_iPlayerSpawn, g_iRoundStart, g_iDissolvers[MAX_DISSOLVE]; // g_iRagdollFader
+bool /*g_bCanDiss,*/ g_bCvarAllow, g_bMapStarted, g_bLeft4Dead2;
 float g_fCvarTime, g_fCvarTimeMin, g_fCvarTimeMax;
 int g_iClassTank, g_iDamageType;
 
@@ -166,8 +166,8 @@ public APLRes AskPluginLoad2(Handle myself, bool late, char[] error, int err_max
 	}
 
 	MarkNativeAsOptional("LMC_GetEntityOverlayModel"); // LMC
-
-	if( late ) g_bCanDiss = true;
+	MarkNativeAsOptional("GetUserMessageType");
+	// if( late ) g_bCanDiss = true;
 	return APLRes_Success;
 }
 
@@ -267,7 +267,7 @@ public void OnMapEnd()
 // ====================================================================================================
 void ResetPlugin()
 {
-	g_bCanDiss = false;
+	// g_bCanDiss = false;
 	g_iRoundStart = 0;
 	g_iPlayerSpawn = 0;
 	// DeleteFader();
@@ -300,7 +300,7 @@ Action TimerLoad(Handle timer)
 
 void LoadPlugin()
 {
-	g_bCanDiss = true;
+	// g_bCanDiss = true;
 	// CreateFader();
 }
 
@@ -358,7 +358,7 @@ void ConVarChanged_Cvars(ConVar convar, const char[] oldValue, const char[] newV
 
 void GetCvars()
 {
-	g_iCvarChance = g_hCvarChance.IntValue;
+	// g_iCvarChance = g_hCvarChance.IntValue;
 	g_iCvarInfected = g_hCvarInfected.IntValue;
 	g_fCvarTime = g_hCvarTime.FloatValue;
 	g_fCvarTimeMin = g_hCvarTimeMin.FloatValue;
@@ -734,12 +734,12 @@ Action OnCommonDamage(int victim, int &attacker, int &inflictor, float &damage, 
 	return Plugin_Continue;
 }
 
-bool HasChance()
-{
-	if( g_iCvarChance && GetRandomInt(1, 100) <= g_iCvarChance )
-		return true;
-	return false;
-}
+// bool HasChance()
+// {
+// 	if( g_iCvarChance && GetRandomInt(1, 100) <= g_iCvarChance )
+// 		return true;
+// 	return false;
+// }
 
 void DissolveTarget(int index, int target, int original = 0)
 {

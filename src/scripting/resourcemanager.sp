@@ -11,9 +11,9 @@
 
 	enum State { Unknown=0, Defined, Download, Force, Precached };
 
-	new Handle:cvarDownloadThreshold	= INVALID_HANDLE;
-	new Handle:cvarSoundThreshold		= INVALID_HANDLE;
-	new Handle:cvarSoundLimitMap		= INVALID_HANDLE;
+	// new Handle:cvarDownloadThreshold	= INVALID_HANDLE;
+	// new Handle:cvarSoundThreshold		= INVALID_HANDLE;
+	// new Handle:cvarSoundLimitMap		= INVALID_HANDLE;
 
 	new g_iSoundCount			= 0;
 	new g_iDownloadCount		= 0;
