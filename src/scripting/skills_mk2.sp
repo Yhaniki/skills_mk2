@@ -1,4 +1,5 @@
 #define SKILL_DEBUG                     (false)
+#define USING_EXPLOSION_EX              (true)
 #define GAMEDATA_MELEE                  ("l4d2_melee_range")
 #define TURN_UNDEAD_DIST                (1000.0)
 #define EXPLOSION_DIST                  (300.0)
@@ -66,6 +67,8 @@ new Handle:Glow_Timer[MAXENTITIES];
 new bool:State_Freeze[MAXENTITIES];
 new Handle:Freeze_Timer[MAXENTITIES];
 bool Invulnerable[MAXENTITIES];
+int Skill_Delay_Cnt[MAXENTITIES];
+new Handle:Skill_Delay_Timer[MAXENTITIES];
 new Slow_Ent;
 new bool:State_Slow;
 new Handle:Slow_Timer;
@@ -296,6 +299,8 @@ public OnPluginStart() {
 		State_Glow[i]=false;
 		State_Freeze[i]=false;
 		Invulnerable[i]=false;
+		Skill_Delay_Cnt[i] = 0;
+		Skill_Delay_Timer[i] = INVALID_HANDLE;
 	}
 //------------------------------
 	//Setup_Materials();
@@ -559,6 +564,12 @@ public Delete_Skill(client) {
 
 public Skill_Trigger(client) {
 	new skill_using = Skill[client];
+	if(Skill_Delay_Cnt[client]>1)
+	{
+		PrintToChatAll("cnt %d",Skill_Delay_Cnt[client]);
+		skill_using = skill_num-1;
+		Skill_Delay_Cnt[client]=0;
+	}
 	switch (Skill_Type[skill_using])
 	{
 		case TYPE_NORMAL:
@@ -594,7 +605,7 @@ public int Skill_Change_Menu_Handler(Menu menu, MenuAction action, int param1, i
 public Skill_Change_Menu(client) {
 	Menu menu = new Menu(Skill_Change_Menu_Handler);
 	menu.SetTitle("Choose a Skill...");
-	for (new i = 0; i < skill_num; ++i) {//TODO: hidden explosion full option
+	for (new i = 0; i < skill_num-1; ++i) {//TODO: hidden explosion full option
 		new String:skill_msg[MAXCMD] = "";
 		Format(skill_msg, MAXCMD, "  %s", Skill_Name[i]);
 		menu.AddItem("", skill_msg);
@@ -665,12 +676,26 @@ public Interrupt_Skill(client) {
 public bool CheckExplosion(int client)
 {
 	bool result = false;
-	if (Skill_MP[client] == 100.0 &&
+#if USING_EXPLOSION_EX
+	if ((Skill_MP[client] >= 99.0||Skill_Delay_Cnt[client]>=1) &&
 		StrEqual(Skill_Name[Skill[client]], "Explosion 爆裂"))
 	{
 		result = true;
+		Skill_Delay_Cnt[client]++;
 	}
+	PrintToChatAll("Skill_MP[client] %f\n",Skill_MP[client]);
+	PrintToChatAll("result %d\n",result);
+#endif
 	return result;
+}
+
+public Action:Explosion_Trigger(Handle:timer, int client)
+{
+	int skill_using = Skill[client];
+	Skill_Delay_Cnt[client]=0;
+	CreateTimer(0.0, Timer:Timer_Skill_Start[skill_using], client);
+	Skill_Trigger(client);
+	return Plugin_Stop;
 }
 
 public Action:Event_SkillStateTransition(client, args) {
@@ -682,9 +707,31 @@ public Action:Event_SkillStateTransition(client, args) {
 	if (StrEqual(cmd, "skill1")) {
 		switch (Skill_State[client]) {
 			case SKILL_RDY: {
+				CheckExplosion(client);
 				if (MP_Decrease(client, Skill_MPcost[skill_using])) {
-					CreateTimer(0.0, Timer:Timer_Skill_Start[skill_using], client);
-					Skill_Trigger(client);
+#if USING_EXPLOSION_EX
+					if (Skill_Delay_Cnt[client] == 1)
+					{
+						Skill_Delay_Timer[client] = CreateTimer(0.5, Explosion_Trigger, client);
+					}
+					else if (Skill_Delay_Cnt[client] > 1)
+					{
+						if (Skill_Delay_Timer[client] != null &&
+							Skill_Delay_Timer[client] != INVALID_HANDLE)
+						{
+							KillTimer(Skill_Delay_Timer[client]);
+						}
+						Skill_MP[client]=0.0;
+						CreateTimer(0.0, Timer:Timer_Skill_Start[skill_num - 1], client);
+						Skill_Trigger(client);
+					}
+					else
+#endif
+					{
+						Skill_Delay_Cnt[client]=0;
+						CreateTimer(0.0, Timer:Timer_Skill_Start[skill_using], client);
+						Skill_Trigger(client);
+					}
 				} else {
 					PrintToChat(client, "魔力不足");
 				}
