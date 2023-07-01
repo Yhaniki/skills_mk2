@@ -1,6 +1,9 @@
 #define SKILL_DEBUG                     (false)
 #define USING_EXPLOSION_EX              (true)
+#define INIT_MP                         (100.0)
 #define GAMEDATA_MELEE                  ("l4d2_melee_range")
+#define GAS_TANK_NUM                    (30.0)
+#define EXEX_DIST                       (500.0)
 #define TURN_UNDEAD_DIST                (1000.0)
 #define EXPLOSION_DIST                  (300.0)
 #define MAX_WEAPONS                     (12)
@@ -18,6 +21,7 @@
 #define MAXSKILLS                       (64)
 #define MAXENTITIES                     (4096)
 #define PANIC_SEC                       (120.0)
+#define EX_HIT_TIMES                    (2)
 #define PARTICLE_EXPLOSION              ("Skill_Explosion")
 #define PARTICLE_EAGLEEYE               ("Skill_EagleEye")
 #define PARTICLE_TURNUNDEAD             ("Skill_Turn_Undead")
@@ -25,6 +29,8 @@
 #define PARTICLE_FX_EXPLOSION_RING      ("fx_explosion_ring")
 #define PARTICLE_EX_GLOW                ("b_glow_2")
 #define PARTICLE_EX_LIGHT               ("fire_glow_01")
+#define PARTICLE_MAGIC_CIRCLE           ("Skill_Magic_Circle")
+#define PARTICLE_EX_GLOW_BIG            ("fire_grow_big")
 //#define PARTICLE_ELEC                  ("electrical_arc_01_parent")
 //#define PARTICLE_WARP                  ("electrical_arc_01_system")
 
@@ -89,7 +95,8 @@ new Float:Skill_MPcost[MAXSKILLS];
 new skill_num = 0;
 float explosion_ex_delay_secs = 25.0;
 Handle g_hDetour;
-
+bool useDP[MAXPLAYERS + 1];
+DataPack playerDP[MAXPLAYERS + 1];
 public Plugin:MyInfo = {
 	name = "Skills",
 	author = "MKLUO",
@@ -302,6 +309,10 @@ public OnPluginStart() {
 		Skill_Delay_Cnt[i] = 0;
 		Skill_Delay_Timer[i] = INVALID_HANDLE;
 	}
+	for(int i=0; i<MAXPLAYERS+1; i++)
+	{
+		useDP[i]=false;
+	}
 //------------------------------
 	//Setup_Materials();
 	RegisterSkill("Explosion 爆裂" ,Timer_Skill_Explosion_Start, Timer_Skill_Null_End, Timer_Skill_Null_Ready, 1.0, 2.0, 30.0);
@@ -309,7 +320,7 @@ public OnPluginStart() {
 	RegisterSkill("Eagle Eye 鷹眼" ,Timer_Skill_EagleEye_Start, Timer_Skill_Null_End, Timer_Skill_Null_Ready, 5.0, 2.0, 40.0);
 	RegisterSkill("Steal 偷竊" ,Timer_Skill_Steal_Start, Timer_Skill_Null_End, Timer_Skill_Null_Ready, 7.0, 2.0, 20.0);// Float:skill_duration, Float:skill_cooldown, Float:skill_mpcost
 	RegisterSkill("Sacred Turn Undead 淨化" , Timer_Skill_TurnUndead_Start, Timer_Skill_Null_End, Timer_Skill_Null_Ready, 3.5, 2.0, 50.0);
-	RegisterSkill("爆裂ex" , Timer_Skill_EX_Start, Timer_Skill_EX_End, Timer_Skill_Null_Ready, explosion_ex_delay_secs, 2.0, 1.0);
+	RegisterSkill("爆裂ex" , Timer_Skill_EX_Start, Timer_Skill_EX_End, Timer_Skill_Null_Ready, explosion_ex_delay_secs+2.0, 2.0, 1.0);
 	//RegisterSkill("Sixth Sense 第六感" ,Timer_Skill_EagleEye_Start, Timer_Skill_EagleEye_End, Timer_Skill_Null_Ready, 10.0, 60.0, 80.0);
 
 	//Function: OnClientConnected
@@ -352,6 +363,7 @@ public CheckPlayerConnections() {
 public OnMapStart() {
 	Setup_Materials();
 	TrunUndeadMapStart();
+	CheckPlayerConnections();
 	if (State_TurnUndead && TurnUndead_Timer != null)
 	{
 		KillTimer(TurnUndead_Timer);
@@ -382,6 +394,7 @@ public Setup_Materials() {
 	SetupSound("skills\\explosion_full.mp3", true);
 
 	SetupMaterial("particles\\skill_fx.pcf");
+	SetupMaterial("particles\\skill_fx2.pcf");
 	SetupMaterial("particles\\ex.pcf");
 
 	PrecacheParticle(PARTICLE_EXPLOSION);
@@ -391,7 +404,8 @@ public Setup_Materials() {
 	PrecacheParticle(PARTICLE_TURNUNDEAD);
 	PrecacheParticle(PARTICLE_EX_GLOW);
 	PrecacheParticle(PARTICLE_EX_LIGHT);
-
+	// PrecacheParticle(PARTICLE_MAGIC_CIRCLE);
+	// PrecacheParticle(PARTICLE_EX_GLOW_BIG);
 	PrintToServer("===========Material Setup End===========");
 }
 
@@ -433,10 +447,10 @@ public Action:CreateParticle(String:particlename[], Float:time, Float:Pos[3]) {
 	new particle = CreateEntityByName("info_particle_system");
 	if (IsValidEntity(particle))
 	{
-		TeleportEntity(particle, Pos, NULL_VECTOR, NULL_VECTOR);
 		DispatchKeyValue(particle, "scale", "");
 		DispatchKeyValue(particle, "effect_name", particlename);
 		DispatchKeyValue(particle, "targetname", "particle");
+		TeleportEntity(particle, Pos, NULL_VECTOR, NULL_VECTOR);
 		DispatchSpawn(particle);
 		ActivateEntity(particle);
 
@@ -543,7 +557,7 @@ public Init_Skill(client) {
 	// PrintToChatAll("Timer for %N created!", client);
 	if(Skill[client]<0||Skill[client]>skill_num-1)
 		Skill[client] = 0;
-	Skill_MP[client] = 50.0;
+	Skill_MP[client] = INIT_MP;
 	// Skill_Trigger(client);
 }
 
@@ -564,9 +578,8 @@ public Delete_Skill(client) {
 
 public Skill_Trigger(client) {
 	new skill_using = Skill[client];
-	if(Skill_Delay_Cnt[client]>1)
+	if(Skill_Delay_Cnt[client]>=EX_HIT_TIMES)
 	{
-		PrintToChatAll("cnt %d",Skill_Delay_Cnt[client]);
 		skill_using = skill_num-1;
 		Skill_Delay_Cnt[client]=0;
 	}
@@ -673,29 +686,56 @@ public Interrupt_Skill(client) {
 	Skill_State[client] = SKILL_RDY;
 }
 
-public bool CheckExplosion(int client)
-{
-	bool result = false;
-#if USING_EXPLOSION_EX
-	if ((Skill_MP[client] >= 99.0||Skill_Delay_Cnt[client]>=1) &&
-		StrEqual(Skill_Name[Skill[client]], "Explosion 爆裂"))
-	{
-		result = true;
-		Skill_Delay_Cnt[client]++;
-	}
-	PrintToChatAll("Skill_MP[client] %f\n",Skill_MP[client]);
-	PrintToChatAll("result %d\n",result);
-#endif
-	return result;
-}
-
 public Action:Explosion_Trigger(Handle:timer, int client)
 {
 	int skill_using = Skill[client];
 	Skill_Delay_Cnt[client]=0;
+	MP_Decrease(client, Skill_MPcost[skill_using]);
 	CreateTimer(0.0, Timer:Timer_Skill_Start[skill_using], client);
 	Skill_Trigger(client);
 	return Plugin_Stop;
+}
+
+public bool CheckExplosion(int client)
+{
+	bool result = false;
+#if USING_EXPLOSION_EX
+	if ((Skill_MP[client] >= 100.0) &&
+		StrEqual(Skill_Name[Skill[client]], "Explosion 爆裂"))
+	{
+		result = true;
+		Skill_Delay_Cnt[client]++;
+		if (Skill_Delay_Cnt[client] == 1)
+		{
+			useDP[client]=true;
+			new Float:Pos[3];
+			GetAimOrigin(client, Pos, 10.0);
+			playerDP[client]=new DataPack();
+			playerDP[client].WriteCell(Pos[0]);
+			playerDP[client].WriteCell(Pos[1]);
+			playerDP[client].WriteCell(Pos[2]);
+			Skill_Delay_Timer[client] = CreateTimer(0.5, Explosion_Trigger, client);
+		}
+		else if(Skill_Delay_Cnt[client]>=EX_HIT_TIMES)
+		{
+			if (Skill_Delay_Timer[client] != null &&
+				Skill_Delay_Timer[client] != INVALID_HANDLE)
+			{
+				KillTimer(Skill_Delay_Timer[client]);
+			}
+			Skill_MP[client]=0.0;
+			CreateTimer(0.0, Timer:Timer_Skill_Start[skill_num - 1], client);
+			Skill_Trigger(client);
+		}
+	}
+	else
+	{
+		Skill_Delay_Cnt[client]=0;
+	}
+	// PrintToChatAll("Skill_MP[client] %f\n",Skill_MP[client]);
+	// PrintToChatAll("result %d\n",result);
+#endif
+	return result;
 }
 
 public Action:Event_SkillStateTransition(client, args) {
@@ -707,33 +747,14 @@ public Action:Event_SkillStateTransition(client, args) {
 	if (StrEqual(cmd, "skill1")) {
 		switch (Skill_State[client]) {
 			case SKILL_RDY: {
-				CheckExplosion(client);
-				if (MP_Decrease(client, Skill_MPcost[skill_using])) {
-#if USING_EXPLOSION_EX
-					if (Skill_Delay_Cnt[client] == 1)
-					{
-						Skill_Delay_Timer[client] = CreateTimer(0.5, Explosion_Trigger, client);
-					}
-					else if (Skill_Delay_Cnt[client] > 1)
-					{
-						if (Skill_Delay_Timer[client] != null &&
-							Skill_Delay_Timer[client] != INVALID_HANDLE)
-						{
-							KillTimer(Skill_Delay_Timer[client]);
-						}
-						Skill_MP[client]=0.0;
-						CreateTimer(0.0, Timer:Timer_Skill_Start[skill_num - 1], client);
-						Skill_Trigger(client);
-					}
-					else
-#endif
-					{
-						Skill_Delay_Cnt[client]=0;
+				if(!CheckExplosion(client))
+				{
+					if (MP_Decrease(client, Skill_MPcost[skill_using])) {
 						CreateTimer(0.0, Timer:Timer_Skill_Start[skill_using], client);
 						Skill_Trigger(client);
+					} else {
+						PrintToChat(client, "魔力不足");
 					}
-				} else {
-					PrintToChat(client, "魔力不足");
 				}
 			}
 			case SKILL_ACT: {
@@ -802,6 +823,10 @@ public Skill_Notify_MPbar(const String:str[], client) {
 	new String:bar[MAXCMD] = "";
 	new String:dot[MAXCMD] = "";
 	float resolution = MP_BAR_SIZE/MP_MAX;
+	if(Invulnerable[client])
+	{
+		Skill_MP[client]=0.0;
+	}
 	new bar_amount = RoundToFloor(Skill_MP[client] * resolution);
 	for (new i = 0; i < bar_amount; i++) {
 		if (State_Adrenaline_Boost[client]) {
@@ -964,6 +989,71 @@ public Action:Timer_Skill_Null_Ready(Handle:timer, any:client) {
 }
 //------------------------------------//
 //------------隱藏版爆裂---------------//
+public Action:Timer_exex(Handle:timer, DataPack:DP)
+{
+	DP.Reset();
+	new client = DP.ReadCell();
+	new Float:Pos[3];
+	Pos[0] = DP.ReadCell();
+	Pos[1] = DP.ReadCell();
+	Pos[2] = DP.ReadCell();
+
+	float p[3];
+	// float pi = 3.14;
+	// float dAng = 2.0 * pi / 5.0;
+	// // PrintToChatAll("ori x%f y%f\n",Pos[0],Pos[1]);
+	// for (int i = 0; i < GAS_TANK_NUM; i++)
+	// {
+	// 	p[0] = Pos[0] + EXEX_DIST * Cosine(dAng * i);
+	// 	p[1] = Pos[1] - EXEX_DIST * Sine(dAng * i);
+	// 	p[2] = Pos[2];
+	// 	// PrintToChatAll("dang %f , cos %f\n",dAng,Cosine(dAng * i));
+	// 	// PrintToChatAll("i%d x%f y%f\n",i,p[0],p[1]);
+	// 	PropaneAtPos(p);
+	// }
+
+	int gasNum=0;
+	while(gasNum<GAS_TANK_NUM)
+	{
+		p[0] = Pos[0] + GetRandomFloat(-EXEX_DIST, EXEX_DIST);
+		p[1] = Pos[1] + GetRandomFloat(-EXEX_DIST, EXEX_DIST);
+		p[2] = Pos[2];
+		float dist = GetVectorDistance(Pos, p);
+		if(dist<EXEX_DIST)
+		{
+			PropaneAtPos(p);
+			gasNum++;
+		}
+	}
+
+	for (new i = 1; i < MAXPLAYERS; i++) {
+		if (IsAliveSpecialInf(i)) {
+			new Float:distance = GetEntityPosDistance(i, Pos);
+			if (distance <= EXEX_DIST) {
+				DealDamage(i, 100, client, DMG_BURN);
+			}
+		}
+	}
+
+	new entity = -1;
+	while ((entity = FindEntityByClassname(entity, "infected")) != INVALID_ENT_REFERENCE) {
+		new health = GetEntProp(entity, Prop_Data, "m_iHealth");
+		if (health > 0) {
+			if (GetEntityPosDistance(entity, Pos) <= EXEX_DIST) {
+				DealDamage(entity, health, client, DMG_BURN);
+			}
+		}
+	}
+	while ((entity = FindEntityByClassname(entity, "witch")) != INVALID_ENT_REFERENCE) {
+		new health = GetEntProp(entity, Prop_Data, "m_iHealth");
+		if (health > 0) {
+			if (GetEntityPosDistance(entity, Pos) <= EXEX_DIST) {
+				DealDamage(entity, health, client, DMG_BURN);
+			}
+		}
+	}
+	return Plugin_Stop;
+}
 public Action:Timer_Skill_EX_End(Handle:timer, any:client)
 {
 	if (IsAliveHumanPlayer(client) &&
@@ -978,14 +1068,25 @@ public Action:Timer_Skill_EX_End(Handle:timer, any:client)
 public Action:Timer_Skill_EX_Start(Handle:timer, any:client) {
 	PrintToChatAll("\x04%N \x01エクスプロージョン!", client);
 	new Float:Pos[3];
+	SlowForSecs(explosion_ex_delay_secs, client);
 	GetClientAbsOrigin(client, Pos);
 	CreateParticle(PARTICLE_EX_GLOW, explosion_ex_delay_secs, Pos);
 	CreateParticle(PARTICLE_EX_LIGHT, explosion_ex_delay_secs, Pos);
+	CreateParticle(PARTICLE_MAGIC_CIRCLE, explosion_ex_delay_secs, Pos);
 	PrepareAndEmitSoundtoAll("skills\\explosion_full.mp3", .entity = client, .volume = 1.0);
 	GlowForSecs(client, 255, 0, 0, explosion_ex_delay_secs);
-	SlowForSecs(explosion_ex_delay_secs, client);
 	FreezeForSecs(client, explosion_ex_delay_secs);
 	Invulnerable[client]=true;
+
+	if (GetAimOrigin(client, Pos, 10.0) == 0) return Plugin_Stop;
+	CreateParticle(PARTICLE_EX_GLOW_BIG, explosion_ex_delay_secs, Pos);
+	DataPack DP = new DataPack();
+	DP.WriteCell(client);
+	DP.WriteCell(Pos[0]);
+	DP.WriteCell(Pos[1]);
+	DP.WriteCell(Pos[2]);
+
+	CreateTimer(explosion_ex_delay_secs, Timer:Timer_exex, DP);
 	return Plugin_Stop;
 }
 //------------------------------------//
@@ -1377,9 +1478,9 @@ public Action:Timer_Skill_Explosion_Start(Handle:timer, any:client) {
 //----------Mana Shield (魔心護盾)----------//
 public Action:Timer_Skill_ManaShield_Start(Handle:timer, any:client) {
 	// GlowForSecs(client, 100, 100, 0, 10.0);
-	// int glowcolor = 100 | (100 << 8) | (0 << 16);
-	// SetEntProp(client, Prop_Send, "m_glowColorOverride", glowcolor);
-	// SetEntProp(client, Prop_Send, "m_iGlowType", 3);
+	int glowcolor = 255 | (255 << 8) | (0 << 16);
+	SetEntProp(client, Prop_Send, "m_glowColorOverride", glowcolor);
+	SetEntProp(client, Prop_Send, "m_iGlowType", 3);
 	
 	State_ManaShield[client] = true;
 	//PrintToChatAll("%N - Mana Shield!", client);
@@ -1687,6 +1788,14 @@ public ExplodeAim(client, Float:delay) {
 	
 	DataPack DP = new DataPack();
 	DP.WriteCell(client);
+	if(useDP[client]==true)
+	{
+		useDP[client]=false;
+		playerDP[client].Reset();
+		Pos[0] = playerDP[client].ReadCell();
+		Pos[1] = playerDP[client].ReadCell();
+		Pos[2] = playerDP[client].ReadCell();
+	}
 	DP.WriteCell(Pos[0]);
 	DP.WriteCell(Pos[1]);
 	DP.WriteCell(Pos[2]);
