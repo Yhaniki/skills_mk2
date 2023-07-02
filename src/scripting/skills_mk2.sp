@@ -331,7 +331,7 @@ public OnPluginStart() {
 	RegisterSkill("Eagle Eye 鷹眼" ,Timer_Skill_EagleEye_Start, Timer_Skill_Null_End, Timer_Skill_Null_Ready, 5.0, 2.0, 40.0);
 	RegisterSkill("Steal 偷竊" ,Timer_Skill_Steal_Start, Timer_Skill_Null_End, Timer_Skill_Null_Ready, 7.0, 2.0, 20.0);// Float:skill_duration, Float:skill_cooldown, Float:skill_mpcost
 	RegisterSkill("Sacred Turn Undead 淨化" , Timer_Skill_TurnUndead_Start, Timer_Skill_Null_End, Timer_Skill_Null_Ready, 3.5, 2.0, 50.0);
-	RegisterSkill("爆裂ex" , Timer_Skill_EX_Start, Timer_Skill_EX_End, Timer_Skill_Null_Ready, explosion_ex_delay_secs+2.0, 2.0, 1.0);
+	RegisterSkill("爆裂ex" , Timer_Skill_EX_Start, Timer_Skill_EX_End, Timer_Skill_Null_Ready, explosion_ex_delay_secs+1.0, 2.0, 1.0);
 	//RegisterSkill("Sixth Sense 第六感" ,Timer_Skill_EagleEye_Start, Timer_Skill_EagleEye_End, Timer_Skill_Null_Ready, 10.0, 60.0, 80.0);
 
 	//Function: OnClientConnected
@@ -1272,8 +1272,8 @@ public Action:Timer_Skill_EX_Start(Handle:timer, any:client) {
 	DP.WriteCell(Pos[1]);
 	DP.WriteCell(Pos[2]);
 
-	CreateTimer(explosion_ex_delay_secs, Timer:Timer_exex, DP);
-	CreateTimer(explosion_ex_delay_secs-1.0, Timer:Timer_ExAfter, DP);
+	CreateTimer(explosion_ex_delay_secs-1.0, Timer:Timer_exex, DP);
+	CreateTimer(explosion_ex_delay_secs-1.5, Timer:Timer_ExAfter, DP);
 	return Plugin_Stop;
 }
 //------------------------------------//
