@@ -2,8 +2,8 @@
 #define USING_EXPLOSION_EX              (true)
 #define INIT_MP                         (100.0)
 #define GAMEDATA_MELEE                  ("l4d2_melee_range")
-#define GAS_TANK_NUM                    (30.0)
-#define EXEX_DIST                       (500.0)
+#define GAS_TANK_NUM                    (20.0)
+#define EXEX_DIST                       (1000.0)
 #define TURN_UNDEAD_DIST                (1000.0)
 #define EXPLOSION_DIST                  (300.0)
 #define MAX_WEAPONS                     (12)
@@ -23,6 +23,7 @@
 #define PANIC_SEC                       (120.0)
 #define EX_HIT_TIMES                    (2)
 #define PARTICLE_EXPLOSION              ("Skill_Explosion")
+#define PARTICLE_EXPLOSION2             ("Skill_Explosion_2")
 #define PARTICLE_EAGLEEYE               ("Skill_EagleEye")
 #define PARTICLE_TURNUNDEAD             ("Skill_Turn_Undead")
 #define PARTICLE_FX_AFTER_EXPLOSION     ("fx_after_explosion")
@@ -31,6 +32,16 @@
 #define PARTICLE_EX_LIGHT               ("fire_glow_01")
 #define PARTICLE_MAGIC_CIRCLE           ("Skill_Magic_Circle")
 #define PARTICLE_EX_GLOW_BIG            ("fire_grow_big")
+#define PARTICLE_BOMB2		"missile_hit1"
+#define PARTICLE_BOMB3		"gas_explosion_main"
+#define PARTICLE_BOMB4		"explosion_huge"
+#define PARTICLE_BLUE		"flame_blue"
+#define PARTICLE_FIRE		"fire_medium_01"
+#define PARTICLE_SPARKS		"fireworks_sparkshower_01e"
+#define PARTICLE_SMOKE		"rpg_smoke"
+#define SOUND_EXPLODE3		"weapons/hegrenade/explode3.wav"
+#define SOUND_EXPLODE4		"weapons/hegrenade/explode4.wav"
+#define SOUND_EXPLODE5		"weapons/hegrenade/explode5.wav"
 //#define PARTICLE_ELEC                  ("electrical_arc_01_parent")
 //#define PARTICLE_WARP                  ("electrical_arc_01_system")
 
@@ -393,19 +404,30 @@ public Setup_Materials() {
 	SetupMaterial("sound\\skills\\explosion_full.mp3");
 	SetupSound("skills\\explosion_full.mp3", true);
 
+	PrecacheSound(SOUND_EXPLODE3, true);
+	PrecacheSound(SOUND_EXPLODE4, true);
+	PrecacheSound(SOUND_EXPLODE5, true);
+
 	SetupMaterial("particles\\skill_fx.pcf");
-	SetupMaterial("particles\\skill_fx2.pcf");
 	SetupMaterial("particles\\ex.pcf");
 
 	PrecacheParticle(PARTICLE_EXPLOSION);
+	PrecacheParticle(PARTICLE_EXPLOSION2);
 	PrecacheParticle(PARTICLE_EAGLEEYE);
 	PrecacheParticle(PARTICLE_FX_AFTER_EXPLOSION);
 	PrecacheParticle(PARTICLE_FX_EXPLOSION_RING);
 	PrecacheParticle(PARTICLE_TURNUNDEAD);
 	PrecacheParticle(PARTICLE_EX_GLOW);
 	PrecacheParticle(PARTICLE_EX_LIGHT);
-	// PrecacheParticle(PARTICLE_MAGIC_CIRCLE);
-	// PrecacheParticle(PARTICLE_EX_GLOW_BIG);
+	PrecacheParticle(PARTICLE_MAGIC_CIRCLE);
+	PrecacheParticle(PARTICLE_EX_GLOW_BIG);
+	PrecacheParticle(PARTICLE_BOMB2);
+	PrecacheParticle(PARTICLE_BOMB3);
+	PrecacheParticle(PARTICLE_BOMB4);
+	PrecacheParticle(PARTICLE_BLUE);
+	PrecacheParticle(PARTICLE_FIRE);
+	PrecacheParticle(PARTICLE_SPARKS);
+	PrecacheParticle(PARTICLE_SMOKE);
 	PrintToServer("===========Material Setup End===========");
 }
 
@@ -417,18 +439,19 @@ public SetupMaterial(const char[] file) {
 //===========================================================
 //======================= Particles =========================
 //===========================================================
-
-public Action:PrecacheParticle(String:particlename[]) {
-	new particle = CreateEntityByName("info_particle_system");
-	if (IsValidEntity(particle))
+void PrecacheParticle(const char[] sEffectName)
+{
+	static int table = INVALID_STRING_TABLE;
+	if( table == INVALID_STRING_TABLE )
 	{
-		PrintToServer("PAR: %s Precached", particlename);
-		DispatchKeyValue(particle, "effect_name", particlename);
-		DispatchKeyValue(particle, "targetname", "particle");
-		DispatchSpawn(particle);
-		ActivateEntity(particle);
-		AcceptEntityInput(particle, "start");
-		CreateTimer(0.1, DeleteParticles, particle, TIMER_FLAG_NO_MAPCHANGE);
+		table = FindStringTable("ParticleEffectNames");
+	}
+
+	if( FindStringIndex(table, sEffectName) == INVALID_STRING_INDEX )
+	{
+		bool save = LockStringTables(false);
+		AddToStringTable(table, sEffectName);
+		LockStringTables(save);
 	}
 }
 
@@ -838,12 +861,11 @@ public Skill_Notify_MPbar(const String:str[], client) {
 	if (State_ManaShield[client]) {
 		Format(dot, MAXCMD, "%s) ", dot);
 	}
-	for (new i = 0; i < MP_BAR_SIZE - bar_amount; i++) {
-		if (State_ManaShield[client]) {
-			Format(dot, MAXCMD, "%s ", dot);
-		} else {
-			Format(dot, MAXCMD, "%s ", dot);
-		}
+	float weight = 1.2;
+	int size = RoundToFloor((MP_BAR_SIZE - bar_amount)*weight);
+	// PrintToServer("%d size",size);
+	for (new i = 0; i <size; i++) {
+		Format(dot, MAXCMD, "%s ", dot);
 	}
 
 	PrintHintText(client, "%s\n[%s%s] MP %d", str, bar, dot, RoundToFloor(Skill_MP[client]));
@@ -989,8 +1011,159 @@ public Action:Timer_Skill_Null_Ready(Handle:timer, any:client) {
 }
 //------------------------------------//
 //------------隱藏版爆裂---------------//
+// Credit to Timocop on VScript function
+void StaggerClient(int iUserID, const float fPos[3])
+{
+	static int iScriptLogic = INVALID_ENT_REFERENCE;
+	if( iScriptLogic == INVALID_ENT_REFERENCE || !IsValidEntity(iScriptLogic) )
+	{
+		iScriptLogic = EntIndexToEntRef(CreateEntityByName("logic_script"));
+		if(iScriptLogic == INVALID_ENT_REFERENCE || !IsValidEntity(iScriptLogic))
+			LogError("Could not create 'logic_script");
+
+		DispatchSpawn(iScriptLogic);
+	}
+
+	char sBuffer[96];
+	Format(sBuffer, sizeof(sBuffer), "GetPlayerFromUserID(%d).Stagger(Vector(%d,%d,%d))", iUserID, RoundFloat(fPos[0]), RoundFloat(fPos[1]), RoundFloat(fPos[2]));
+	SetVariantString(sBuffer);
+	AcceptEntityInput(iScriptLogic, "RunScriptCode");
+	RemoveEntity(iScriptLogic);
+}
+
+Action TimerBombTouch(Handle timer, DataPack DP)
+{
+	int g_iCvarDamage = 200;
+	int g_iCvarDistance = 500;
+	int g_iCvarShake = 1000;
+	int g_iCvarStumble = 2000;
+
+	// if( EntRefToEntIndex(entity) == INVALID_ENT_REFERENCE )
+	// 	return Plugin_Continue;
+
+	float vPos[3];
+	char sTemp[8];
+	DP.Reset();
+	int client = DP.ReadCell();
+	vPos[0] = DP.ReadCell();
+	vPos[1] = DP.ReadCell();
+	vPos[2] = DP.ReadCell();
+
+	vPos[0] = vPos[0] + GetRandomFloat(-400.0, 400.0);
+	vPos[1] = vPos[1] + GetRandomFloat(-400.0, 400.0);
+	vPos[2] = vPos[2];
+	// GetEntPropVector(entity, Prop_Data, "m_vecAbsOrigin", vPos);
+	// RemoveEntity(entity);
+	IntToString(g_iCvarDamage, sTemp, sizeof(sTemp));
+
+	// Call_StartForward(g_hForwardOnMissileHit);//todo: i dont know what is this
+	// Call_PushArray(vPos, 3);
+	// Call_Finish();
+
+	// Create explosion, kills infected, hurts special infected/survivors, pushes physics entities.
+	int entity = CreateEntityByName("env_explosion");
+	DispatchKeyValue(entity, "spawnflags", "1916");
+	IntToString(g_iCvarDamage, sTemp, sizeof(sTemp));
+	DispatchKeyValue(entity, "iMagnitude", sTemp);
+	IntToString(g_iCvarDistance, sTemp, sizeof(sTemp));
+	DispatchKeyValue(entity, "iRadiusOverride", sTemp);
+	DispatchSpawn(entity);
+	SetEntProp(entity, Prop_Data, "m_iHammerID", 1078682);
+	TeleportEntity(entity, vPos, NULL_VECTOR, NULL_VECTOR);
+	AcceptEntityInput(entity, "Explode");
+
+	// Shake!
+	int shake  = CreateEntityByName("env_shake");
+	if( shake != -1 )
+	{
+		DispatchKeyValue(shake, "spawnflags", "8");
+		DispatchKeyValue(shake, "amplitude", "16.0");
+		DispatchKeyValue(shake, "frequency", "1.5");
+		DispatchKeyValue(shake, "duration", "0.9");
+		IntToString(g_iCvarShake, sTemp, sizeof(sTemp));
+		DispatchKeyValue(shake, "radius", sTemp);
+		DispatchSpawn(shake);
+		ActivateEntity(shake);
+		AcceptEntityInput(shake, "Enable");
+
+		TeleportEntity(shake, vPos, NULL_VECTOR, NULL_VECTOR);
+		AcceptEntityInput(shake, "StartShake");
+		RemoveEdict(shake);
+	}
+
+	// Loop through survivors, work out distance and stumble/vocalize.
+	if( g_iCvarStumble)
+	{
+		float fDistance;
+		float vPos2[3];
+
+		for( int i = 1; i <= MaxClients; i++ )
+		{
+			if( IsClientInGame(i) && GetClientTeam(i) == 2 && IsPlayerAlive(i) )
+			{
+				GetClientAbsOrigin(i, vPos2);
+				fDistance = GetVectorDistance(vPos, vPos2);
+
+				if( g_iCvarStumble && fDistance <= g_iCvarStumble )
+				{
+					StaggerClient(GetClientUserId(i), vPos);
+				}
+			}
+		}
+	}
+
+
+	// Explosion effect
+	entity = CreateEntityByName("info_particle_system");
+	if( entity != -1 )
+	{
+		int random = GetRandomInt(2, 4);
+
+		switch( random )
+		{
+			// case 1:		DispatchKeyValue(entity, "effect_name", PARTICLE_BOMB1);
+			case 2:		DispatchKeyValue(entity, "effect_name", PARTICLE_BOMB2);
+			case 3:		DispatchKeyValue(entity, "effect_name", PARTICLE_BOMB3);
+			case 4:		DispatchKeyValue(entity, "effect_name", PARTICLE_BOMB4);
+		}
+
+		// if( random == 1 )
+			// vPos[2] += 175.0;
+		if( random == 2 )
+			vPos[2] += 100.0;
+		else if( random == 4 )
+			vPos[2] += 25.0;
+
+		DispatchSpawn(entity);
+		ActivateEntity(entity);
+		AcceptEntityInput(entity, "start");
+
+		TeleportEntity(entity, vPos, NULL_VECTOR, NULL_VECTOR);
+
+		SetVariantString("OnUser1 !self:Kill::1.0:1");
+		AcceptEntityInput(entity, "AddOutput");
+		AcceptEntityInput(entity, "FireUser1");
+	}
+
+
+	// Sound
+	int random = GetRandomInt(0, 2);
+	if( random == 0 )
+		EmitSoundToAll(SOUND_EXPLODE3, entity, SNDCHAN_AUTO, SNDLEVEL_HELICOPTER);
+	else if( random == 1 )
+		EmitSoundToAll(SOUND_EXPLODE4, entity, SNDCHAN_AUTO, SNDLEVEL_HELICOPTER);
+	else if( random == 2 )
+		EmitSoundToAll(SOUND_EXPLODE5, entity, SNDCHAN_AUTO, SNDLEVEL_HELICOPTER);
+
+	return Plugin_Continue;
+}
+
 public Action:Timer_exex(Handle:timer, DataPack:DP)
 {
+	for(int i=0; i<5; i++)
+	{
+		CreateTimer(0.0, Timer:TimerBombTouch, DP);
+	}
 	DP.Reset();
 	new client = DP.ReadCell();
 	new Float:Pos[3];
@@ -1059,12 +1232,25 @@ public Action:Timer_Skill_EX_End(Handle:timer, any:client)
 	if (IsAliveHumanPlayer(client) &&
 		!IsIncapped(client))
 	{
-		int hp = GetEntProp(client, Prop_Data, "m_iHealth");
-		DealDamage(client, hp, client, DMG_BURN);
+		// int hp = GetEntProp(client, Prop_Data, "m_iHealth");
+		// DealDamage(client, hp+1, client, DMG_BURN);
+		L4D_SetPlayerIncappedDamage(client, client);
 	}
 	Invulnerable[client]=false;
 	return Plugin_Stop;
 }
+
+public Action:Timer_ExAfter(Handle timer, DataPack:DP)
+{
+	DP.Reset();
+	new client = DP.ReadCell();
+	new Float:Pos[3];
+	Pos[0] = DP.ReadCell();
+	Pos[1] = DP.ReadCell();
+	Pos[2] = DP.ReadCell();
+	CreateParticle(PARTICLE_EXPLOSION2, 5.0, Pos);
+}
+
 public Action:Timer_Skill_EX_Start(Handle:timer, any:client) {
 	PrintToChatAll("\x04%N \x01エクスプロージョン!", client);
 	new Float:Pos[3];
@@ -1072,7 +1258,7 @@ public Action:Timer_Skill_EX_Start(Handle:timer, any:client) {
 	GetClientAbsOrigin(client, Pos);
 	CreateParticle(PARTICLE_EX_GLOW, explosion_ex_delay_secs, Pos);
 	CreateParticle(PARTICLE_EX_LIGHT, explosion_ex_delay_secs, Pos);
-	CreateParticle(PARTICLE_MAGIC_CIRCLE, explosion_ex_delay_secs, Pos);
+	CreateParticle(PARTICLE_MAGIC_CIRCLE, explosion_ex_delay_secs-4.0, Pos);
 	PrepareAndEmitSoundtoAll("skills\\explosion_full.mp3", .entity = client, .volume = 1.0);
 	GlowForSecs(client, 255, 0, 0, explosion_ex_delay_secs);
 	FreezeForSecs(client, explosion_ex_delay_secs);
@@ -1087,6 +1273,7 @@ public Action:Timer_Skill_EX_Start(Handle:timer, any:client) {
 	DP.WriteCell(Pos[2]);
 
 	CreateTimer(explosion_ex_delay_secs, Timer:Timer_exex, DP);
+	CreateTimer(explosion_ex_delay_secs-1.0, Timer:Timer_ExAfter, DP);
 	return Plugin_Stop;
 }
 //------------------------------------//
