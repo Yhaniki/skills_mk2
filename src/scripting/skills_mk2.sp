@@ -1,9 +1,9 @@
 #define SKILL_DEBUG                     (false)
 #define USING_EXPLOSION_EX              (true)
-#define INIT_MP                         (100.0)
+#define INIT_MP                         (50.0)
 #define GAMEDATA_MELEE                  ("l4d2_melee_range")
-#define GAS_TANK_NUM                    (20.0)
-#define EXEX_DIST                       (1000.0)
+#define GAS_TANK_NUM                    (5.0)
+#define EXEX_DIST                       (1500.0)
 #define TURN_UNDEAD_DIST                (1000.0)
 #define EXPLOSION_DIST                  (300.0)
 #define MAX_WEAPONS                     (12)
@@ -1202,8 +1202,9 @@ public Action:Timer_exex(Handle:timer, DataPack:DP)
 	for (new i = 1; i < MAXPLAYERS; i++) {
 		if (IsAliveSpecialInf(i)) {
 			new Float:distance = GetEntityPosDistance(i, Pos);
+			new health = GetEntProp(i, Prop_Data, "m_iHealth");
 			if (distance <= EXEX_DIST) {
-				DealDamage(i, 100, client, DMG_BURN);
+				DealDamage(i, health, client, DMG_BURN);
 			}
 		}
 	}
