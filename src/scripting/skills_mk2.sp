@@ -104,6 +104,7 @@ new Float:Skill_Cooldown[MAXSKILLS];
 new Float:Skill_Duration[MAXSKILLS];
 new Float:Skill_MPcost[MAXSKILLS];
 new skill_num = 0;
+new bool:Hooked[MAXPLAYERS];
 float explosion_ex_delay_secs = 25.0;
 Handle g_hDetour;
 bool useDP[MAXPLAYERS + 1];
@@ -367,7 +368,10 @@ public OnPluginStart() {
 
 public CheckPlayerConnections() {
 	for (new i = 1; i < MaxClients; i++) {
-		if (IsClientInGame(i)) OnClientConnected(i);
+		if (IsClientInGame(i)){
+			OnClientConnected(i);
+			SDKHook(i, SDKHook_OnTakeDamage, Event_Hurt);
+		}
 	}
 }
 
@@ -498,9 +502,24 @@ public OnClientConnected(client) {
 		State_Player[client] = PLAYER_ALIVE;
 	State_Adrenaline_Boost[client] = false;
 	State_ManaShield[client] = false;
-
+	Hooked[client] = false;
 	Init_Skill(client);
 	PrintPlayerState("connect", client);
+}
+
+public OnClientPostAdminCheck(client)
+{
+	if(IsClientInGame(client) && !IsFakeClient(client))
+	{
+		SDKHook(client, SDKHook_OnTakeDamage, Event_Hurt);
+		Hooked[client] = true;
+	}
+}
+
+public OnClientDisconnect(client)
+{
+	if(Hooked[client])
+		SDKUnhook(client, SDKHook_OnTakeDamage, Event_Hurt);
 }
 
 public void Event_Draw(Event event, const char[] name, bool dontBroadcast)
@@ -1033,28 +1052,28 @@ void StaggerClient(int iUserID, const float fPos[3])
 
 Action TimerBombTouch(Handle timer, DataPack DP)
 {
-	int g_iCvarDamage = 200;
-	int g_iCvarDistance = 500;
-	int g_iCvarShake = 1000;
+	int g_iCvarDamage = 400;
+	int g_iCvarDistance = 600;
+	int g_iCvarShake = 1500;
 	int g_iCvarStumble = 2000;
-
+	float randomDist = 400.0;
 	// if( EntRefToEntIndex(entity) == INVALID_ENT_REFERENCE )
 	// 	return Plugin_Continue;
 
 	float vPos[3];
 	char sTemp[8];
 	DP.Reset();
-	int client = DP.ReadCell();
+	DP.ReadCell();
 	vPos[0] = DP.ReadCell();
 	vPos[1] = DP.ReadCell();
 	vPos[2] = DP.ReadCell();
 
-	vPos[0] = vPos[0] + GetRandomFloat(-400.0, 400.0);
-	vPos[1] = vPos[1] + GetRandomFloat(-400.0, 400.0);
+	vPos[0] = vPos[0] + GetRandomFloat(-randomDist, randomDist);
+	vPos[1] = vPos[1] + GetRandomFloat(-randomDist, randomDist);
 	vPos[2] = vPos[2];
 	// GetEntPropVector(entity, Prop_Data, "m_vecAbsOrigin", vPos);
 	// RemoveEntity(entity);
-	IntToString(g_iCvarDamage, sTemp, sizeof(sTemp));
+	// IntToString(g_iCvarDamage, sTemp, sizeof(sTemp));
 
 	// Call_StartForward(g_hForwardOnMissileHit);//todo: i dont know what is this
 	// Call_PushArray(vPos, 3);
@@ -1186,13 +1205,14 @@ public Action:Timer_exex(Handle:timer, DataPack:DP)
 	// }
 
 	int gasNum=0;
+	const float maxGasDist = 500.0;
 	while(gasNum<GAS_TANK_NUM)
 	{
-		p[0] = Pos[0] + GetRandomFloat(-EXEX_DIST, EXEX_DIST);
-		p[1] = Pos[1] + GetRandomFloat(-EXEX_DIST, EXEX_DIST);
+		p[0] = Pos[0] + GetRandomFloat(-maxGasDist, maxGasDist);
+		p[1] = Pos[1] + GetRandomFloat(-maxGasDist, maxGasDist);
 		p[2] = Pos[2];
 		float dist = GetVectorDistance(Pos, p);
-		if(dist<EXEX_DIST)
+		if(dist<maxGasDist)
 		{
 			PropaneAtPos(p);
 			gasNum++;
@@ -1244,11 +1264,12 @@ public Action:Timer_Skill_EX_End(Handle:timer, any:client)
 public Action:Timer_ExAfter(Handle timer, DataPack:DP)
 {
 	DP.Reset();
-	new client = DP.ReadCell();
+	DP.ReadCell();
 	new Float:Pos[3];
 	Pos[0] = DP.ReadCell();
 	Pos[1] = DP.ReadCell();
 	Pos[2] = DP.ReadCell();
+
 	CreateParticle(PARTICLE_EXPLOSION2, 5.0, Pos);
 }
 
@@ -1688,7 +1709,6 @@ public Action:Timer_Skill_ManaShield_End(Handle:timer, any:client) {
 public Action:Event_DmgReducedByManaShield(Handle:event, const String:name[], bool:dontBroadcast) {
 	int dmg_health = GetEventInt(event, "dmg_health");
 	new client = GetClientOfUserId(GetEventInt(event, "userid"));
-	if(Invulnerable[client]) return Plugin_Handled;
 	if (!State_ManaShield[client]) return Plugin_Continue;
 	
 	if (IsAliveHumanPlayer(client)) {
@@ -2236,4 +2256,14 @@ Action Timer_OnPummelResetAnim(Handle timer, int client)
 	AnimHookDisable(client, OnPummelOnAnimPre);
 
 	return Plugin_Continue;
+}
+
+public Action:Event_Hurt(victim, &attacker, &inflictor, &Float:damage, &damagetype, &weapon, Float:damageForce[3], Float:damagePosition[3], damagecustom)
+{
+	if(victim > MaxClients || victim < 1)
+		return Plugin_Continue;
+
+	if(Invulnerable[victim])
+		damage = 0.0;
+	return Plugin_Changed;
 }
