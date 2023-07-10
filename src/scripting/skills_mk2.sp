@@ -106,6 +106,7 @@ new Float:Skill_MPcost[MAXSKILLS];
 new skill_num = 0;
 new bool:Hooked[MAXPLAYERS];
 float explosion_ex_delay_secs = 25.0;
+float time_weight = 1.0;
 Handle g_hDetour;
 bool useDP[MAXPLAYERS + 1];
 DataPack playerDP[MAXPLAYERS + 1];
@@ -1406,8 +1407,8 @@ public TurnUndeadAim(client, Float:delay) {
 	CreateTimer(delay, Timer:Timer_TurnUndeadAimDelay, DP);
 }
 public Action:Timer_Skill_TurnUndead_Start(Handle:timer, any:client) {
-	GlowForSecs(client, 0, 0, 100, 3.5);
-	TurnUndeadAim(client, 2.5);
+	GlowForSecs(client, 0, 0, 100, 3.5*time_weight);
+	TurnUndeadAim(client, 2.5*time_weight);
 	PrintToChatAll("\x04%N \x01淨化!", client);
 
 	return Plugin_Stop;
@@ -1451,14 +1452,15 @@ public Action:Timer_Skill_Steal_Start(Handle:timer, any:client) {
 	// FakeClientCommand(client, "give katana");
 	PrepareAndEmitSoundtoAll("skills\\steal.mp3", .entity = client, .volume = 1.0);
 	PrintToChatAll("\x04%N \x01STEAL!", client);
-	GlowForSecs(client, 0, 100, 0, 6.0);//rgb sec
+
+	GlowForSecs(client, 0, 100, 0, 6.0*time_weight);//rgb sec
 	// Skill_Steal(client);
 	new entityId = GetClientAimTarget(client, false);//return Entity
 	DataPack DP = new DataPack();
 	DP.WriteCell(client);
 	DP.WriteCell(entityId);
 	DP.WriteCell(CheckStealType(entityId));
-	CreateTimer(5.2, Timer:Skill_Steal, DP);
+	CreateTimer(5.2*time_weight, Timer:Skill_Steal, DP);
 	return Plugin_Stop;
 }
 
@@ -1675,8 +1677,8 @@ public Action:Skill_Steal(Handle:timer, DataPack:DP)
 public Action:Timer_Skill_Explosion_Start(Handle:timer, any:client) {
 	PrepareAndEmitSoundtoAll("skills\\explosion.mp3", .entity = client, .volume = 1.0);
 
-	GlowForSecs(client, 100, 0, 0, 1.5);
-	ExplodeAim(client, 1.5);
+	GlowForSecs(client, 100, 0, 0, 1.5*time_weight);
+	ExplodeAim(client, 1.5*time_weight);
 
 	//ExExplodeAim(client, 0.3);
 	PrintToChatAll("\x04%N \x01EXPLOSION!", client);
@@ -1861,7 +1863,7 @@ public SlowForSecs(Float:time, client) {
 	if (State_Slow&&Slow_Timer!=null)KillTimer(Slow_Timer);
 	
 	State_Slow = true;
-	
+	time_weight = 0.6;
 	PrepareAndEmitSoundtoAll("skills\\slomo.mp3", .entity = client, .volume = 1.0);
 	
 	Slow_Ent = CreateEntityByName("func_timescale");
@@ -1877,7 +1879,7 @@ public SlowForSecs(Float:time, client) {
 
 public Action:Timer_Unslow(Handle:timer, any:client) {
 	State_Slow = false;
-
+	time_weight = 1.0;
 	PrepareAndEmitSoundtoAll("skills\\slomo_end.mp3", .entity = client, .volume = 1.0);
 	
 	AcceptEntityInput(Slow_Ent, "Stop");
