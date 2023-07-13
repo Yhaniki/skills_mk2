@@ -1,3 +1,4 @@
+#define PLUGIN_VERSION                  "0.1"
 #define SKILL_DEBUG                     (false)
 #define USING_EXPLOSION_EX              (true)
 #define INIT_MP                         (50.0)
@@ -110,12 +111,13 @@ float time_weight = 1.0;
 Handle g_hDetour;
 bool useDP[MAXPLAYERS + 1];
 DataPack playerDP[MAXPLAYERS + 1];
-public Plugin:MyInfo = {
-	name = "Skills",
-	author = "MKLUO",
-	description = "",
-	version = "",
-	url = ""
+// int ammoOffset = 0;
+public Plugin myinfo = {
+	name = "[KONOSUBA_SKILLS]",
+	author = "MKLUO, Eithwa",
+	description = "skills system in konosuba",
+	version = PLUGIN_VERSION,
+	url = "https://github.com/Yhaniki/skills_mk2"
 }
 
 static char g_sWeaponNames[ALL_WEAPONS][] = 
@@ -326,6 +328,7 @@ public OnPluginStart() {
 	{
 		useDP[i]=false;
 	}
+	// ammoOffset = FindSendPropInfo("CCSPlayer", "m_iAmmo");
 //------------------------------
 	//Setup_Materials();
 	RegisterSkill("Explosion 爆裂" ,Timer_Skill_Explosion_Start, Timer_Skill_Null_End, Timer_Skill_Null_Ready, 1.0, 2.0, 30.0);
@@ -507,7 +510,6 @@ public OnClientConnected(client) {
 	Init_Skill(client);
 	PrintPlayerState("connect", client);
 }
-
 public OnClientPostAdminCheck(client)
 {
 	if(IsClientInGame(client) && !IsFakeClient(client))
@@ -516,13 +518,11 @@ public OnClientPostAdminCheck(client)
 		Hooked[client] = true;
 	}
 }
-
 public OnClientDisconnect(client)
 {
 	if(Hooked[client])
 		SDKUnhook(client, SDKHook_OnTakeDamage, Event_Hurt);
 }
-
 public void Event_Draw(Event event, const char[] name, bool dontBroadcast)
 {
 	for (new i = 1; i < MaxClients; i++) {
@@ -1031,7 +1031,6 @@ public Action:Timer_Skill_Null_Ready(Handle:timer, any:client) {
 }
 //------------------------------------//
 //------------隱藏版爆裂---------------//
-// Credit to Timocop on VScript function
 void StaggerClient(int iUserID, const float fPos[3])
 {
 	static int iScriptLogic = INVALID_ENT_REFERENCE;
@@ -1054,7 +1053,7 @@ void StaggerClient(int iUserID, const float fPos[3])
 Action TimerBombTouch(Handle timer, DataPack DP)
 {
 	int g_iCvarDamage = 400;
-	int g_iCvarDistance = 600;
+	int g_iCvarDistance = 900;
 	int g_iCvarShake = 1500;
 	int g_iCvarStumble = 2000;
 	float randomDist = 400.0;
@@ -1180,7 +1179,7 @@ Action TimerBombTouch(Handle timer, DataPack DP)
 
 public Action:Timer_exex(Handle:timer, DataPack:DP)
 {
-	for(int i=0; i<5; i++)
+	// for(int i=0; i<5; i++)
 	{
 		CreateTimer(0.0, Timer:TimerBombTouch, DP);
 	}
@@ -1251,6 +1250,7 @@ public Action:Timer_exex(Handle:timer, DataPack:DP)
 }
 public Action:Timer_Skill_EX_End(Handle:timer, any:client)
 {
+	Invulnerable[client]=false;
 	if (IsAliveHumanPlayer(client) &&
 		!IsIncapped(client))
 	{
@@ -1258,7 +1258,7 @@ public Action:Timer_Skill_EX_End(Handle:timer, any:client)
 		// DealDamage(client, hp+1, client, DMG_BURN);
 		L4D_SetPlayerIncappedDamage(client, client);
 	}
-	Invulnerable[client]=false;
+
 	return Plugin_Stop;
 }
 
@@ -1610,7 +1610,18 @@ public Action:Skill_Steal(Handle:timer, DataPack:DP)
 			{
 				// 2. If the player has aimed another client, check the item they are currently holding
 				//    Randomly select one item from the client and remove it from their inventory
-
+				// todo get now ammo
+				// int ammo = 0;
+				// int pw = GetNowWeapon(client);
+				// if (pw > 0)
+				// {
+				// 	GetEdictClassname(pw, item, MAXCMD);
+				// 	// PrintToChatAll("weapon %d", weapon);
+				// 	if(StrEqual(item, "weapon_melee")==false)
+				// 	{
+				// 		int activeweapon = GetEntPropEnt(entityId, Prop_Send, "m_hActiveWeapon");
+				// 	}
+				// }
 				int weaponIdx = ForceWeaponDrop(entityId);
 
 				// int weaponType = GetRandomInt(0, WEAPON_TYPE_NUM - 1);

@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.17"
+// #define PLUGIN_VERSION 		"1.17"
 
 /*======================================================================================
 	Plugin Info:
@@ -145,14 +145,14 @@ int g_iClassTank, g_iDamageType;
 // ====================================================================================================
 //					PLUGIN INFO / START / END
 // ====================================================================================================
-public Plugin myinfo =
-{
-	name = "[L4D & L4D2] Dissolve Infected",
-	author = "SilverShot",
-	description = "Dissolves the witch, common or special infected when killed.",
-	version = PLUGIN_VERSION,
-	url = "https://forums.alliedmods.net/showthread.php?t=306789"
-}
+// public Plugin myinfo =
+// {
+// 	name = "[L4D & L4D2] Dissolve Infected",
+// 	author = "SilverShot",
+// 	description = "Dissolves the witch, common or special infected when killed.",
+// 	version = PLUGIN_VERSION,
+// 	url = "https://forums.alliedmods.net/showthread.php?t=306789"
+// }
 
 public APLRes AskPluginLoad2(Handle myself, bool late, char[] error, int err_max)
 {
