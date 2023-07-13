@@ -1540,10 +1540,15 @@ public SetItemToPlayer(client, char[] item)
 		//----------------
 		if (StrEqual(item, "weapon_pistol"))
 		{
-			int activeweapon = GetEntPropEnt(client, Prop_Send, "m_hActiveWeapon");
-			if (activeweapon > 0 && GetEntProp(activeweapon, Prop_Send, "m_isDualWielding"))
+			int weapon = GetPlayerWeaponSlot(client, 1);
+			if (weapon > 0)
 			{
-				GivePlayerItem(client, "weapon_pistol");
+				GetEdictClassname(weapon, item, MAXCMD);
+				if (StrEqual(item, "weapon_pistol") &&
+					GetEntProp(weapon, Prop_Send, "m_isDualWielding") > 0)
+				{
+					GivePlayerItem(client, "weapon_pistol");
+				}
 			}
 			AcceptEntityInput(wq, "use", client);
 		}
