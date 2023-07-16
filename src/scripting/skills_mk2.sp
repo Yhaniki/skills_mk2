@@ -54,6 +54,7 @@
 #include "resourcemanager.sp"
 // #include "damage.sp"
 #include "l4d_dissolve_infected.sp"
+#include "ammo"
 
 enum player_state { PLAYER_ALIVE = 2, PLAYER_INCAP = 1, PLAYER_DEAD = 0 }
 
@@ -1496,7 +1497,7 @@ public int ForceWeaponDrop(client)
 				if (StrEqual(item, "weapon_pistol")&&GetEntProp(activeweapon, Prop_Send, "m_isDualWielding"))
 				{
 					RemoveEntity(weapon);
-					// SetItemToPlayer(client, "weapon_pistol");
+					// SetItemToPlayer(client, "weapon_pistol",-1);
 					new wq = CreateEntityByName("weapon_pistol");
 					DispatchSpawn(wq);
 					EquipPlayerWeapon(client, wq);
@@ -1527,7 +1528,7 @@ public int GetNowWeapon(client)
 	return weapon;
 }
 
-public SetItemToPlayer(client, char[] item)
+public SetItemToPlayer(client, char[] item, int ammo)
 {
 	// char weapon[MAXCMD] = "weapon_katana"; //TODO: get random item
 	// new wq = CreateEntityByName(weapon);
@@ -1561,7 +1562,10 @@ public SetItemToPlayer(client, char[] item)
 		if (weapon == wq)
 		{
 			int ammoAmount = GetRandomInt(MIN_STEAL_AMMO, MAX_STEAL_AMMO);
-			GivePlayerAmmo(client, ammoAmount, Weapon_GetPrimaryAmmoType(weapon), true);
+			if(ammo>=0)ammoAmount = ammo;
+			// PrintToChatAll("ammoAmount %d\n",ammoAmount);
+			SetWeaponAmmo(client, weapon, ammoAmount);
+			// GivePlayerAmmo(client, ammoAmount, Weapon_GetPrimaryAmmoType(weapon), true);
 		}
 	}
 }
@@ -1616,17 +1620,8 @@ public Action:Skill_Steal(Handle:timer, DataPack:DP)
 				// 2. If the player has aimed another client, check the item they are currently holding
 				//    Randomly select one item from the client and remove it from their inventory
 				// todo get now ammo
-				// int ammo = 0;
-				// int pw = GetNowWeapon(client);
-				// if (pw > 0)
-				// {
-				// 	GetEdictClassname(pw, item, MAXCMD);
-				// 	// PrintToChatAll("weapon %d", weapon);
-				// 	if(StrEqual(item, "weapon_melee")==false)
-				// 	{
-				// 		int activeweapon = GetEntPropEnt(entityId, Prop_Send, "m_hActiveWeapon");
-				// 	}
-				// }
+				int ammo = GetWeaponAmmo(entityId);
+				// PrintToChatAll("ammo %d\n",ammo);
 				int weaponIdx = ForceWeaponDrop(entityId);
 
 				// int weaponType = GetRandomInt(0, WEAPON_TYPE_NUM - 1);
@@ -1636,7 +1631,7 @@ public Action:Skill_Steal(Handle:timer, DataPack:DP)
 				if (weaponIdx > 0)
 				{
 					GetEdictClassname(weaponIdx, item, MAXCMD);
-					SetItemToPlayer(client, item);
+					SetItemToPlayer(client, item, ammo);
 					int idx = GetItemTranslateIdx(item);
 					if (idx >= 0)
 					{
@@ -1673,7 +1668,7 @@ public Action:Skill_Steal(Handle:timer, DataPack:DP)
 				PrintToChatAll("\x04%N \x01從 \x04殭屍 \x01身上偷了 \x04%s", client, g_sWeapons[weaponIdx]);
 			}
 			// PrintToChatAll("\x04%N \x01從殭屍身上偷了 %s", client, g_sWeapons[weaponIdx]);
-			SetItemToPlayer(client, g_sWeapons[weaponIdx]);
+			SetItemToPlayer(client, g_sWeapons[weaponIdx],-1);
 		}
 		else
 		{
