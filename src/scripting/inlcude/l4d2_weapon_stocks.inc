@@ -6,7 +6,6 @@
 #define GETWEAPONNAME(%0) (IsValidWeaponId(WeaponId:(%0)) ? (WeaponNames[_:(%0)]) : "")
 #define GETLONGWEAPONNAME(%0) (IsValidWeaponId(WeaponId:(%0)) ? (LongWeaponNames[_:(%0)]) : "")
 #define GETMELEEWEAPONNAME(%0) (IsValidWeaponId(MeleeWeaponId:(%0)) ? (MeleeWeaponNames[_:(%0)]) : "")
-#define GETLONGMELEEWEAPONNAME(%0) (IsValidWeaponId(MeleeWeaponId:(%0)) ? (LongMeleeWeaponNames[_:(%0)]) : "")
 #define GETWEAPONMODEL(%0) (HasValidWeaponModel(WeaponId:(%0)) ? (WeaponModels[_:(%0)]) : "")
 #define GETMELEEWEAPONMODEL(%0) (HasValidWeaponModel(MeleeWeaponId:(%0)) ? (MeleeWeaponModels[_:(%0)]) : "")
 
@@ -70,7 +69,8 @@ enum WeaponId
     WEPID_ROCK,             // 52
     WEPID_PHYSICS,          // 53
     WEPID_AMMO,             // 54
-    WEPID_UPGRADE_ITEM      // 55
+    WEPID_UPGRADE_ITEM,      // 55
+    WEPID_NUM
 };
 
 // These values are arbitrary
@@ -79,7 +79,7 @@ enum MeleeWeaponId
     WEPID_MELEE_NONE,
     WEPID_KNIFE,
     WEPID_BASEBALL_BAT,
-    WEPID_CHAINSAW2,
+    WEPID_MELEE_CHAINSAW,
     WEPID_CRICKET_BAT,
     WEPID_CROWBAR,
     WEPID_DIDGERIDOO,
@@ -90,11 +90,12 @@ enum MeleeWeaponId
     WEPID_KATANA,
     WEPID_MACHETE,
     WEPID_RIOT_SHIELD,
-    WEPID_TONFA
+    WEPID_TONFA,
+    WEPID_MELEE_NUM
 };
 
 // Weapon names for each of the weapons, used in identification.
-new const String:WeaponNames[WeaponId][] =
+new const String:WeaponNames[WEPID_NUM][] =
 {
     "weapon_none", "weapon_pistol", "weapon_smg",                                            // 0
     "weapon_pumpshotgun", "weapon_autoshotgun", "weapon_rifle",                              // 3
@@ -118,7 +119,7 @@ new const String:WeaponNames[WeaponId][] =
 };
 
 // Long weapon names
-new const String:LongWeaponNames[WeaponId][] = 
+new const String:LongWeaponNames[WEPID_NUM][] = 
 {
     "None", "Pistol", "Uzi", // 0
     "Pump", "Autoshotgun", "M-16", // 3
@@ -142,7 +143,7 @@ new const String:LongWeaponNames[WeaponId][] =
 };
 
 // Internal names for melee weapons
-new const String:MeleeWeaponNames[MeleeWeaponId][] =
+new const String:MeleeWeaponNames[WEPID_MELEE_NUM][] =
 {
     "",
     "knife",
@@ -161,29 +162,9 @@ new const String:MeleeWeaponNames[MeleeWeaponId][] =
     "tonfa"
 };
 
-// Long melee weapon names
-new const String:LongMeleeWeaponNames[MeleeWeaponId][] =
-{
-    "None",
-    "Knife",
-    "Baseball Bat",
-    "Chainsaw",
-    "Cricket Bat",
-    "Crowbar",
-    "didgeridoo", // derp
-    "Guitar",
-    "Axe",
-    "Frying Pan",
-    "Golf Club",
-    "Katana",
-    "Machete",
-    "Riot Shield",
-    "Tonfa"
-};
-
 // World weapon models for each of the weapons. Useful for making new weapon spawns.
 // Some models are left blank because no single model can be given, the model is known or none exist.
-new const String:WeaponModels[WeaponId][] =
+new const String:WeaponModels[WEPID_NUM][] =
 {
     "",
     "/w_models/weapons/w_pistol_B.mdl",
@@ -243,7 +224,7 @@ new const String:WeaponModels[WeaponId][] =
     ""
 };
 
-new const String:MeleeWeaponModels[MeleeWeaponId][] =
+new const String:MeleeWeaponModels[WEPID_MELEE_NUM][] =
 {
     "",
     "/w_models/weapons/w_knife_t.mdl",
@@ -262,7 +243,7 @@ new const String:MeleeWeaponModels[MeleeWeaponId][] =
     "/weapons/melee/w_tonfa.mdl"
 };
 
-new const WeaponSlots[_:WeaponId] =
+new const WeaponSlots[WEPID_NUM] =
 {
     -1, // WEPID_NONE
     1,  // WEPID_PISTOL
@@ -338,14 +319,14 @@ static Handle:hMeleeWeaponModelsTrie = INVALID_HANDLE;
 stock InitWeaponNamesTrie()
 {
     hWeaponNamesTrie = CreateTrie();
-    for(new i = 0; i < _:WeaponId; i++)
+    for(new i = 0; i <view_as<int>(WEPID_NUM) ; i++)
     {
         SetTrieValue(hWeaponNamesTrie, WeaponNames[WeaponId:i], i);
     }
 
     hMeleeWeaponNamesTrie = CreateTrie();
     hMeleeWeaponModelsTrie = CreateTrie();
-    for (new i = 0; i < _:MeleeWeaponId; ++i)
+    for (new i = 0; i <view_as<int>(WEPID_MELEE_NUM); ++i)
     {
         SetTrieValue(hMeleeWeaponNamesTrie, MeleeWeaponNames[MeleeWeaponId:i], i);
         SetTrieString(hMeleeWeaponModelsTrie, MeleeWeaponModels[MeleeWeaponId:i], MeleeWeaponNames[MeleeWeaponId:i]);
@@ -359,13 +340,9 @@ stock InitWeaponNamesTrie()
  * @param wepid        WeaponId to check for validity
  * @return True if wepid is valid, false otherwise.
  */
-stock bool:IsValidWeaponId(any wepid, tagType = tagof(wepid))
+stock bool:IsValidWeaponId(WeaponId:wepid)
 {
-    if (tagType == tagof(MeleeWeaponId))
-    {
-        return MeleeWeaponId:wepid >= WEPID_MELEE_NONE && MeleeWeaponId:wepid < MeleeWeaponId;
-    }
-    return wepid >= WEPID_NONE && wepid < WeaponId;
+    return wepid >= WEPID_NONE && wepid < WEPID_NUM;
 }
 
 /**
@@ -386,12 +363,8 @@ stock GetSlotFromWeaponId(WeaponId:wepid)
  * @param wepid        WeaponId to check for a known weapon model for.
  * @return True if a valid weapon model exists for wepid, false otherwise.
  */
-stock bool:HasValidWeaponModel(any wepid, tagType = tagof(wepid))
+stock bool:HasValidWeaponModel(WeaponId:wepid)
 {
-    if (tagType == tagof(MeleeWeaponId))
-    {
-        return IsValidWeaponId(MeleeWeaponId:wepid) && MeleeWeaponModels[MeleeWeaponId:wepid][0] != '\0';
-    }
     return IsValidWeaponId(wepid) && WeaponModels[wepid][0] != '\0';
 }
 
@@ -423,16 +396,9 @@ stock WeaponId:WeaponNameToId(const String:weaponName[])
  * @param length        Max length which can be written to the buffer.
  * @return                Number of bytes written to buffer, or 0 for invalid weaponId.
  */
-stock GetWeaponName(any wepid, String:nameBuffer[], length, tagType = tagof(wepid))
+stock GetWeaponName(WeaponId:wepid, String:nameBuffer[], length)
 {
-    if (tagType == tagof(MeleeWeaponId))
-    {
-        strcopy(nameBuffer, length, GETMELEEWEAPONNAME(wepid));
-    }
-    else
-    {
-        strcopy(nameBuffer, length, GETWEAPONNAME(wepid));
-    }
+    strcopy(nameBuffer, length, GETWEAPONNAME(wepid));
 }
 
 /**
@@ -443,16 +409,9 @@ stock GetWeaponName(any wepid, String:nameBuffer[], length, tagType = tagof(wepi
  * @param length        Max length which can be written to the buffer.
  * @return                Number of bytes written to buffer, or 0 for invalid weaponId.
  */
-stock GetLongWeaponName(any wepid, String:nameBuffer[], length, tagType = tagof(wepid))
+stock GetLongWeaponName(WeaponId:wepid, String:nameBuffer[], length)
 {
-    if (tagType == tagof(MeleeWeaponId))
-    {
-        strcopy(nameBuffer, length, GETLONGMELEEWEAPONNAME(wepid));
-    }
-    else
-    {
-        strcopy(nameBuffer, length, GETLONGWEAPONNAME(wepid));
-    }
+    strcopy(nameBuffer, length, GETLONGWEAPONNAME(wepid));
 }
     
 /**
@@ -464,16 +423,9 @@ stock GetLongWeaponName(any wepid, String:nameBuffer[], length, tagType = tagof(
  * @param length        Max length which can be written to the buffer.
  * @return                Number of bytes written to buffer, or 0 for invalid weaponid or no weapon model available.
  */
-stock GetWeaponModel(any wepid, String:modelBuffer[], length, tagType = tagof(wepid))
+stock GetWeaponModel(WeaponId:wepid, String:modelBuffer[], length)
 {
-    if (tagType == tagof(MeleeWeaponId))
-    {
-        strcopy(modelBuffer, length, GETMELEEWEAPONMODEL(wepid));
-    }
-    else
-    {
-        strcopy(modelBuffer, length, GETWEAPONMODEL(wepid));
-    }
+    strcopy(modelBuffer, length, GETWEAPONMODEL(wepid));
 }
 
 /**

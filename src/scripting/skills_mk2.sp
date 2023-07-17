@@ -51,11 +51,11 @@
 #include <sdkhooks>
 #include <dhooks>
 #include <left4dhooks>
+#include <l4d2_weapon_stocks>
+#include "ammo"
 #include "resourcemanager.sp"
 // #include "damage.sp"
 #include "l4d_dissolve_infected.sp"
-#include "ammo"
-#include "l4d2_weapon_stocks"
 
 enum player_state { PLAYER_ALIVE = 2, PLAYER_INCAP = 1, PLAYER_DEAD = 0 }
 
@@ -819,7 +819,7 @@ public Action:Event_SkillStateTransition(client, args) {
 		// int weapon = GetNowWeapon(client);
 		int activeweapon = GetEntPropEnt(client, Prop_Send, "m_hActiveWeapon");
 		if (activeweapon > 0)
-				SDKHooks_DropWeapon(client, activeweapon, NULL_VECTOR, NULL_VECTOR);
+			SDKHooks_DropWeapon(client, activeweapon, NULL_VECTOR, NULL_VECTOR);
 	}
 	else if (StrEqual(cmd, "fix"))
 	{
@@ -1466,18 +1466,26 @@ public Action:Timer_Skill_Steal_Start(Handle:timer, any:client) {
 	return Plugin_Stop;
 }
 
-public int ForceWeaponDropByType(client, type)
+public int ForceWeaponDropBySlot(int client, int slot)
 {
-	int weapon = GetPlayerWeaponSlot(client, type);
+	int weapon = GetPlayerWeaponSlot(client, slot);
 
 	if (weapon > 0)
 	{
 		char item[MAXCMD];
 		GetEdictClassname(weapon, item, MAXCMD);
+		if(StrEqual(item, "weapon_melee")==true)
+		{
+			GetEntPropString(weapon, Prop_Data, "m_strMapSetScriptName", item, MAXCMD);
+		}
 		if(StrEqual(item, "weapon_melee")==false)
-			RemoveEntity(weapon);
+		{
+			SDKHooks_DropWeapon(client, weapon, NULL_VECTOR, NULL_VECTOR);
+		}
 		else
+		{
 			weapon = -1;
+		}
 	}
 	return weapon;
 }
@@ -1490,6 +1498,10 @@ public int ForceWeaponDrop(client)
 	{
 		GetEdictClassname(weapon, item, MAXCMD);
 		// PrintToChatAll("weapon %d", weapon);
+		if(StrEqual(item, "weapon_melee")==true)
+		{
+			GetEntPropString(weapon, Prop_Data, "m_strMapSetScriptName", item, MAXCMD);
+		}
 		if(StrEqual(item, "weapon_melee")==false)
 		{
 			int activeweapon = GetEntPropEnt(client, Prop_Send, "m_hActiveWeapon");
@@ -1498,7 +1510,7 @@ public int ForceWeaponDrop(client)
 				if (StrEqual(item, "weapon_pistol")&&GetEntProp(activeweapon, Prop_Send, "m_isDualWielding"))
 				{
 					RemoveEntity(weapon);
-					// SetItemToPlayer(client, "weapon_pistol",-1,-1);
+					// SetItemToPlayer(client, "weapon_pistol",activeweapon,-1,-1);
 					new wq = CreateEntityByName("weapon_pistol");
 					DispatchSpawn(wq);
 					EquipPlayerWeapon(client, wq);
@@ -1511,7 +1523,9 @@ public int ForceWeaponDrop(client)
 			}
 		}
 		else
+		{
 			weapon = -1;
+		}
 	}
 	return weapon;
 }
@@ -1524,45 +1538,60 @@ public int GetNowWeapon(client)
 	return weapon;
 }
 
-public SetItemToPlayer(client, char[] item, int ammo, int clip)
+public SetItemToPlayer(int client, char[] item, int index, int ammo, int clip)
 {
 	// char weapon[MAXCMD] = "weapon_katana"; //TODO: get random item
 	// new wq = CreateEntityByName(weapon);
-
-	new wq = CreateEntityByName(item);
-	if (wq > 0)
+	WeaponId id = WeaponNameToId(item);
+	int slot = GetSlotFromWeaponId(id);
+	if(slot>=0) ForceWeaponDropBySlot(client, slot);
+	if(StrEqual(item, "weapon_melee")==true)
 	{
-		DispatchSpawn(wq);
-		// EquipPlayerWeapon(client, wq);
-		//----------------
-		if (StrEqual(item, "weapon_pistol"))
+		GetEntPropString(index, Prop_Data, "m_strMapSetScriptName", item, MAXCMD);
+		char cmd[MAXCMD] = "give ";
+		StrCat(cmd, MAXCMD, item);
+		// PrintToChatAll("cmd %s\n",cmd);
+		FakeClientCommand(client, cmd);
+	}
+	else
+	{
+		PrintToChatAll("wq %s\n",item);
+		new wq = CreateEntityByName(item);
+		PrintToChatAll("wq %d\n",wq);
+		if (wq > 0)
 		{
-			int weapon = GetPlayerWeaponSlot(client, 1);
-			if (weapon > 0)
+			DispatchSpawn(wq);
+			// EquipPlayerWeapon(client, wq);
+			//----------------
+			if (StrEqual(item, "weapon_pistol"))
 			{
-				GetEdictClassname(weapon, item, MAXCMD);
-				if (StrEqual(item, "weapon_pistol") &&
-					GetEntProp(weapon, Prop_Send, "m_isDualWielding") > 0)
+				int weapon = GetPlayerWeaponSlot(client, 1);
+				if (weapon > 0)
 				{
-					GivePlayerItem(client, "weapon_pistol");
+					GetEdictClassname(weapon, item, MAXCMD);
+					if (StrEqual(item, "weapon_pistol") &&
+						GetEntProp(weapon, Prop_Send, "m_isDualWielding") > 0)
+					{
+						GivePlayerItem(client, "weapon_pistol");
+					}
 				}
+				AcceptEntityInput(wq, "use", client);
 			}
-			AcceptEntityInput(wq, "use", client);
-		}
-		else
-		{
-			EquipPlayerWeapon(client, wq);
-		}
-		//----------------
-		int weapon = GetPlayerWeaponSlot(client, 0);
-		if (weapon == wq)
-		{
-			int ammoAmount = GetRandomInt(MIN_STEAL_AMMO, MAX_STEAL_AMMO);
-			if(ammo>=0)ammoAmount = ammo;
-			// PrintToChatAll("ammoAmount %d\n",ammoAmount);
-			// GivePlayerAmmo(client, ammoAmount, Weapon_GetPrimaryAmmoType(weapon), true);
-			SetWeaponAmmo(client, weapon, ammoAmount);
-			if(clip>=0) SetWeaponClip(weapon, clip);
+			else
+			{
+				EquipPlayerWeapon(client, wq);
+			}
+			//----------------
+			int weapon = GetPlayerWeaponSlot(client, 0);
+			if (weapon == wq)
+			{
+				int ammoAmount = GetRandomInt(MIN_STEAL_AMMO, MAX_STEAL_AMMO);
+				if(ammo>=0)ammoAmount = ammo;
+				// PrintToChatAll("ammoAmount %d\n",ammoAmount);
+				// GivePlayerAmmo(client, ammoAmount, Weapon_GetPrimaryAmmoType(weapon), true);
+				SetWeaponAmmo(client, weapon, ammoAmount);
+				if(clip>=0) SetWeaponClip(weapon, clip);
+			}
 		}
 	}
 }
@@ -1623,18 +1652,24 @@ public Action:Skill_Steal(Handle:timer, DataPack:DP)
 				if (weaponIdx > 0)
 				{
 					GetEdictClassname(weaponIdx, item, MAXCMD);
-					int id = WeaponNameToId(item);
-					int slot = GetSlotFromWeaponId(id);
-					ForceWeaponDropBySlot(client, slot);
-					SetItemToPlayer(client, item, ammo, clip);
+					SetItemToPlayer(client, item, weaponIdx, ammo, clip);
 					int idx = GetItemTranslateIdx(item);
 					if (idx >= 0)
 					{
 						PrintToChatAll("\x04%N \x01從 \x04%N \x01身上偷了 \x04%s", client, entityId, g_sWeaponTranslate[idx]);
 					}
+					else if(weaponIdx<ALL_WEAPONS)
+					{
+						PrintToChatAll("idx %d all %d %d\n",idx,ALL_WEAPONS,weaponIdx);
+						PrintToChatAll("\x04%N \x01從 \x04%N \x01身上偷了 \x04%s", client, entityId, g_sWeaponNames[weaponIdx]);
+					}
 					else
 					{
-						PrintToChatAll("\x04%N \x01從 \x04%N \x01身上偷了 \x04%s", client, entityId, g_sWeaponNames[idx]);
+						if(StrEqual(item, "weapon_melee")==true)
+						{
+							GetEntPropString(entityId, Prop_Data, "m_strMapSetScriptName", item, MAXCMD);
+						}
+						PrintToChatAll("\x04%N \x01從 \x04%N \x01身上偷了 \x04%s", client, entityId, item);
 					}
 				}
 				else
@@ -1663,7 +1698,7 @@ public Action:Skill_Steal(Handle:timer, DataPack:DP)
 				PrintToChatAll("\x04%N \x01從 \x04殭屍 \x01身上偷了 \x04%s", client, g_sWeapons[weaponIdx]);
 			}
 			// PrintToChatAll("\x04%N \x01從殭屍身上偷了 %s", client, g_sWeapons[weaponIdx]);
-			SetItemToPlayer(client, g_sWeapons[weaponIdx],-1,-1);
+			SetItemToPlayer(client, g_sWeapons[weaponIdx], idx, -1,-1);
 		}
 		else
 		{
