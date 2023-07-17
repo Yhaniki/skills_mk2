@@ -1555,9 +1555,9 @@ public SetItemToPlayer(int client, char[] item, int index, int ammo, int clip)
 	}
 	else
 	{
-		PrintToChatAll("wq %s\n",item);
+		// PrintToChatAll("wq %s\n",item);
 		new wq = CreateEntityByName(item);
-		PrintToChatAll("wq %d\n",wq);
+		// PrintToChatAll("wq %d\n",wq);
 		if (wq > 0)
 		{
 			DispatchSpawn(wq);
