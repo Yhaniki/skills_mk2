@@ -113,7 +113,7 @@ float time_weight = 1.0;
 Handle g_hDetour;
 bool useDP[MAXPLAYERS + 1];
 DataPack playerDP[MAXPLAYERS + 1];
-// int ammoOffset = 0;
+
 public Plugin myinfo = {
 	name = "[KONOSUBA_SKILLS]",
 	author = "MKLUO, Eithwa",
@@ -330,7 +330,7 @@ public OnPluginStart() {
 	{
 		useDP[i]=false;
 	}
-	// ammoOffset = FindSendPropInfo("CCSPlayer", "m_iAmmo");
+	SetWeaponNameId();
 //------------------------------
 	//Setup_Materials();
 	RegisterSkill("Explosion 爆裂" ,Timer_Skill_Explosion_Start, Timer_Skill_Null_End, Timer_Skill_Null_Ready, 1.0, 2.0, 30.0);
@@ -1417,10 +1417,6 @@ public Action:Timer_Skill_TurnUndead_Start(Handle:timer, any:client) {
 }
 //------------------------------------//
 //--------------steal-----------------//
-stock Weapon_GetPrimaryAmmoType(weapon)
-{
-	return GetEntProp(weapon, Prop_Data, "m_iPrimaryAmmoType");
-}
 int CheckStealType(int entityId)
 {
 	char target[MAXCMD];
@@ -1588,13 +1584,13 @@ public SetItemToPlayer(int client, char[] item, int index, int ammo, int clip)
 				int ammoAmount = GetRandomInt(MIN_STEAL_AMMO, MAX_STEAL_AMMO);
 				if(ammo>=0)ammoAmount = ammo;
 				// PrintToChatAll("ammoAmount %d\n",ammoAmount);
-				// GivePlayerAmmo(client, ammoAmount, Weapon_GetPrimaryAmmoType(weapon), true);
 				SetWeaponAmmo(client, weapon, ammoAmount);
 				if(clip>=0) SetWeaponClip(weapon, clip);
 			}
 		}
 	}
 }
+
 int GetItemTranslateIdx(char item[MAXCMD])
 {
 	int rst = -1;
@@ -1608,6 +1604,7 @@ int GetItemTranslateIdx(char item[MAXCMD])
 	}
 	return rst;
 }
+
 int GetItemIdx(int idx)
 {
 	int rst = -1;
@@ -1686,7 +1683,6 @@ public Action:Skill_Steal(Handle:timer, DataPack:DP)
 		{
 			// 3. If the player has aimed a zombie, randomly choose an item from the item table
 			//    The chance of obtaining an item can be based on a predetermined percentage set in the table
-			// todo
 			int weaponIdx = GetRandomInt(0, MAX_WEAPONS - 1);
 			int idx = GetItemIdx(weaponIdx);
 			if (idx >= 0)

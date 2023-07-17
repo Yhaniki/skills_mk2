@@ -114,7 +114,6 @@ public int GetWeaponAmmo(int client)
 		return -1;
 	}
 	int ammoOffset = FindSendPropInfo("CCSPlayer", "m_iAmmo");
-	SetWeaponNameId()
 	static char sWeaponName[32];
 	GetEntityClassname(weapon, sWeaponName, sizeof(sWeaponName));
 	WeaponID weaponid = GetWeaponID(weapon, sWeaponName);
@@ -134,14 +133,27 @@ void SetWeaponAmmo(int client, int weapon, int ammo)
 }
 
 //how to check clip when more then one people use the same weapon?
-public int GetWeaponClip(int weapon)
+public int GetWeaponClip(int client)
 {
-	return GetEntProp(weapon, Prop_Send, "m_iClip1");
+	int clip = -1;
+	int weapon = GetEntPropEnt(client, Prop_Send, "m_hActiveWeapon"); //抓人類目前裝彈的武器
+	if (weapon <= 0 || !IsValidEntity(weapon))
+	{
+		return -1;
+	}
+	if(HasEntProp(weapon, Prop_Send, "m_iClip1"))
+	{
+		clip =  GetEntProp(weapon, Prop_Send, "m_iClip1");
+	}
+	return clip;
 }
 
 public void SetWeaponClip(int weapon, int clip)
 {
-	SetEntProp(weapon, Prop_Send, "m_iClip1", clip);
+	if(HasEntProp(weapon, Prop_Send, "m_iClip1"))
+	{
+		SetEntProp(weapon, Prop_Send, "m_iClip1", clip);
+	}
 }
 
 bool IsValidAliveSurvivor(int client) 
