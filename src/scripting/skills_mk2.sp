@@ -114,6 +114,7 @@ float time_weight = 1.0;
 Handle g_hDetour;
 bool useDP[MAXPLAYERS + 1];
 DataPack playerDP[MAXPLAYERS + 1];
+GlobalForward OnWeaponDrop;
 
 public Plugin myinfo = {
 	name = "[KONOSUBA_SKILLS]",
@@ -332,6 +333,7 @@ public OnPluginStart() {
 		useDP[i]=false;
 	}
 	SetWeaponNameId();
+	OnWeaponDrop = CreateGlobalForward("OnWeaponDrop", ET_Event, Param_Cell, Param_CellByRef);
 //------------------------------
 	//Setup_Materials();
 	RegisterSkill("Explosion 爆裂" ,Timer_Skill_Explosion_Start, Timer_Skill_Null_End, Timer_Skill_Null_Ready, 1.0, 2.0, 30.0);
@@ -363,7 +365,7 @@ public OnPluginStart() {
 	
 	RegConsoleCmd("skill1",					Event_SkillStateTransition);
 	RegConsoleCmd("change_skill",			Event_SkillStateTransition);
-	// RegConsoleCmd("drop",					Event_SkillStateTransition);
+	RegConsoleCmd("drop",					Event_SkillStateTransition);
 	RegConsoleCmd("fix",					Event_SkillStateTransition);
 	//HookEvent("player_hurt", 			Event_DmgInflicted);
 	//HookEvent("infected_hurt", 			Event_DmgInflicted);
@@ -783,7 +785,130 @@ public bool CheckExplosion(int client)
 #endif
 	return result;
 }
+bool IsSurvivor(int client)
+{ return (GetClientTeam(client) == 2 || GetClientTeam(client) == 4); }
 
+bool IsValidClient(int client, bool replaycheck = true)
+{
+	if (client > 0 && client <= MaxClients && IsClientInGame(client))
+	{
+		if (replaycheck)
+		{
+			if (IsClientSourceTV(client) || IsClientReplay(client)) return false;
+		}
+		return true;
+	}
+	return false;
+}
+bool RealValidEntity(int entity)
+{ return (entity > 0 && IsValidEntity(entity)); }
+void SetPlayerReserveAmmo(int client, int weapon, int ammo)
+{
+	int ammotype = GetEntProp(weapon, Prop_Send, "m_iPrimaryAmmoType");
+	if (ammotype >= 0 )
+	{
+		SetEntProp(client, Prop_Send, "m_iAmmo", ammo, _, ammotype);
+		ChangeEdictState(client, FindDataMapInfo(client, "m_iAmmo"));
+	}
+}
+
+int GetPlayerReserveAmmo(int client, int weapon)
+{
+	int ammotype = GetEntProp(weapon, Prop_Send, "m_iPrimaryAmmoType");
+	if (ammotype >= 0)
+	{
+		return GetEntProp(client, Prop_Send, "m_iAmmo", _, ammotype);
+	}
+	return 0;
+}
+void DropActiveWeapon(int client)
+{
+	if (!IsValidClient(client) || !IsSurvivor(client) || !IsPlayerAlive(client) || IsIncapped(client)) return;
+	
+	//static char classname[64];
+	//GetEntityClassname(GetPlayerWeaponSlot(client, tester_wep_slot), classname, sizeof(classname));
+	//PrintToChatAll("slot: %s", classname);
+	
+	int weapon = GetEntPropEnt(client, Prop_Data, "m_hActiveWeapon");
+	if (RealValidEntity(weapon))
+		DropWeapon(client, weapon);
+}
+void DropWeapon(int client, int weapon)
+{
+	// if ((g_iBlockDropMidAction == 1 ||
+	// (g_iBlockDropMidAction > 1 && GetPlayerWeaponSlot(client, 2) == weapon)) && 
+	// GetEntPropEnt(client, Prop_Data, "m_hActiveWeapon") == weapon && 
+	// GetEntPropFloat(weapon, Prop_Data, "m_flNextPrimaryAttack") >= GetGameTime()) return;
+	// slot 2 is throwable
+
+	Action actResult = Plugin_Continue;
+	Call_StartForward(OnWeaponDrop);
+	Call_PushCell(client);
+	Call_PushCellRef(weapon);
+	Call_Finish(actResult);
+	switch (actResult) {
+		case Plugin_Continue, Plugin_Changed :
+		{
+			//nothing
+		}
+		default:
+		{
+			PrintToChat(client, "Third-Party plugin prevents you from weapon dropping");
+			return;
+		}
+	}
+
+	static char classname[32];
+	GetEntityClassname(weapon, classname, sizeof(classname));
+	if (strcmp(classname, "weapon_pistol") == 0 && GetEntProp(weapon, Prop_Send, "m_isDualWielding") > 0)
+	{
+		int clip = GetEntProp(weapon, Prop_Send, "m_iClip1");
+		int second_clip = 0;
+		if(clip % 2 == 0)
+		{
+			second_clip = clip / 2;
+			clip = clip / 2;
+		}
+		else
+		{
+			second_clip = clip / 2 + 1;
+			clip = clip / 2;
+		}
+		
+		RemovePlayerItem(client, weapon);
+		RemoveEntity(weapon);
+
+		int single_pistol = CreateEntityByName("weapon_pistol");
+		if(single_pistol <= MaxClients) return;
+
+		DispatchSpawn(single_pistol);
+		EquipPlayerWeapon(client, single_pistol);
+		SDKHooks_DropWeapon(client, single_pistol);
+		SetEntProp(single_pistol, Prop_Send, "m_iClip1", clip);
+
+		single_pistol = CreateEntityByName("weapon_pistol");
+		if(single_pistol <= MaxClients) return;
+
+		DispatchSpawn(single_pistol);
+		EquipPlayerWeapon(client, single_pistol);
+		SetEntProp(single_pistol, Prop_Send, "m_iClip1", second_clip);
+
+		return;	
+	}
+	
+	int ammo = GetPlayerReserveAmmo(client, weapon);
+	SDKHooks_DropWeapon(client, weapon);
+	SetPlayerReserveAmmo(client, weapon, 0);
+	SetEntProp(weapon, Prop_Send, "m_iExtraPrimaryAmmo", ammo);
+	
+	// if (!g_isSequel) return;
+	
+	if (strcmp(classname, "weapon_defibrillator") == 0)
+	{
+		int modelindex = GetEntProp(weapon, Prop_Data, "m_nModelIndex");
+		SetEntProp(weapon, Prop_Send, "m_iWorldModelIndex", modelindex);
+	}
+}
 public Action:Event_SkillStateTransition(client, args) {
 	new String:cmd[MAXCMD];
 	GetCmdArg(0, cmd, MAXCMD);
@@ -815,14 +940,14 @@ public Action:Event_SkillStateTransition(client, args) {
 	{
 		Skill_Change_Menu(client);
 	}
-	// else if (StrEqual(cmd, "drop"))
-	// {
-	// 	// int weapon = GetNowWeapon(client);
-	// 	// int activeweapon = GetEntPropEnt(client, Prop_Send, "m_hActiveWeapon");
-	// 	// if (activeweapon > 0)
-	// 	// 	SDKHooks_DropWeapon(client, activeweapon, NULL_VECTOR, NULL_VECTOR);
-	// 	DropActiveWeapon(client);
-	// }
+	else if (StrEqual(cmd, "drop"))
+	{
+		// int weapon = GetNowWeapon(client);
+		// int activeweapon = GetEntPropEnt(client, Prop_Send, "m_hActiveWeapon");
+		// if (activeweapon > 0)
+		// 	SDKHooks_DropWeapon(client, activeweapon, NULL_VECTOR, NULL_VECTOR);
+		DropActiveWeapon(client);
+	}
 	else if (StrEqual(cmd, "fix"))
 	{
 		PrintToChat(client, "Correction Mana Bar");
@@ -1478,7 +1603,8 @@ public int ForceWeaponDropBySlot(int client, int slot)
 		}
 		if(StrEqual(item, "weapon_melee")==false)
 		{
-			SDKHooks_DropWeapon(client, weapon, NULL_VECTOR, NULL_VECTOR);
+			// SDKHooks_DropWeapon(client, weapon, NULL_VECTOR, NULL_VECTOR);
+			DropWeapon(client, weapon);
 		}
 		else
 		{
