@@ -23,6 +23,7 @@
 #define MAXENTITIES                     (4096)
 #define PANIC_SEC                       (120.0)
 #define EX_HIT_TIMES                    (2)
+#define EX_WAIT_SEC                     (0.5)
 #define PARTICLE_EXPLOSION              ("Skill_Explosion")
 #define PARTICLE_EXPLOSION2             ("Skill_Explosion_2")
 #define PARTICLE_EAGLEEYE               ("Skill_EagleEye")
@@ -362,7 +363,7 @@ public OnPluginStart() {
 	
 	RegConsoleCmd("skill1",					Event_SkillStateTransition);
 	RegConsoleCmd("change_skill",			Event_SkillStateTransition);
-	RegConsoleCmd("drop",					Event_SkillStateTransition);
+	// RegConsoleCmd("drop",					Event_SkillStateTransition);
 	RegConsoleCmd("fix",					Event_SkillStateTransition);
 	//HookEvent("player_hurt", 			Event_DmgInflicted);
 	//HookEvent("infected_hurt", 			Event_DmgInflicted);
@@ -750,7 +751,7 @@ public bool CheckExplosion(int client)
 	{
 		result = true;
 		Skill_Delay_Cnt[client]++;
-		if (Skill_Delay_Cnt[client] == 1)
+		if (Skill_Delay_Cnt[client] < EX_HIT_TIMES)
 		{
 			useDP[client]=true;
 			new Float:Pos[3];
@@ -759,9 +760,9 @@ public bool CheckExplosion(int client)
 			playerDP[client].WriteCell(Pos[0]);
 			playerDP[client].WriteCell(Pos[1]);
 			playerDP[client].WriteCell(Pos[2]);
-			Skill_Delay_Timer[client] = CreateTimer(0.5, Explosion_Trigger, client);
+			Skill_Delay_Timer[client] = CreateTimer(EX_WAIT_SEC, Explosion_Trigger, client);
 		}
-		else if(Skill_Delay_Cnt[client]>=EX_HIT_TIMES)
+		else
 		{
 			if (Skill_Delay_Timer[client] != null &&
 				Skill_Delay_Timer[client] != INVALID_HANDLE)
@@ -814,13 +815,14 @@ public Action:Event_SkillStateTransition(client, args) {
 	{
 		Skill_Change_Menu(client);
 	}
-	else if (StrEqual(cmd, "drop"))
-	{
-		// int weapon = GetNowWeapon(client);
-		int activeweapon = GetEntPropEnt(client, Prop_Send, "m_hActiveWeapon");
-		if (activeweapon > 0)
-			SDKHooks_DropWeapon(client, activeweapon, NULL_VECTOR, NULL_VECTOR);
-	}
+	// else if (StrEqual(cmd, "drop"))
+	// {
+	// 	// int weapon = GetNowWeapon(client);
+	// 	// int activeweapon = GetEntPropEnt(client, Prop_Send, "m_hActiveWeapon");
+	// 	// if (activeweapon > 0)
+	// 	// 	SDKHooks_DropWeapon(client, activeweapon, NULL_VECTOR, NULL_VECTOR);
+	// 	DropActiveWeapon(client);
+	// }
 	else if (StrEqual(cmd, "fix"))
 	{
 		PrintToChat(client, "Correction Mana Bar");
@@ -1534,13 +1536,32 @@ public int GetNowWeapon(client)
 	return weapon;
 }
 
+stock Weapon_GetPrimaryAmmoType(weapon)
+{
+	return GetEntProp(weapon, Prop_Data, "m_iPrimaryAmmoType");
+}
+
 public SetItemToPlayer(int client, char[] item, int index, int ammo, int clip)
 {
 	// char weapon[MAXCMD] = "weapon_katana"; //TODO: get random item
 	// new wq = CreateEntityByName(weapon);
 	WeaponId id = WeaponNameToId(item);
 	int slot = GetSlotFromWeaponId(id);
-	if(slot>=0) ForceWeaponDropBySlot(client, slot);
+	bool havePistol = false;
+	if (slot == 1)
+	{
+		int wep_Secondary = GetPlayerWeaponSlot(client, slot);
+		char wepName[MAXCMD];
+		GetEdictClassname(wep_Secondary, wepName, MAXCMD);
+		if (StrEqual(wepName, "weapon_pistol"))
+		{
+			havePistol = true;
+		}
+	}
+	if((slot>=0&&slot!=1)||(slot==1&&!havePistol)) 
+	{
+		ForceWeaponDropBySlot(client, slot);
+	}
 	if(StrEqual(item, "weapon_melee")==true)
 	{
 		GetEntPropString(index, Prop_Data, "m_strMapSetScriptName", item, MAXCMD);
@@ -1561,12 +1582,14 @@ public SetItemToPlayer(int client, char[] item, int index, int ammo, int clip)
 			//----------------
 			if (StrEqual(item, "weapon_pistol"))
 			{
-				int weapon = GetPlayerWeaponSlot(client, 1);
-				if (weapon > 0)
+				int wep_Secondary = GetPlayerWeaponSlot(client, 1);
+				if (wep_Secondary > 0)
 				{
-					GetEdictClassname(weapon, item, MAXCMD);
+					bool m_isDualWielding = view_as<bool>(GetEntProp(wep_Secondary, Prop_Send, "m_isDualWielding"));
+					GetEdictClassname(wep_Secondary, item, MAXCMD);
+					
 					if (StrEqual(item, "weapon_pistol") &&
-						GetEntProp(weapon, Prop_Send, "m_isDualWielding") > 0)
+						m_isDualWielding)
 					{
 						GivePlayerItem(client, "weapon_pistol");
 					}
@@ -1584,7 +1607,8 @@ public SetItemToPlayer(int client, char[] item, int index, int ammo, int clip)
 				int ammoAmount = GetRandomInt(MIN_STEAL_AMMO, MAX_STEAL_AMMO);
 				if(ammo>=0)ammoAmount = ammo;
 				// PrintToChatAll("ammoAmount %d\n",ammoAmount);
-				SetWeaponAmmo(client, weapon, ammoAmount);
+				// SetWeaponAmmo(client, weapon, ammoAmount);
+				GivePlayerAmmo(client, ammoAmount, Weapon_GetPrimaryAmmoType(weapon), true);
 				if(clip>=0) SetWeaponClip(weapon, clip);
 			}
 		}
