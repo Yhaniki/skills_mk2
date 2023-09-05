@@ -1,4 +1,4 @@
-#define PLUGIN_VERSION                  "0.1"
+#define PLUGIN_VERSION                  "0.2"
 #define SKILL_DEBUG                     (false)
 #define USING_EXPLOSION_EX              (true)
 #define INIT_MP                         (50.0)
@@ -119,7 +119,7 @@ GlobalForward OnWeaponDrop;
 public Plugin myinfo = {
 	name = "[KONOSUBA_SKILLS]",
 	author = "MKLUO, Eithwa",
-	description = "skills system in konosuba",
+	description = "skills system of konosuba",
 	version = PLUGIN_VERSION,
 	url = "https://github.com/Yhaniki/skills_mk2"
 }
@@ -256,7 +256,7 @@ static char g_sWeapons[MAX_WEAPONS][] =
 	"weapon_pistol" ,
 	"weapon_pistol_magnum"
 };
-ConVar g_hCvarMeleeRange, g_hCvarPanicForever;
+ConVar g_hCvarMeleeRange/*, g_hCvarPanicForever*/;
 int g_iStockRange;
 MRESReturn TestMeleeSwingCollisionPre(int pThis, Handle hReturn)
 {
@@ -311,8 +311,8 @@ public OnPluginStart() {
 		SetFailState("Failed to detour post \"CTerrorMeleeWeapon::TestMeleeSwingCollision\".");
 
 	g_hCvarMeleeRange = FindConVar("melee_range");
-	g_hCvarPanicForever = FindConVar("director_panic_forever");
-	g_hCvarPanicForever.SetBool(false, false, false);
+	// g_hCvarPanicForever = FindConVar("director_panic_forever");
+	// g_hCvarPanicForever.SetBool(false, false, false);
 	g_iStockRange = g_hCvarMeleeRange.IntValue;
 	if (State_TurnUndead && TurnUndead_Timer != null)
 	{
@@ -336,10 +336,10 @@ public OnPluginStart() {
 	OnWeaponDrop = CreateGlobalForward("OnWeaponDrop", ET_Event, Param_Cell, Param_CellByRef);
 //------------------------------
 	//Setup_Materials();
-	RegisterSkill("Explosion 爆裂" ,Timer_Skill_Explosion_Start, Timer_Skill_Null_End, Timer_Skill_Null_Ready, 1.0, 2.0, 30.0);
+	RegisterSkill("Explosion 爆裂" ,Timer_Skill_Explosion_Start, Timer_Skill_Null_End, Timer_Skill_Null_Ready, 3.0, 2.0, 30.0);
 	RegisterSkill("Mana Shield 魔心護盾" ,Timer_Skill_ManaShield_Start, Timer_Skill_ManaShield_End, Timer_Skill_Null_Ready, 0.0, -1.0, 0.0);
-	RegisterSkill("Eagle Eye 鷹眼" ,Timer_Skill_EagleEye_Start, Timer_Skill_Null_End, Timer_Skill_Null_Ready, 5.0, 2.0, 40.0);
-	RegisterSkill("Steal 偷竊" ,Timer_Skill_Steal_Start, Timer_Skill_Null_End, Timer_Skill_Null_Ready, 7.0, 2.0, 20.0);// Float:skill_duration, Float:skill_cooldown, Float:skill_mpcost
+	RegisterSkill("Eagle Eye 鷹眼" ,Timer_Skill_EagleEye_Start, Timer_Skill_Null_End, Timer_Skill_Null_Ready, 7.0, 2.0, 40.0);
+	RegisterSkill("Steal 偷竊" ,Timer_Skill_Steal_Start, Timer_Skill_Null_End, Timer_Skill_Null_Ready, 6.0, 2.0, 20.0);// Float:skill_duration, Float:skill_cooldown, Float:skill_mpcost
 	RegisterSkill("Sacred Turn Undead 淨化" , Timer_Skill_TurnUndead_Start, Timer_Skill_Null_End, Timer_Skill_Null_Ready, 3.5, 2.0, 50.0);
 	RegisterSkill("爆裂ex" , Timer_Skill_EX_Start, Timer_Skill_EX_End, Timer_Skill_Null_Ready, explosion_ex_delay_secs+1.0, 2.0, 1.0);
 	//RegisterSkill("Sixth Sense 第六感" ,Timer_Skill_EagleEye_Start, Timer_Skill_EagleEye_End, Timer_Skill_Null_Ready, 10.0, 60.0, 80.0);
@@ -364,6 +364,7 @@ public OnPluginStart() {
 	HookEvent("player_death", 				Event_DeathUnglow);
 	
 	RegConsoleCmd("skill1",					Event_SkillStateTransition);
+	RegConsoleCmd("skill2",					Event_SkillStateTransition);
 	RegConsoleCmd("change_skill",			Event_SkillStateTransition);
 	RegConsoleCmd("drop",					Event_SkillStateTransition);
 	RegConsoleCmd("fix",					Event_SkillStateTransition);
@@ -743,7 +744,7 @@ public Action:Explosion_Trigger(Handle:timer, int client)
 	Skill_Trigger(client);
 	return Plugin_Stop;
 }
-
+#if 0
 public bool CheckExplosion(int client)
 {
 	bool result = false;
@@ -785,6 +786,7 @@ public bool CheckExplosion(int client)
 #endif
 	return result;
 }
+#endif
 bool IsSurvivor(int client)
 { return (GetClientTeam(client) == 2 || GetClientTeam(client) == 4); }
 
@@ -918,14 +920,11 @@ public Action:Event_SkillStateTransition(client, args) {
 	if (StrEqual(cmd, "skill1")) {
 		switch (Skill_State[client]) {
 			case SKILL_RDY: {
-				if(!CheckExplosion(client))
-				{
-					if (MP_Decrease(client, Skill_MPcost[skill_using])) {
-						CreateTimer(0.0, Timer:Timer_Skill_Start[skill_using], client);
-						Skill_Trigger(client);
-					} else {
-						PrintToChat(client, "魔力不足");
-					}
+				if (MP_Decrease(client, Skill_MPcost[skill_using])) {
+					CreateTimer(0.0, Timer:Timer_Skill_Start[skill_using], client);
+					Skill_Trigger(client);
+				} else {
+					PrintToChat(client, "魔力不足");
 				}
 			}
 			case SKILL_ACT: {
@@ -933,6 +932,24 @@ public Action:Event_SkillStateTransition(client, args) {
 			}
 			case SKILL_CD: {
 				PrintToChat(client, "技能冷卻中");
+			}
+		}
+	}
+	else if(StrEqual(cmd, "skill2"))
+	{
+		int hiddenExplosionNum = skill_num-1;
+		if ((Skill_MP[client] >= 100.0) &&
+			StrEqual(Skill_Name[Skill[client]], "Explosion 爆裂"))
+		{
+			if (MP_Decrease(client, Skill_MPcost[hiddenExplosionNum]))
+			{
+				Skill_Delay_Cnt[client] = EX_HIT_TIMES;
+				CreateTimer(0.0, Timer: Timer_Skill_Start[hiddenExplosionNum], client);
+				Skill_Trigger(client);
+			}
+			else
+			{
+				PrintToChat(client, "魔力不足");
 			}
 		}
 	}
@@ -962,7 +979,18 @@ public Action:Skill_Notify(Handle:timer, any:client) {
 	if (State_Transition[client] || (State_Player[client] == PLAYER_DEAD) || !IsClientInGame(client) || !IsPlayer(client)) return;
 	
 	new String:str[MAXCMD] = "";
+	new String:state[MAXCMD] = "";
+	new String:name[MAXCMD] = "";
 	new skill_using = Skill[client];
+	if ((Skill_MP[client] >= 100.0) &&
+		StrEqual(Skill_Name[Skill[client]], "Explosion 爆裂"))
+	{
+		Format(name, MAXCMD, "Explosion ☆爆裂★");
+	}
+	else
+	{
+		Format(name, MAXCMD, Skill_Name[Skill[client]]);
+	}
 	switch (Skill_State[client]) {
 		case SKILL_RDY: {
 			if (Skill_MP[client] < Skill_MPcost[skill_using]) {
@@ -970,28 +998,38 @@ public Action:Skill_Notify(Handle:timer, any:client) {
 			} else {
 				switch (Skill_Notify_Ani_State[client]) {
 					case 0: {
-						Format(str, MAXCMD, ">    %s    <", Skill_Name[Skill[client]]);
+						Format(str, MAXCMD, ">    %s    <", name);
 					}
 					case 1: {
-						Format(str, MAXCMD, " >   %s   < ", Skill_Name[Skill[client]]);
+						Format(str, MAXCMD, " >   %s   < ", name);
 					}
 					case 2: {
-						Format(str, MAXCMD, " >   %s   < ", Skill_Name[Skill[client]]);
+						Format(str, MAXCMD, "  >  %s  <  ", name);
 					}
 				}
+			}
+			if(Skill_MP[client] >= Skill_MPcost[skill_using])
+			{
+				Format(state, MAXCMD, "已準備");
+			}else
+			{
+				Format(state, MAXCMD, "魔力不足(%-.0fMP)",Skill_MPcost[skill_using]);
 			}
 		}
 		case SKILL_ACT: {
 			Format(str, MAXCMD, " -  %s  - ", Skill_Name[skill_using]);
+			Format(state, MAXCMD, "施放中");
 		}
 		case SKILL_CD: {
-			Format(str, MAXCMD, "%s", Skill_Name[skill_using],  RoundToCeil(Skill_Cooldown[skill_using] + Skill_Duration[skill_using] - (GetGameTime() - Skill_LastUseTime[client])));
+			float time = (Skill_Cooldown[skill_using] + Skill_Duration[skill_using] - (GetGameTime() - Skill_LastUseTime[client]));
+			Format(str, MAXCMD, "%s", Skill_Name[skill_using]);
+			Format(state, MAXCMD, "冷卻中 (%-.2fs)", time);
 		}
 	}
-	Skill_Notify_MPbar(str, client);
+	Skill_Notify_MPbar(str, state, client);
 }
 
-public Skill_Notify_MPbar(const String:str[], client) {
+public Skill_Notify_MPbar(const String:str[], const String:state[], client) {
 	new String:bar[MAXCMD] = "";
 	new String:dot[MAXCMD] = "";
 	float resolution = MP_BAR_SIZE/MP_MAX;
@@ -1003,7 +1041,15 @@ public Skill_Notify_MPbar(const String:str[], client) {
 	for (new i = 0; i < bar_amount; i++) {
 		if (State_Adrenaline_Boost[client]) {
 			Format(dot, MAXCMD, "%s/", dot);
-		} else {
+		}
+		else if ((Skill_MP[client] >= 100.0) &&
+				 StrEqual(Skill_Name[Skill[client]], "Explosion 爆裂"))
+		{
+			if(i<13){
+				Format(dot, MAXCMD, "%s▓", dot);
+			}
+		}
+		else {
 			Format(bar, MAXCMD, "%s|", bar);
 		}
 	}
@@ -1016,8 +1062,7 @@ public Skill_Notify_MPbar(const String:str[], client) {
 	for (new i = 0; i <size; i++) {
 		Format(dot, MAXCMD, "%s ", dot);
 	}
-
-	PrintHintText(client, "%s\n[%s%s] MP %d", str, bar, dot, RoundToFloor(Skill_MP[client]));
+	PrintHintText(client, "%s\n[%s%s] MP %d\n%s", str, bar, dot, RoundToFloor(Skill_MP[client]),state);
 }
 
 
@@ -1411,7 +1456,8 @@ public Action:Timer_Skill_EX_Start(Handle:timer, any:client) {
 	CreateParticle(PARTICLE_EX_GLOW, explosion_ex_delay_secs, Pos);
 	CreateParticle(PARTICLE_EX_LIGHT, explosion_ex_delay_secs, Pos);
 	CreateParticle(PARTICLE_MAGIC_CIRCLE, explosion_ex_delay_secs-4.0, Pos);
-	PrepareAndEmitSoundtoAll("skills\\explosion_full.mp3", .entity = client, .volume = 1.0);
+	// PrepareAndEmitSoundtoAll("skills\\explosion_full.mp3", .entity = client, .volume = 1.0);
+	EmitSoundToAll("skills\\explosion_full.mp3", client, SNDCHAN_AUTO, SNDLEVEL_HELICOPTER);
 	GlowForSecs(client, 255, 0, 0, explosion_ex_delay_secs);
 	FreezeForSecs(client, explosion_ex_delay_secs);
 	Invulnerable[client]=true;
@@ -1432,7 +1478,7 @@ public Action:Timer_Skill_EX_Start(Handle:timer, any:client) {
 //------------trun undead-------------//
 public Action:Timer_UndeadRushEnd(Handle:timer) {
 	State_TurnUndead = false;
-	g_hCvarPanicForever.SetBool(false, false, false);
+	// g_hCvarPanicForever.SetBool(false, false, false);
 	PrintToChatAll("\x01屍潮結束");
 }
 StripAndExecuteClientCommand(client, const String:command[], const String:arguments[]) {
@@ -1445,35 +1491,35 @@ public Action:Timer_UndeadRush(Handle:timer, DataPack:DP) {
 	DP.Reset();
 	new client = DP.ReadCell();
 
-	g_hCvarPanicForever.SetBool(false, false, false);
+	// g_hCvarPanicForever.SetBool(false, false, false);
 	StripAndExecuteClientCommand(client, "z_spawn_old", "mob");
-	static int director = INVALID_ENT_REFERENCE;
+	// static int director = INVALID_ENT_REFERENCE;
 
-	if (director == INVALID_ENT_REFERENCE || EntRefToEntIndex(director) == INVALID_ENT_REFERENCE)
-	{
-		director = FindEntityByClassname(-1, "info_director");
-		if (director != INVALID_ENT_REFERENCE)
-		{
-			director = EntIndexToEntRef(director);
-		}
-	}
+	// if (director == INVALID_ENT_REFERENCE || EntRefToEntIndex(director) == INVALID_ENT_REFERENCE)
+	// {
+	// 	director = FindEntityByClassname(-1, "info_director");
+	// 	if (director != INVALID_ENT_REFERENCE)
+	// 	{
+	// 		director = EntIndexToEntRef(director);
+	// 	}
+	// }
 
-	if (director != INVALID_ENT_REFERENCE)
-	{
-		AcceptEntityInput(director, "ForcePanicEvent");
-	}
+	// if (director != INVALID_ENT_REFERENCE)
+	// {
+	// 	AcceptEntityInput(director, "ForcePanicEvent");
+	// }
 	L4D_CTerrorPlayer_OnVomitedUpon(client, client);
 	SDKCall(g_hSDKUnVomit, client);
-	g_hCvarPanicForever.SetBool(true, false, false);
-	if (State_TurnUndead &&
-		TurnUndead_Timer != null &&
-		TurnUndead_Timer != INVALID_HANDLE)
-	{
-		KillTimer(TurnUndead_Timer);
-	}
+	// g_hCvarPanicForever.SetBool(true, false, false);
+	// if (State_TurnUndead &&
+	// 	TurnUndead_Timer != null &&
+	// 	TurnUndead_Timer != INVALID_HANDLE)
+	// {
+	// 	KillTimer(TurnUndead_Timer);
+	// }
 	State_TurnUndead = true;
-	TurnUndead_Timer = CreateTimer(PANIC_SEC, Timer:Timer_UndeadRushEnd);
-	PrintToChatAll("\x04 %N \x01施放淨化引來屍潮！", client);
+	// TurnUndead_Timer = CreateTimer(PANIC_SEC, Timer:Timer_UndeadRushEnd);
+	PrintToChatAll("\x04%N \x01施放淨化引來屍潮！", client);
 }
 public Action:Timer_TurnUndeadAimDelay(Handle:timer, DataPack:DP) {
 	DP.Reset();
@@ -1515,7 +1561,7 @@ public Action:Timer_TurnUndeadAimDelay(Handle:timer, DataPack:DP) {
 
 	DataPack DP2 = new DataPack();
 	DP2.WriteCell(client);
-	CreateTimer(3.0, Timer:Timer_UndeadRush, DP2);
+	CreateTimer(1.0, Timer:Timer_UndeadRush, DP2);
 	// PropaneAtPos(Pos);
 	
 	return Plugin_Stop;

@@ -1,4 +1,5 @@
 particles_manifest
 {
 	"file"		"particles/skill_fx.pcf"
+    "file"		"particles/ex.pcf"
 }

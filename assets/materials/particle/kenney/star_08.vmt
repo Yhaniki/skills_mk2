@@ -1,0 +1,7 @@
+"SpriteCard"
+{
+	"$basetexture" "particle\kenney\star_08"
+    "$vertexcolor" 1
+    "$vertexalpha" 1
+	"$translucent" 1
+}

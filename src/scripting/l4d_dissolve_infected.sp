@@ -575,7 +575,7 @@ void Turn_Undead(int target, int client)
 				if( clone > 0)
 				{
 					int hp = GetEntProp(target, Prop_Data, "m_iHealth")+5;
-					DealDamage(target, hp, client, DMG_CLUB);
+					DealDamage(target, hp, client, DMG_BULLET);
 					SetEntityRenderMode(clone, RENDER_NONE); // Hide and dissolve clone - method to show more particles
 					DissolveTarget(index, clone, class == 3 ? 0 : target); // Exclude boomer to producer gibs
 					SetEntityRenderFx(target, RENDERFX_FADE_FAST);
@@ -612,8 +612,8 @@ void Turn_Undead(int target, int client)
 					if( bWitch )
 					{
 						int hp = GetEntProp(target, Prop_Data, "m_iHealth")+5;
-						DealDamage(target, hp, client, DMG_CLUB);
-						// DealDamage(target, 10000, client, DMG_CLUB);
+						DealDamage(target, hp, client, DMG_BULLET);
+						// DealDamage(target, 10000, client, DMG_BULLET);
 						SetEntityRenderFx(target, RENDERFX_FADE_FAST);
 						DissolveTarget(index, target, 0);
 					} else {
@@ -630,9 +630,9 @@ void Turn_Undead(int target, int client)
 					
 				}else
 				{
-					// DealDamage(target, 10000, client, DMG_CLUB);
+					// DealDamage(target, 10000, client, DMG_BULLET);
 					int hp = GetEntProp(target, Prop_Data, "m_iHealth")+5;
-					DealDamage(target, hp, client, DMG_CLUB);
+					DealDamage(target, hp, client, DMG_BULLET);
 					SetEntityRenderFx(target, RENDERFX_FADE_FAST);
 				}
 			}
