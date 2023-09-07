@@ -1,4 +1,4 @@
-#define PLUGIN_VERSION                  "0.2"
+#define PLUGIN_VERSION                  "0.4"
 #define SKILL_DEBUG                     (false)
 #define USING_EXPLOSION_EX              (true)
 #define INIT_MP                         (50.0)
@@ -37,6 +37,8 @@
 #define PARTICLE_BOMB2		"missile_hit1"
 #define PARTICLE_BOMB3		"gas_explosion_main"
 #define PARTICLE_BOMB4		"explosion_huge"
+#define PARTICLE_NUKE1		"explosion_core"
+#define PARTICLE_NUKE2		"nuke_core"
 #define PARTICLE_BLUE		"flame_blue"
 #define PARTICLE_FIRE		"fire_medium_01"
 #define PARTICLE_SPARKS		"fireworks_sparkshower_01e"
@@ -44,6 +46,7 @@
 #define SOUND_EXPLODE3		"weapons/hegrenade/explode3.wav"
 #define SOUND_EXPLODE4		"weapons/hegrenade/explode4.wav"
 #define SOUND_EXPLODE5		"weapons/hegrenade/explode5.wav"
+#define NUKE_SOUND			"nuke/explosion.mp3"
 //#define PARTICLE_ELEC                  ("electrical_arc_01_parent")
 //#define PARTICLE_WARP                  ("electrical_arc_01_system")
 
@@ -82,7 +85,8 @@ new Skill_Notify_Ani_State[MAXPLAYERS + 1];
 
 new Handle:Skill_MPrecover_Timer[MAXPLAYERS + 1];
 new Handle:Skill_Adrenaline_Boost_Timer[MAXPLAYERS + 1];
-
+new Handle:Skill_TurnUndead_Timer[MAXPLAYERS + 1];
+int g_iChase[MAXPLAYERS+1];
 new bool:State_Glow[MAXENTITIES];
 new Handle:Glow_Timer[MAXENTITIES];
 new bool:State_Freeze[MAXENTITIES];
@@ -257,7 +261,7 @@ static char g_sWeapons[MAX_WEAPONS][] =
 	"weapon_pistol_magnum"
 };
 ConVar g_hCvarMeleeRange/*, g_hCvarPanicForever*/;
-int g_iStockRange;
+int g_iStockRange = 150; //default value
 MRESReturn TestMeleeSwingCollisionPre(int pThis, Handle hReturn)
 {
 	if( IsValidEntity(pThis) )
@@ -421,9 +425,11 @@ public Setup_Materials() {
 	PrecacheSound(SOUND_EXPLODE3, true);
 	PrecacheSound(SOUND_EXPLODE4, true);
 	PrecacheSound(SOUND_EXPLODE5, true);
-
+	PrecacheSound(NUKE_SOUND, true);
 	SetupMaterial("particles\\skill_fx.pcf");
 	SetupMaterial("particles\\ex.pcf");
+	SetupMaterial("particles\\nuke.pcf");
+	SetupMaterial("particles\\nuke2.pcf");
 
 	PrecacheParticle(PARTICLE_EXPLOSION);
 	PrecacheParticle(PARTICLE_EXPLOSION2);
@@ -442,6 +448,9 @@ public Setup_Materials() {
 	PrecacheParticle(PARTICLE_FIRE);
 	PrecacheParticle(PARTICLE_SPARKS);
 	PrecacheParticle(PARTICLE_SMOKE);
+	PrecacheParticle(PARTICLE_NUKE1);
+	PrecacheParticle(PARTICLE_NUKE2);
+
 	PrintToServer("===========Material Setup End===========");
 }
 
@@ -1205,6 +1214,228 @@ public Action:Timer_Skill_Null_Ready(Handle:timer, any:client) {
 }
 //------------------------------------//
 //------------隱藏版爆裂---------------//
+float beaPos[3];
+// void NukeExplosion(int entity)
+void NukeExplosion(const float vPos[3]=NULL_VECTOR)
+{
+	// float vPos[3];
+	// GetEntPropVector(entity, Prop_Send, "m_vecOrigin", vPos);
+
+	int particle = CreateEntityByName("info_particle_system");
+	if (particle != -1)
+	{
+		// int type = GetConVarInt(g_hParticle);
+		int type = 2;
+		if (type == 1)
+		{
+			DispatchKeyValue(particle, "effect_name", PARTICLE_NUKE1);
+		}
+		else if (type == 2)
+		{
+			DispatchKeyValue(particle, "effect_name", PARTICLE_NUKE1);
+		}
+
+		DispatchSpawn(particle);
+		ActivateEntity(particle);
+		AcceptEntityInput(particle, "start");
+
+		TeleportEntity(particle, vPos, NULL_VECTOR, NULL_VECTOR);
+
+		SetVariantString("OnUser1 !self:Kill::45.0:-1");
+		AcceptEntityInput(particle, "AddOutput");
+		AcceptEntityInput(particle, "FireUser1");
+	}
+
+	// for (int i = 1; i <= MaxClients; i++)
+	// {
+	// 	if (i > 0 && IsClientInGame(i) && !IsFakeClient(i))
+	// 	{
+	// 		EmitSoundToClient(i, NUKE_SOUND);
+	// 	}
+	// }
+	EmitSoundToAll(NUKE_SOUND, particle, SNDCHAN_AUTO, SNDLEVEL_ROCKET);
+
+	float Pos[3];
+	char tName[64];
+	int g_hNukeRadius = 99999;
+	for (int i = 1; i <= GetEntityCount(); i++)
+	{
+		if (!IsValidEntity(i))
+			continue;
+
+		if (IsValidClient(i) && GetClientTeam(i) == 3)
+		{
+			Fade(i, 255, 50, 80, 100, 800, 1);
+			GetEntPropVector(i, Prop_Send, "m_vecOrigin", Pos);
+			if (GetVectorDistance(beaPos, Pos) > g_hNukeRadius)
+				return;
+			CreateTimer(GetVectorDistance(vPos, Pos) / 5000.0, ShockWave, i);
+		}
+		if (IsValidClient(i) && GetClientTeam(i) == 2)
+		{
+			Fade(i, 255, 120, 80, 100, 800, 1);
+			GetEntPropVector(i, Prop_Send, "m_vecOrigin", Pos);
+			if (GetVectorDistance(beaPos, Pos) > g_hNukeRadius)
+				return;
+			CreateTimer(GetVectorDistance(vPos, Pos) / 5000.0, ShockWave, i);
+		}
+
+		else
+		{
+			GetEntityClassname(i, tName, sizeof(tName));
+			if (StrEqual(tName, "witch", false))
+			{
+				GetEntPropVector(i, Prop_Send, "m_vecOrigin", Pos);
+				CreateTimer(GetVectorDistance(vPos, Pos) / 5000.0, ShockWave, i);
+			}
+			else if (StrEqual(tName, "infected", false))
+			{
+				GetEntPropVector(i, Prop_Send, "m_vecOrigin", Pos);
+				CreateTimer(GetVectorDistance(vPos, Pos) / 5000.0, ShockWave, i);
+			}
+			else if (StrEqual(tName, "prop_physics", false))
+			{
+				GetEntPropVector(i, Prop_Send, "m_vecOrigin", Pos);
+				CreateTimer(GetVectorDistance(vPos, Pos) / 5000.0, ShockWave, i);
+			}
+			else if (StrEqual(tName, "prop_physics_multiplayer", false))
+			{
+				GetEntPropVector(i, Prop_Send, "m_vecOrigin", Pos);
+				CreateTimer(GetVectorDistance(vPos, Pos) / 5000.0, ShockWave, i);
+			}
+			else if (StrEqual(tName, "prop_physics_override", false))
+			{
+				GetEntPropVector(i, Prop_Send, "m_vecOrigin", Pos);
+				CreateTimer(GetVectorDistance(vPos, Pos) / 5000.0, ShockWave, i);
+			}
+		}
+	}
+}
+public
+void Shake(int target, float intensity)
+{
+	Handle msg;
+	msg = StartMessageOne("Shake", target);
+
+	BfWriteByte(msg, 0);
+	BfWriteFloat(msg, intensity);
+	BfWriteFloat(msg, 15.0);
+	BfWriteFloat(msg, 12.0);
+	EndMessage();
+}
+void ThrowEntity(int entity)
+{
+	float Pos[3];
+	float qqAA[3];
+	float qqDA[3];
+	float qqVv[3];
+	float g_hNukeRadius = 999999.0;
+	GetEntPropVector(entity, Prop_Send, "m_vecOrigin", Pos);
+	if (GetVectorDistance(beaPos, Pos) > g_hNukeRadius)
+		return;
+	MakeVectorFromPoints(beaPos, Pos, qqAA);
+	GetVectorAngles(qqAA, qqDA);
+	qqDA[0] = qqDA[0] - 40.0;
+	GetAngleVectors(qqDA, qqVv, NULL_VECTOR, NULL_VECTOR);
+	NormalizeVector(qqVv, qqVv);
+	ScaleVector(qqVv, 1200.0);
+	TeleportEntity(entity, NULL_VECTOR, NULL_VECTOR, qqVv);
+}
+public void Fade(int target, int red, int green, int blue, int alpha, int duration, int type)
+{
+	Handle msg = StartMessageOne("Fade", target);
+	BfWriteShort(msg, 500);
+	BfWriteShort(msg, duration);
+	if (type == 0)
+		BfWriteShort(msg, (0x0002 | 0x0008));
+	else
+		BfWriteShort(msg, (0x0001 | 0x0010));
+	BfWriteByte(msg, red);
+	BfWriteByte(msg, green);
+	BfWriteByte(msg, blue);
+	BfWriteByte(msg, alpha);
+	EndMessage();
+}
+public Action ShockWave(Handle timer, int entity)
+{
+	float g_hNukeDamage = 5000.0;
+	char tName[64];
+
+	if (!IsValidEntity(entity))
+		return Plugin_Continue;
+
+	if (IsValidClient(entity) && GetClientTeam(entity) == 3)
+	{
+		IgniteEntity(entity, 999.9);
+		if (!IsFakeClient(entity))
+			EmitSoundToClient(entity, NUKE_SOUND);
+
+		ThrowEntity(entity);
+
+		if (!IsFakeClient(entity))
+			Shake(entity, 32.0);
+
+		switch (GetRandomInt(0, 1))
+		{
+		case 0:
+			SDKHooks_TakeDamage(entity, 0, 0, g_hNukeDamage, DMG_BURN);
+		case 1:
+			SDKHooks_TakeDamage(entity, 0, 0, g_hNukeDamage, DMG_BLAST);
+		}
+	}
+	if (IsValidClient(entity) && GetClientTeam(entity) == 2)
+	{
+		if (!IsFakeClient(entity))
+			EmitSoundToClient(entity, NUKE_SOUND);
+		StaggerClient(GetClientUserId(entity), beaPos);
+		if (!IsFakeClient(entity))
+			Shake(entity, 32.0);
+	}
+	else
+	{
+		GetEntityClassname(entity, tName, sizeof(tName));
+		if (StrEqual(tName, "witch", false))
+		{
+			IgniteEntity(entity, 999.9);
+			switch (GetRandomInt(0, 1))
+			{
+			case 0:
+				SDKHooks_TakeDamage(entity, 0, 0, g_hNukeDamage, DMG_BURN);
+			case 1:
+				SDKHooks_TakeDamage(entity, 0, 0, g_hNukeDamage, DMG_BLAST);
+			}
+		}
+		else if (StrEqual(tName, "infected", false))
+		{
+			IgniteEntity(entity, 999.9);
+			switch (GetRandomInt(0, 1))
+			{
+			case 0:
+				SDKHooks_TakeDamage(entity, 0, 0, g_hNukeDamage, DMG_BURN);
+			case 1:
+				SDKHooks_TakeDamage(entity, 0, 0, g_hNukeDamage, DMG_BLAST);
+			}
+		}
+
+		else if (StrEqual(tName, "prop_physics", false))
+		{
+			IgniteEntity(entity, 999.9);
+			ThrowEntity(entity);
+		}
+		else if (StrEqual(tName, "prop_physics_multiplayer", false))
+		{
+			IgniteEntity(entity, 999.9);
+			ThrowEntity(entity);
+		}
+		else if (StrEqual(tName, "prop_physics_override", false))
+		{
+			IgniteEntity(entity, 999.9);
+			ThrowEntity(entity);
+		}
+	}
+
+	return Plugin_Handled;
+}
 void StaggerClient(int iUserID, const float fPos[3])
 {
 	static int iScriptLogic = INVALID_ENT_REFERENCE;
@@ -1339,15 +1570,15 @@ Action TimerBombTouch(Handle timer, DataPack DP)
 	}
 
 
-	// Sound
-	int random = GetRandomInt(0, 2);
-	if( random == 0 )
-		EmitSoundToAll(SOUND_EXPLODE3, entity, SNDCHAN_AUTO, SNDLEVEL_HELICOPTER);
-	else if( random == 1 )
-		EmitSoundToAll(SOUND_EXPLODE4, entity, SNDCHAN_AUTO, SNDLEVEL_HELICOPTER);
-	else if( random == 2 )
-		EmitSoundToAll(SOUND_EXPLODE5, entity, SNDCHAN_AUTO, SNDLEVEL_HELICOPTER);
-
+	// // Sound
+	// int random = GetRandomInt(0, 2);
+	// if( random == 0 )
+	// 	EmitSoundToAll(SOUND_EXPLODE3, entity, SNDCHAN_AUTO, SNDLEVEL_HELICOPTER);
+	// else if( random == 1 )
+	// 	EmitSoundToAll(SOUND_EXPLODE4, entity, SNDCHAN_AUTO, SNDLEVEL_HELICOPTER);
+	// else if( random == 2 )
+	// 	EmitSoundToAll(SOUND_EXPLODE5, entity, SNDCHAN_AUTO, SNDLEVEL_HELICOPTER);
+	NukeExplosion(vPos);
 	return Plugin_Continue;
 }
 
@@ -1364,7 +1595,7 @@ public Action:Timer_exex(Handle:timer, DataPack:DP)
 	Pos[1] = DP.ReadCell();
 	Pos[2] = DP.ReadCell();
 
-	float p[3];
+	// float p[3];
 	// float pi = 3.14;
 	// float dAng = 2.0 * pi / 5.0;
 	// // PrintToChatAll("ori x%f y%f\n",Pos[0],Pos[1]);
@@ -1378,20 +1609,20 @@ public Action:Timer_exex(Handle:timer, DataPack:DP)
 	// 	PropaneAtPos(p);
 	// }
 
-	int gasNum=0;
-	const float maxGasDist = 500.0;
-	while(gasNum<GAS_TANK_NUM)
-	{
-		p[0] = Pos[0] + GetRandomFloat(-maxGasDist, maxGasDist);
-		p[1] = Pos[1] + GetRandomFloat(-maxGasDist, maxGasDist);
-		p[2] = Pos[2];
-		float dist = GetVectorDistance(Pos, p);
-		if(dist<maxGasDist)
-		{
-			PropaneAtPos(p);
-			gasNum++;
-		}
-	}
+	// int gasNum=0;
+	// const float maxGasDist = 500.0;
+	// while(gasNum<GAS_TANK_NUM)
+	// {
+	// 	p[0] = Pos[0] + GetRandomFloat(-maxGasDist, maxGasDist);
+	// 	p[1] = Pos[1] + GetRandomFloat(-maxGasDist, maxGasDist);
+	// 	p[2] = Pos[2];
+	// 	float dist = GetVectorDistance(Pos, p);
+	// 	if(dist<maxGasDist)
+	// 	{
+	// 		PropaneAtPos(p);
+	// 		gasNum++;
+	// 	}
+	// }
 
 	for (new i = 1; i < MAXPLAYERS; i++) {
 		if (IsAliveSpecialInf(i)) {
@@ -1476,10 +1707,19 @@ public Action:Timer_Skill_EX_Start(Handle:timer, any:client) {
 }
 //------------------------------------//
 //------------trun undead-------------//
-public Action:Timer_UndeadRushEnd(Handle:timer) {
+public Action:Timer_UndeadRushEnd(Handle:timer, any userid) {
 	State_TurnUndead = false;
 	// g_hCvarPanicForever.SetBool(false, false, false);
-	PrintToChatAll("\x01屍潮結束");
+	// PrintToChatAll("\x01屍潮結束");
+	int client = GetClientOfUserId(userid);
+	if( client && IsClientInGame(client) )
+	{
+		// Chase
+		int entity = g_iChase[client];
+		g_iChase[client] = 0;
+		if( entity && EntRefToEntIndex(entity) != INVALID_ENT_REFERENCE )
+			RemoveEntity(entity);
+	}
 }
 StripAndExecuteClientCommand(client, const String:command[], const String:arguments[]) {
 	new flags = GetCommandFlags(command);
@@ -1493,23 +1733,23 @@ public Action:Timer_UndeadRush(Handle:timer, DataPack:DP) {
 
 	// g_hCvarPanicForever.SetBool(false, false, false);
 	StripAndExecuteClientCommand(client, "z_spawn_old", "mob");
-	// static int director = INVALID_ENT_REFERENCE;
+	static int director = INVALID_ENT_REFERENCE;
 
-	// if (director == INVALID_ENT_REFERENCE || EntRefToEntIndex(director) == INVALID_ENT_REFERENCE)
-	// {
-	// 	director = FindEntityByClassname(-1, "info_director");
-	// 	if (director != INVALID_ENT_REFERENCE)
-	// 	{
-	// 		director = EntIndexToEntRef(director);
-	// 	}
-	// }
+	if (director == INVALID_ENT_REFERENCE || EntRefToEntIndex(director) == INVALID_ENT_REFERENCE)
+	{
+		director = FindEntityByClassname(-1, "info_director");
+		if (director != INVALID_ENT_REFERENCE)
+		{
+			director = EntIndexToEntRef(director);
+		}
+	}
 
-	// if (director != INVALID_ENT_REFERENCE)
-	// {
-	// 	AcceptEntityInput(director, "ForcePanicEvent");
-	// }
-	L4D_CTerrorPlayer_OnVomitedUpon(client, client);
-	SDKCall(g_hSDKUnVomit, client);
+	if (director != INVALID_ENT_REFERENCE)
+	{
+		AcceptEntityInput(director, "ForcePanicEvent");
+	}
+	// L4D_CTerrorPlayer_OnVomitedUpon(client, client);
+	// SDKCall(g_hSDKUnVomit, client);
 	// g_hCvarPanicForever.SetBool(true, false, false);
 	// if (State_TurnUndead &&
 	// 	TurnUndead_Timer != null &&
@@ -1518,7 +1758,38 @@ public Action:Timer_UndeadRush(Handle:timer, DataPack:DP) {
 	// 	KillTimer(TurnUndead_Timer);
 	// }
 	State_TurnUndead = true;
+	if (Skill_TurnUndead_Timer[client] != null &&
+		Skill_TurnUndead_Timer[client] != INVALID_HANDLE)
+	{
+		KillTimer(TurnUndead_Timer);
+	}
+	Skill_TurnUndead_Timer[client] = CreateTimer(PANIC_SEC, Timer:Timer_UndeadRushEnd, GetClientUserId(client));
+	int entity = CreateEntityByName("info_goal_infected_chase");
+	if( entity != -1 )
+	{
+		g_iChase[client] = EntIndexToEntRef(entity);
+
+		DispatchSpawn(entity);
+		float vPos[3];
+		GetClientAbsOrigin(client, vPos);
+		vPos[2] += 20.0;
+		TeleportEntity(entity, vPos, NULL_VECTOR, NULL_VECTOR);
+
+		SetVariantString("!activator");
+		AcceptEntityInput(entity, "SetParent", client);
+
+		static char temp[32];
+		Format(temp, sizeof temp, "OnUser4 !self:Kill::%f:-1", PANIC_SEC);
+		SetVariantString(temp);
+		AcceptEntityInput(entity, "AddOutput");
+		AcceptEntityInput(entity, "FireUser4");
+	}
 	// TurnUndead_Timer = CreateTimer(PANIC_SEC, Timer:Timer_UndeadRushEnd);
+	// SetVariantString("OnTrigger director:ForcePanicEvent::1:-1");
+	// AcceptEntityInput(client, "AddOutput");
+	// SetVariantString("OnTrigger @director:ForcePanicEvent::1:-1");
+	// AcceptEntityInput(client, "AddOutput");
+	// AcceptEntityInput(client, "Trigger");
 	PrintToChatAll("\x04%N \x01施放淨化引來屍潮！", client);
 }
 public Action:Timer_TurnUndeadAimDelay(Handle:timer, DataPack:DP) {
@@ -2025,18 +2296,28 @@ public Action:Event_DmgInflicted(Handle:event, const String:name[], bool:dontBro
 //========================== Glow ===========================
 //===========================================================
 
-public GlowForSecs(entity, r, g, b, Float:time) {
+public void GlowForSecs(entity, r, g, b, Float:time) {
 	if(!IsValidEntity(entity))return;
 	if (State_Glow[entity]&&Glow_Timer[entity]!=null) KillTimer(Glow_Timer[entity]);
 	State_Glow[entity] = true;
 
 	// new glowcolor = r + g * 256 + b * 65536;
 	int glowcolor = r | (g << 8) | (b << 16);
+	if (!HasEntProp(entity, Prop_Send, "m_glowColorOverride")) return;
 	SetEntProp(entity, Prop_Send, "m_glowColorOverride", glowcolor);
 	SetEntProp(entity, Prop_Send, "m_iGlowType", 3);
 	Glow_Timer[entity] = CreateTimer(time, Timer:Timer_Unglow, entity);
 }
+public void OnEntityDestroyed(int entity)
+{
+	if (entity < 0)
+		return;
 
+	// ge_bMoveUp[entity] = false;
+	if (!HasEntProp(entity, Prop_Send, "m_glowColorOverride")) return;
+	SetEntProp(entity, Prop_Send, "m_glowColorOverride", 0);
+	SetEntProp(entity, Prop_Send, "m_iGlowType", 0);
+}
 public Action:Timer_Unglow(Handle:timer, any:entity) {
 	State_Glow[entity] = false;
 
