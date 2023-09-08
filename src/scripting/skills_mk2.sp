@@ -1,4 +1,4 @@
-#define PLUGIN_VERSION                  "0.4"
+#define PLUGIN_VERSION                  "0.5"
 #define SKILL_DEBUG                     (false)
 #define USING_EXPLOSION_EX              (true)
 #define INIT_MP                         (50.0)
@@ -1221,6 +1221,9 @@ void NukeExplosion(const float vPos[3]=NULL_VECTOR)
 	// float vPos[3];
 	// GetEntPropVector(entity, Prop_Send, "m_vecOrigin", vPos);
 
+	beaPos[0] = vPos[0];
+	beaPos[1] = vPos[1];
+	beaPos[2] = vPos[2];
 	int particle = CreateEntityByName("info_particle_system");
 	if (particle != -1)
 	{
@@ -1253,7 +1256,7 @@ void NukeExplosion(const float vPos[3]=NULL_VECTOR)
 	// 		EmitSoundToClient(i, NUKE_SOUND);
 	// 	}
 	// }
-	EmitSoundToAll(NUKE_SOUND, particle, SNDCHAN_AUTO, SNDLEVEL_ROCKET);
+	// EmitSoundToAll(NUKE_SOUND, particle, SNDCHAN_AUTO, SNDLEVEL_ROCKET);
 
 	float Pos[3];
 	char tName[64];
@@ -1457,25 +1460,25 @@ void StaggerClient(int iUserID, const float fPos[3])
 
 Action TimerBombTouch(Handle timer, DataPack DP)
 {
-	int g_iCvarDamage = 400;
-	int g_iCvarDistance = 900;
-	int g_iCvarShake = 1500;
-	int g_iCvarStumble = 2000;
-	float randomDist = 400.0;
+	// int g_iCvarDamage = 400;
+	// int g_iCvarDistance = 900;
+	// int g_iCvarShake = 8000;
+	// int g_iCvarStumble = 99999;
+	// float randomDist = 400.0;
 	// if( EntRefToEntIndex(entity) == INVALID_ENT_REFERENCE )
 	// 	return Plugin_Continue;
 
 	float vPos[3];
-	char sTemp[8];
+	// char sTemp[8];
 	DP.Reset();
 	DP.ReadCell();
 	vPos[0] = DP.ReadCell();
 	vPos[1] = DP.ReadCell();
 	vPos[2] = DP.ReadCell();
 
-	vPos[0] = vPos[0] + GetRandomFloat(-randomDist, randomDist);
-	vPos[1] = vPos[1] + GetRandomFloat(-randomDist, randomDist);
-	vPos[2] = vPos[2];
+	// vPos[0] = vPos[0] + GetRandomFloat(-randomDist, randomDist);
+	// vPos[1] = vPos[1] + GetRandomFloat(-randomDist, randomDist);
+	// vPos[2] = vPos[2];
 	// GetEntPropVector(entity, Prop_Data, "m_vecAbsOrigin", vPos);
 	// RemoveEntity(entity);
 	// IntToString(g_iCvarDamage, sTemp, sizeof(sTemp));
@@ -1485,89 +1488,89 @@ Action TimerBombTouch(Handle timer, DataPack DP)
 	// Call_Finish();
 
 	// Create explosion, kills infected, hurts special infected/survivors, pushes physics entities.
-	int entity = CreateEntityByName("env_explosion");
-	DispatchKeyValue(entity, "spawnflags", "1916");
-	IntToString(g_iCvarDamage, sTemp, sizeof(sTemp));
-	DispatchKeyValue(entity, "iMagnitude", sTemp);
-	IntToString(g_iCvarDistance, sTemp, sizeof(sTemp));
-	DispatchKeyValue(entity, "iRadiusOverride", sTemp);
-	DispatchSpawn(entity);
-	SetEntProp(entity, Prop_Data, "m_iHammerID", 1078682);
-	TeleportEntity(entity, vPos, NULL_VECTOR, NULL_VECTOR);
-	AcceptEntityInput(entity, "Explode");
+	// int entity = CreateEntityByName("env_explosion");
+	// DispatchKeyValue(entity, "spawnflags", "1916");
+	// IntToString(g_iCvarDamage, sTemp, sizeof(sTemp));
+	// DispatchKeyValue(entity, "iMagnitude", sTemp);
+	// IntToString(g_iCvarDistance, sTemp, sizeof(sTemp));
+	// DispatchKeyValue(entity, "iRadiusOverride", sTemp);
+	// DispatchSpawn(entity);
+	// SetEntProp(entity, Prop_Data, "m_iHammerID", 1078682);
+	// TeleportEntity(entity, vPos, NULL_VECTOR, NULL_VECTOR);
+	// AcceptEntityInput(entity, "Explode");
 
-	// Shake!
-	int shake  = CreateEntityByName("env_shake");
-	if( shake != -1 )
-	{
-		DispatchKeyValue(shake, "spawnflags", "8");
-		DispatchKeyValue(shake, "amplitude", "16.0");
-		DispatchKeyValue(shake, "frequency", "1.5");
-		DispatchKeyValue(shake, "duration", "0.9");
-		IntToString(g_iCvarShake, sTemp, sizeof(sTemp));
-		DispatchKeyValue(shake, "radius", sTemp);
-		DispatchSpawn(shake);
-		ActivateEntity(shake);
-		AcceptEntityInput(shake, "Enable");
+	// // Shake!
+	// int shake  = CreateEntityByName("env_shake");
+	// if( shake != -1 )
+	// {
+	// 	DispatchKeyValue(shake, "spawnflags", "8");
+	// 	DispatchKeyValue(shake, "amplitude", "16.0");
+	// 	DispatchKeyValue(shake, "frequency", "1.5");
+	// 	DispatchKeyValue(shake, "duration", "0.9");
+	// 	IntToString(g_iCvarShake, sTemp, sizeof(sTemp));
+	// 	DispatchKeyValue(shake, "radius", sTemp);
+	// 	DispatchSpawn(shake);
+	// 	ActivateEntity(shake);
+	// 	AcceptEntityInput(shake, "Enable");
 
-		TeleportEntity(shake, vPos, NULL_VECTOR, NULL_VECTOR);
-		AcceptEntityInput(shake, "StartShake");
-		RemoveEdict(shake);
-	}
+	// 	TeleportEntity(shake, vPos, NULL_VECTOR, NULL_VECTOR);
+	// 	AcceptEntityInput(shake, "StartShake");
+	// 	RemoveEdict(shake);
+	// }
 
-	// Loop through survivors, work out distance and stumble/vocalize.
-	if( g_iCvarStumble)
-	{
-		float fDistance;
-		float vPos2[3];
+	// // Loop through survivors, work out distance and stumble/vocalize.
+	// if( g_iCvarStumble)
+	// {
+	// 	float fDistance;
+	// 	float vPos2[3];
 
-		for( int i = 1; i <= MaxClients; i++ )
-		{
-			if( IsClientInGame(i) && GetClientTeam(i) == 2 && IsPlayerAlive(i) )
-			{
-				GetClientAbsOrigin(i, vPos2);
-				fDistance = GetVectorDistance(vPos, vPos2);
+	// 	for( int i = 1; i <= MaxClients; i++ )
+	// 	{
+	// 		if( IsClientInGame(i) && GetClientTeam(i) == 2 && IsPlayerAlive(i) )
+	// 		{
+	// 			GetClientAbsOrigin(i, vPos2);
+	// 			fDistance = GetVectorDistance(vPos, vPos2);
 
-				if( g_iCvarStumble && fDistance <= g_iCvarStumble )
-				{
-					StaggerClient(GetClientUserId(i), vPos);
-				}
-			}
-		}
-	}
+	// 			if( g_iCvarStumble && fDistance <= g_iCvarStumble )
+	// 			{
+	// 				StaggerClient(GetClientUserId(i), vPos);
+	// 			}
+	// 		}
+	// 	}
+	// }
 
 
-	// Explosion effect
-	entity = CreateEntityByName("info_particle_system");
-	if( entity != -1 )
-	{
-		int random = GetRandomInt(2, 4);
+	// // Explosion effect
+	// entity = CreateEntityByName("info_particle_system");
+	// if( entity != -1 )
+	// {
+	// 	int random = GetRandomInt(2, 4);
 
-		switch( random )
-		{
-			// case 1:		DispatchKeyValue(entity, "effect_name", PARTICLE_BOMB1);
-			case 2:		DispatchKeyValue(entity, "effect_name", PARTICLE_BOMB2);
-			case 3:		DispatchKeyValue(entity, "effect_name", PARTICLE_BOMB3);
-			case 4:		DispatchKeyValue(entity, "effect_name", PARTICLE_BOMB4);
-		}
+	// 	switch( random )
+	// 	{
+	// 		// case 1:		DispatchKeyValue(entity, "effect_name", PARTICLE_BOMB1);
+	// 		case 2:		DispatchKeyValue(entity, "effect_name", PARTICLE_BOMB2);
+	// 		case 3:		DispatchKeyValue(entity, "effect_name", PARTICLE_BOMB3);
+	// 		case 4:		DispatchKeyValue(entity, "effect_name", PARTICLE_BOMB4);
+	// 	}
 
-		// if( random == 1 )
-			// vPos[2] += 175.0;
-		if( random == 2 )
-			vPos[2] += 100.0;
-		else if( random == 4 )
-			vPos[2] += 25.0;
+	// 	// if( random == 1 )
+	// 		// vPos[2] += 175.0;
+	// 	if( random == 2 )
+	// 		vPos[2] += 100.0;
+	// 	else if( random == 4 )
+	// 		vPos[2] += 25.0;
 
-		DispatchSpawn(entity);
-		ActivateEntity(entity);
-		AcceptEntityInput(entity, "start");
+	// 	DispatchSpawn(entity);
+	// 	ActivateEntity(entity);
+	// 	AcceptEntityInput(entity, "start");
 
-		TeleportEntity(entity, vPos, NULL_VECTOR, NULL_VECTOR);
+	// 	TeleportEntity(entity, vPos, NULL_VECTOR, NULL_VECTOR);
 
-		SetVariantString("OnUser1 !self:Kill::1.0:1");
-		AcceptEntityInput(entity, "AddOutput");
-		AcceptEntityInput(entity, "FireUser1");
-	}
+	// 	SetVariantString("OnUser1 !self:Kill::1.0:1");
+	// 	AcceptEntityInput(entity, "AddOutput");
+	// 	AcceptEntityInput(entity, "FireUser1");
+	// }
 
 
 	// // Sound
@@ -1688,7 +1691,14 @@ public Action:Timer_Skill_EX_Start(Handle:timer, any:client) {
 	CreateParticle(PARTICLE_EX_LIGHT, explosion_ex_delay_secs, Pos);
 	CreateParticle(PARTICLE_MAGIC_CIRCLE, explosion_ex_delay_secs-4.0, Pos);
 	// PrepareAndEmitSoundtoAll("skills\\explosion_full.mp3", .entity = client, .volume = 1.0);
-	EmitSoundToAll("skills\\explosion_full.mp3", client, SNDCHAN_AUTO, SNDLEVEL_HELICOPTER);
+	// EmitSoundToAll("skills\\explosion_full.mp3", client, SNDCHAN_AUTO, SNDLEVEL_HELICOPTER);
+	for (int i = 1; i <= MaxClients; i++)
+	{
+		if (i > 0 && IsClientInGame(i) && !IsFakeClient(i))
+		{
+			EmitSoundToClient(i, "skills\\explosion_full.mp3");
+		}
+	}
 	GlowForSecs(client, 255, 0, 0, explosion_ex_delay_secs);
 	FreezeForSecs(client, explosion_ex_delay_secs);
 	Invulnerable[client]=true;
@@ -1761,7 +1771,7 @@ public Action:Timer_UndeadRush(Handle:timer, DataPack:DP) {
 	if (Skill_TurnUndead_Timer[client] != null &&
 		Skill_TurnUndead_Timer[client] != INVALID_HANDLE)
 	{
-		KillTimer(TurnUndead_Timer);
+		KillTimer(Skill_TurnUndead_Timer[client]);
 	}
 	Skill_TurnUndead_Timer[client] = CreateTimer(PANIC_SEC, Timer:Timer_UndeadRushEnd, GetClientUserId(client));
 	int entity = CreateEntityByName("info_goal_infected_chase");
