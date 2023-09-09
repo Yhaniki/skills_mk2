@@ -1,4 +1,4 @@
-#define PLUGIN_VERSION                  "0.5"
+#define PLUGIN_VERSION                  "0.6"
 #define SKILL_DEBUG                     (false)
 #define USING_EXPLOSION_EX              (true)
 #define INIT_MP                         (50.0)
@@ -1019,7 +1019,8 @@ public Action:Skill_Notify(Handle:timer, any:client) {
 			}
 			if(Skill_MP[client] >= Skill_MPcost[skill_using])
 			{
-				Format(state, MAXCMD, "已準備");
+				// Format(state, MAXCMD, "已準備");
+				Format(state, MAXCMD, " ");
 			}else
 			{
 				Format(state, MAXCMD, "魔力不足(%-.0fMP)",Skill_MPcost[skill_using]);
@@ -1235,7 +1236,7 @@ void NukeExplosion(const float vPos[3]=NULL_VECTOR)
 		}
 		else if (type == 2)
 		{
-			DispatchKeyValue(particle, "effect_name", PARTICLE_NUKE1);
+			DispatchKeyValue(particle, "effect_name", PARTICLE_NUKE2);
 		}
 
 		DispatchSpawn(particle);
