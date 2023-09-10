@@ -736,11 +736,26 @@ public Interrupt_Skill(client) {
 	new skill_using = Skill[client];
 	if (Skill_Type[skill_using]==TYPE_NORMAL)
 	{
-		if ((Skill_State[client] == SKILL_CD) || (Skill_State[client] == SKILL_ACT)) TriggerTimer(Skill_Cooldown_Timer[client]);
-		if (Skill_State[client] == SKILL_ACT) TriggerTimer(Skill_Duration_Timer[client]);
+		if ((Skill_State[client] == SKILL_CD) || (Skill_State[client] == SKILL_ACT)) 
+		{
+			if(Skill_Cooldown_Timer[client]!=null&&
+				Skill_Cooldown_Timer[client]!= INVALID_HANDLE)
+				TriggerTimer(Skill_Cooldown_Timer[client]);
+		}
+		if (Skill_State[client] == SKILL_ACT)
+		{
+			if(Skill_Duration_Timer[client]!=null&&
+				Skill_Duration_Timer[client]!= INVALID_HANDLE)
+				TriggerTimer(Skill_Duration_Timer[client]);
+		} 
 	}
-	if (State_Adrenaline_Boost[client]) TriggerTimer(Skill_Adrenaline_Boost_Timer[client]);
-	
+	if (State_Adrenaline_Boost[client])
+	{
+		if (Skill_Adrenaline_Boost_Timer[client] != null &&
+			Skill_Adrenaline_Boost_Timer[client] != INVALID_HANDLE)
+			TriggerTimer(Skill_Adrenaline_Boost_Timer[client]);
+	}
+
 	Skill_State[client] = SKILL_RDY;
 }
 
@@ -979,8 +994,11 @@ public Action:Event_SkillStateTransition(client, args) {
 		PrintToChat(client, "Correction Mana Bar");
 		OnClientConnected(client);
 	}
-
-	TriggerTimer(Skill_Notify_Timer[client], true);
+	if (Skill_Notify_Timer[client] != null &&
+		Skill_Notify_Timer[client] != INVALID_HANDLE)
+	{
+		TriggerTimer(Skill_Notify_Timer[client], true);
+	}
 	return Plugin_Handled;
 }
 
@@ -2005,6 +2023,7 @@ public SetItemToPlayer(int client, char[] item, int index, int ammo, int clip)
 	if (slot == 1)
 	{
 		int wep_Secondary = GetPlayerWeaponSlot(client, slot);
+		if(wep_Secondary<=0)return;
 		char wepName[MAXCMD];
 		GetEdictClassname(wep_Secondary, wepName, MAXCMD);
 		if (StrEqual(wepName, "weapon_pistol"))
@@ -2418,7 +2437,7 @@ public Action:Timer_Unslow(Handle:timer, any:client) {
 
 public bool:IsPlayer(client) {
 	if ((client < 1) || (client > MAXPLAYERS)) return false;
-	if (client>0&&IsFakeClient(client)) return false;
+	if (client>0&&IsValidEntity(client)&&IsFakeClient(client)) return false;
 	return true;
 }
 
