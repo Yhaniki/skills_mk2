@@ -1,0 +1,22 @@
+"SpriteCard"
+{
+	"$basetexture" "particle\konosuba\circle"
+    
+    "$bumpmap" "particle\konosuba\lightwarp\normal"
+
+	"$lightwarptexture" "particle\konosuba\lightwarp\facewarp"
+
+	"$phong" "1"
+	"$phongboost"	"24"
+	"$phongalbedotint" "1"
+	"$phongexponenttexture" "particle\konosuba\lightwarp\phong_exp"
+	"$phongfresnelranges"	"[0 0 1]"
+
+	"$rimlight"               "1"
+	"$rimlightexponent"       "3"
+	"$rimlightboost"          "4"
+    
+    "$vertexcolor" 1
+    "$vertexalpha" 1
+	"$translucent" 1
+}

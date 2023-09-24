@@ -2,4 +2,6 @@ particles_manifest
 {
 	"file"		"particles/skill_fx.pcf"
     "file"		"particles/ex.pcf"
+    "file"		"particles/nuke.pcf"
+    "file"		"particles/nuke2.pcf"
 }

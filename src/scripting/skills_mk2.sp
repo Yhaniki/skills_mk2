@@ -1208,13 +1208,14 @@ void NukeExplosion(int attacker, const float vPos[3] = NULL_VECTOR)
 		DataPack DP = new DataPack();
 		DP.WriteCell(attacker);
 		DP.WriteCell(i);
+		float time = GetVectorDistance(vPos, Pos) / 5000.0 * time_weight * 0.6;
 		if (IsValidClient(i) && GetClientTeam(i) == 3)
 		{
 			Fade(i, 255, 50, 80, 100, 800, 1);
 			GetEntPropVector(i, Prop_Send, "m_vecOrigin", Pos);
 			if (GetVectorDistance(beaPos, Pos) > g_hNukeRadius)
 				return;
-			CreateTimer(GetVectorDistance(vPos, Pos) / 5000.0, ShockWave, DP);
+			CreateTimer(time, ShockWave, DP);
 		}
 		if (IsValidClient(i) && GetClientTeam(i) == 2)
 		{
@@ -1222,7 +1223,7 @@ void NukeExplosion(int attacker, const float vPos[3] = NULL_VECTOR)
 			GetEntPropVector(i, Prop_Send, "m_vecOrigin", Pos);
 			if (GetVectorDistance(beaPos, Pos) > g_hNukeRadius)
 				return;
-			CreateTimer(GetVectorDistance(vPos, Pos) / 5000.0, ShockWave, DP);
+			CreateTimer(time, ShockWave, DP);
 		}
 
 		else
@@ -1231,27 +1232,27 @@ void NukeExplosion(int attacker, const float vPos[3] = NULL_VECTOR)
 			if (StrEqual(tName, "witch", false))
 			{
 				GetEntPropVector(i, Prop_Send, "m_vecOrigin", Pos);
-				CreateTimer(GetVectorDistance(vPos, Pos) / 5000.0, ShockWave, DP);
+				CreateTimer(time, ShockWave, DP);
 			}
 			else if (StrEqual(tName, "infected", false))
 			{
 				GetEntPropVector(i, Prop_Send, "m_vecOrigin", Pos);
-				CreateTimer(GetVectorDistance(vPos, Pos) / 5000.0, ShockWave, DP);
+				CreateTimer(time, ShockWave, DP);
 			}
 			else if (StrEqual(tName, "prop_physics", false))
 			{
 				GetEntPropVector(i, Prop_Send, "m_vecOrigin", Pos);
-				CreateTimer(GetVectorDistance(vPos, Pos) / 5000.0, ShockWave, DP);
+				CreateTimer(time, ShockWave, DP);
 			}
 			else if (StrEqual(tName, "prop_physics_multiplayer", false))
 			{
 				GetEntPropVector(i, Prop_Send, "m_vecOrigin", Pos);
-				CreateTimer(GetVectorDistance(vPos, Pos) / 5000.0, ShockWave, DP);
+				CreateTimer(time, ShockWave, DP);
 			}
 			else if (StrEqual(tName, "prop_physics_override", false))
 			{
 				GetEntPropVector(i, Prop_Send, "m_vecOrigin", Pos);
-				CreateTimer(GetVectorDistance(vPos, Pos) / 5000.0, ShockWave, DP);
+				CreateTimer(time, ShockWave, DP);
 			}
 		}
 	}
