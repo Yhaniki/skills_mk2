@@ -1,54 +1,32 @@
 #define PLUGIN_VERSION                  "0.6"
 #define SKILL_DEBUG                     (false)
-#define USING_EXPLOSION_EX              (true)
 #define INIT_MP                         (50.0)
 #define GAMEDATA_MELEE                  ("l4d2_melee_range")
-#define GAS_TANK_NUM                    (5.0)
-#define EXEX_DIST                       (1500.0)
 #define TURN_UNDEAD_DIST                (1000.0)
 #define EXPLOSION_DIST                  (300.0)
 #define MAX_WEAPONS                     (12)
 #define ALL_WEAPONS                     (47)
-#define WEAPON_TYPE_NUM                 (5)
 #define MP_INC_PERSEC                   (0.5)
 #define MP_BAR_SIZE                     (25.0)
 #define MP_MAX                          (100.0)
 #define MAX_STEAL_AMMO                  (350)
 #define MIN_STEAL_AMMO                  (50)
-#define ITEMNAME                        (64)
-#define ITEMNUM                         (64)
 #define MAXCMD                          (64)
 #define MAXSKILLNAME                    (64)
 #define MAXSKILLS                       (64)
 #define MAXENTITIES                     (4096)
 #define PANIC_SEC                       (120.0)
-#define EX_HIT_TIMES                    (2)
-#define EX_WAIT_SEC                     (0.5)
 #define PARTICLE_EXPLOSION              ("Skill_Explosion")
 #define PARTICLE_EXPLOSION2             ("Skill_Explosion_2")
 #define PARTICLE_EAGLEEYE               ("Skill_EagleEye")
 #define PARTICLE_TURNUNDEAD             ("Skill_Turn_Undead")
-#define PARTICLE_FX_AFTER_EXPLOSION     ("fx_after_explosion")
-#define PARTICLE_FX_EXPLOSION_RING      ("fx_explosion_ring")
 #define PARTICLE_EX_GLOW                ("b_glow_2")
+#define PARTICLE_EX_GLOW_BIG            ("fire_grow_big")
 #define PARTICLE_EX_LIGHT               ("fire_glow_01")
 #define PARTICLE_MAGIC_CIRCLE           ("Skill_Magic_Circle")
-#define PARTICLE_EX_GLOW_BIG            ("fire_grow_big")
-#define PARTICLE_BOMB2		"missile_hit1"
-#define PARTICLE_BOMB3		"gas_explosion_main"
-#define PARTICLE_BOMB4		"explosion_huge"
-#define PARTICLE_NUKE1		"explosion_core"
-#define PARTICLE_NUKE2		"nuke_core"
-#define PARTICLE_BLUE		"flame_blue"
-#define PARTICLE_FIRE		"fire_medium_01"
-#define PARTICLE_SPARKS		"fireworks_sparkshower_01e"
-#define PARTICLE_SMOKE		"rpg_smoke"
-#define SOUND_EXPLODE3		"weapons/hegrenade/explode3.wav"
-#define SOUND_EXPLODE4		"weapons/hegrenade/explode4.wav"
-#define SOUND_EXPLODE5		"weapons/hegrenade/explode5.wav"
-#define NUKE_SOUND			"nuke/explosion.mp3"
-//#define PARTICLE_ELEC                  ("electrical_arc_01_parent")
-//#define PARTICLE_WARP                  ("electrical_arc_01_system")
+#define PARTICLE_NUKE1                  ("explosion_core")
+#define PARTICLE_NUKE2                  ("nuke_core")
+#define NUKE_SOUND                      ("nuke/explosion.mp3")
 
 #include <sourcemod>
 #include <sdktools>
@@ -92,8 +70,7 @@ new Handle:Glow_Timer[MAXENTITIES];
 new bool:State_Freeze[MAXENTITIES];
 new Handle:Freeze_Timer[MAXENTITIES];
 bool Invulnerable[MAXENTITIES];
-int Skill_Delay_Cnt[MAXENTITIES];
-new Handle:Skill_Delay_Timer[MAXENTITIES];
+bool Skill_EX_Using[MAXENTITIES];
 new Slow_Ent;
 new bool:State_Slow;
 new Handle:Slow_Timer;
@@ -112,12 +89,11 @@ new Float:Skill_Cooldown[MAXSKILLS];
 new Float:Skill_Duration[MAXSKILLS];
 new Float:Skill_MPcost[MAXSKILLS];
 new skill_num = 0;
+int hiddenExplosionNum = 0;
 new bool:Hooked[MAXPLAYERS];
 float explosion_ex_delay_secs = 25.0;
 float time_weight = 1.0;
 Handle g_hDetour;
-bool useDP[MAXPLAYERS + 1];
-DataPack playerDP[MAXPLAYERS + 1];
 GlobalForward OnWeaponDrop;
 
 public Plugin myinfo = {
@@ -281,7 +257,7 @@ MRESReturn TestMeleeSwingCollisionPost(int pThis, Handle hReturn)
 	g_hCvarMeleeRange.SetInt(g_iStockRange);
 	return MRES_Ignored;
 }
-Handle g_hSDKUnVomit;
+
 public OnPluginStart() {
 	PrintToServer("=============Plugin Start===============");
 //------------------------------
@@ -291,26 +267,12 @@ public OnPluginStart() {
 
 	Handle hGameData = LoadGameConfigFile(GAMEDATA_MELEE);
 	if( hGameData == null ) SetFailState("Failed to load \"%s.txt\" gamedata.", GAMEDATA_MELEE);
-
 	g_hDetour = DHookCreateFromConf(hGameData, "CTerrorMeleeWeapon::TestMeleeSwingCollision");
 	delete hGameData;
-
-	GameData hGameData2 = new GameData("l4d_unvomit");
-	if( hGameData2 == null ) SetFailState("Failed to load gamedata: l4d_unvomit.txt");
-	StartPrepSDKCall(SDKCall_Player);
-	if( PrepSDKCall_SetFromConf(hGameData2, SDKConf_Signature, "CTerrorPlayer::OnITExpired") == false ) SetFailState("Failed to find signature: CTerrorPlayer::OnITExpired");
-	g_hSDKUnVomit = EndPrepSDKCall();
-	if( g_hSDKUnVomit == null ) SetFailState("Failed to create SDKCall: CTerrorPlayer::OnITExpired");
-
-	delete hGameData2;
-
-
 	if( !g_hDetour )
 		SetFailState("Failed to find \"CTerrorMeleeWeapon::GetPrimaryAttackActivity\" signature.");
-
 	if( !DHookEnableDetour(g_hDetour, false, TestMeleeSwingCollisionPre) )
 		SetFailState("Failed to detour pre \"CTerrorMeleeWeapon::TestMeleeSwingCollision\".");
-
 	if( !DHookEnableDetour(g_hDetour, true, TestMeleeSwingCollisionPost) )
 		SetFailState("Failed to detour post \"CTerrorMeleeWeapon::TestMeleeSwingCollision\".");
 
@@ -329,12 +291,7 @@ public OnPluginStart() {
 		State_Glow[i]=false;
 		State_Freeze[i]=false;
 		Invulnerable[i]=false;
-		Skill_Delay_Cnt[i] = 0;
-		Skill_Delay_Timer[i] = INVALID_HANDLE;
-	}
-	for(int i=0; i<MAXPLAYERS+1; i++)
-	{
-		useDP[i]=false;
+		Skill_EX_Using[i]=false;
 	}
 	SetWeaponNameId();
 	OnWeaponDrop = CreateGlobalForward("OnWeaponDrop", ET_Event, Param_Cell, Param_CellByRef);
@@ -345,35 +302,30 @@ public OnPluginStart() {
 	RegisterSkill("Eagle Eye 鷹眼" ,Timer_Skill_EagleEye_Start, Timer_Skill_Null_End, Timer_Skill_Null_Ready, 7.0, 2.0, 40.0);
 	RegisterSkill("Steal 偷竊" ,Timer_Skill_Steal_Start, Timer_Skill_Null_End, Timer_Skill_Null_Ready, 6.0, 2.0, 20.0);// Float:skill_duration, Float:skill_cooldown, Float:skill_mpcost
 	RegisterSkill("Sacred Turn Undead 淨化" , Timer_Skill_TurnUndead_Start, Timer_Skill_Null_End, Timer_Skill_Null_Ready, 3.5, 2.0, 50.0);
-	RegisterSkill("爆裂ex" , Timer_Skill_EX_Start, Timer_Skill_EX_End, Timer_Skill_Null_Ready, explosion_ex_delay_secs+1.0, 2.0, 1.0);
+	RegisterSkill("爆裂ex" , Timer_Skill_EX_Start, Timer_Skill_EX_End, Timer_Skill_Null_Ready, explosion_ex_delay_secs+2.0, 2.0, 100.0);
 	//RegisterSkill("Sixth Sense 第六感" ,Timer_Skill_EagleEye_Start, Timer_Skill_EagleEye_End, Timer_Skill_Null_Ready, 10.0, 60.0, 80.0);
-
+	hiddenExplosionNum = skill_num-1;
 	//Function: OnClientConnected
-	HookEvent("player_disconnect",		Event_StateTransition);
+	HookEvent("player_disconnect",			Event_StateTransition);
 	HookEvent("player_spawn",				Event_StateTransition);
 	HookEvent("player_death",				Event_StateTransition);
-	HookEvent("player_incapacitated",	Event_StateTransition);
-	HookEvent("revive_success",			Event_StateTransition);
-	HookEvent("map_transition",			Event_StateTransition);
+	HookEvent("player_incapacitated",		Event_StateTransition);
+	HookEvent("revive_success",				Event_StateTransition);
+	HookEvent("map_transition",				Event_StateTransition);
 	HookEvent("player_transitioned",		Event_StateTransition);
-
 	HookEvent("player_death",				Event_MPleech);
-	
 	HookEvent("heal_success",				Event_MPGain);
 	HookEvent("adrenaline_used",			Event_MPGain);
 	HookEvent("pills_used",					Event_MPGain);
-
 	HookEvent("player_hurt", 				Event_DmgReducedByManaShield);
-	
 	HookEvent("player_death", 				Event_DeathUnglow);
-	
+
 	RegConsoleCmd("skill1",					Event_SkillStateTransition);
 	RegConsoleCmd("skill2",					Event_SkillStateTransition);
 	RegConsoleCmd("change_skill",			Event_SkillStateTransition);
 	RegConsoleCmd("drop",					Event_SkillStateTransition);
 	RegConsoleCmd("fix",					Event_SkillStateTransition);
-	//HookEvent("player_hurt", 			Event_DmgInflicted);
-	//HookEvent("infected_hurt", 			Event_DmgInflicted);
+
 	HookEvent("gameinstructor_nodraw", Event_NoDraw, EventHookMode_PostNoCopy);
 	HookEvent("gameinstructor_draw", Event_Draw, EventHookMode_PostNoCopy);
 	TurnUndeadInit();
@@ -422,35 +374,22 @@ public Setup_Materials() {
 	SetupMaterial("sound\\skills\\explosion_full.mp3");
 	SetupSound("skills\\explosion_full.mp3", true);
 
-	PrecacheSound(SOUND_EXPLODE3, true);
-	PrecacheSound(SOUND_EXPLODE4, true);
-	PrecacheSound(SOUND_EXPLODE5, true);
 	PrecacheSound(NUKE_SOUND, true);
+
 	SetupMaterial("particles\\skill_fx.pcf");
 	SetupMaterial("particles\\ex.pcf");
 	SetupMaterial("particles\\nuke.pcf");
 	SetupMaterial("particles\\nuke2.pcf");
-
 	PrecacheParticle(PARTICLE_EXPLOSION);
 	PrecacheParticle(PARTICLE_EXPLOSION2);
 	PrecacheParticle(PARTICLE_EAGLEEYE);
-	PrecacheParticle(PARTICLE_FX_AFTER_EXPLOSION);
-	PrecacheParticle(PARTICLE_FX_EXPLOSION_RING);
 	PrecacheParticle(PARTICLE_TURNUNDEAD);
 	PrecacheParticle(PARTICLE_EX_GLOW);
+	PrecacheParticle(PARTICLE_EX_GLOW_BIG);
 	PrecacheParticle(PARTICLE_EX_LIGHT);
 	PrecacheParticle(PARTICLE_MAGIC_CIRCLE);
-	PrecacheParticle(PARTICLE_EX_GLOW_BIG);
-	PrecacheParticle(PARTICLE_BOMB2);
-	PrecacheParticle(PARTICLE_BOMB3);
-	PrecacheParticle(PARTICLE_BOMB4);
-	PrecacheParticle(PARTICLE_BLUE);
-	PrecacheParticle(PARTICLE_FIRE);
-	PrecacheParticle(PARTICLE_SPARKS);
-	PrecacheParticle(PARTICLE_SMOKE);
 	PrecacheParticle(PARTICLE_NUKE1);
 	PrecacheParticle(PARTICLE_NUKE2);
-
 	PrintToServer("===========Material Setup End===========");
 }
 
@@ -478,15 +417,14 @@ void PrecacheParticle(const char[] sEffectName)
 	}
 }
 
-public Action:DeleteParticles(Handle:timer, any:particle) {
-	if (IsValidEntity(particle)) {
-		new String:classname[64];
-		GetEdictClassname(particle, classname, sizeof(classname));
-		if (StrEqual(classname, "info_particle_system", false)) {
-			AcceptEntityInput(particle, "Kill");
-			//PrintToChatAll("DEL PAR");
-		}
-	}
+Action DeleteParticles(Handle timer, int ref)
+{
+	int entity = EntRefToEntIndex(ref);
+	if(entity == INVALID_ENT_REFERENCE) return Plugin_Continue;
+
+	AcceptEntityInput(entity, "stop");
+	AcceptEntityInput(entity, "kill");
+	return Plugin_Continue;
 }
 
 public Action:CreateParticle(String:particlename[], Float:time, Float:Pos[3]) {
@@ -525,6 +463,7 @@ public OnClientConnected(client) {
 	Init_Skill(client);
 	PrintPlayerState("connect", client);
 }
+
 public OnClientPostAdminCheck(client)
 {
 	if(IsClientInGame(client) && !IsFakeClient(client))
@@ -533,11 +472,13 @@ public OnClientPostAdminCheck(client)
 		Hooked[client] = true;
 	}
 }
+
 public OnClientDisconnect(client)
 {
 	if(Hooked[client])
 		SDKUnhook(client, SDKHook_OnTakeDamage, Event_Hurt);
 }
+
 public void Event_Draw(Event event, const char[] name, bool dontBroadcast)
 {
 	for (new i = 1; i < MaxClients; i++) {
@@ -636,10 +577,10 @@ public Delete_Skill(client) {
 
 public Skill_Trigger(client) {
 	new skill_using = Skill[client];
-	if(Skill_Delay_Cnt[client]>=EX_HIT_TIMES)
+	if(Skill_EX_Using[client])
 	{
 		skill_using = skill_num-1;
-		Skill_Delay_Cnt[client]=0;
+		Skill_EX_Using[client]=false;
 	}
 	switch (Skill_Type[skill_using])
 	{
@@ -794,12 +735,6 @@ void DropActiveWeapon(int client)
 
 void DropWeapon(int client, int weapon)
 {
-	// if ((g_iBlockDropMidAction == 1 ||
-	// (g_iBlockDropMidAction > 1 && GetPlayerWeaponSlot(client, 2) == weapon)) && 
-	// GetEntPropEnt(client, Prop_Data, "m_hActiveWeapon") == weapon && 
-	// GetEntPropFloat(weapon, Prop_Data, "m_flNextPrimaryAttack") >= GetGameTime()) return;
-	// slot 2 is throwable
-
 	Action actResult = Plugin_Continue;
 	Call_StartForward(OnWeaponDrop);
 	Call_PushCell(client);
@@ -895,13 +830,12 @@ public Action:Event_SkillStateTransition(client, args) {
 	}
 	else if(StrEqual(cmd, "skill2"))
 	{
-		int hiddenExplosionNum = skill_num-1;
-		if ((Skill_MP[client] >= 100.0) &&
+		if ((Skill_MP[client] >= Skill_MPcost[hiddenExplosionNum]) &&
 			StrEqual(Skill_Name[Skill[client]], "Explosion 爆裂"))
 		{
 			if (MP_Decrease(client, Skill_MPcost[hiddenExplosionNum]))
 			{
-				Skill_Delay_Cnt[client] = EX_HIT_TIMES;
+				Skill_EX_Using[client] = true;
 				CreateTimer(0.0, Timer: Timer_Skill_Start[hiddenExplosionNum], client);
 				Skill_Trigger(client);
 			}
@@ -917,10 +851,6 @@ public Action:Event_SkillStateTransition(client, args) {
 	}
 	else if (StrEqual(cmd, "drop"))
 	{
-		// int weapon = GetNowWeapon(client);
-		// int activeweapon = GetEntPropEnt(client, Prop_Send, "m_hActiveWeapon");
-		// if (activeweapon > 0)
-		// 	SDKHooks_DropWeapon(client, activeweapon, NULL_VECTOR, NULL_VECTOR);
 		DropActiveWeapon(client);
 	}
 	else if (StrEqual(cmd, "fix"))
@@ -943,7 +873,7 @@ public Action:Skill_Notify(Handle:timer, any:client) {
 	new String:state[MAXCMD] = "";
 	new String:name[MAXCMD] = "";
 	new skill_using = Skill[client];
-	if ((Skill_MP[client] >= 100.0) &&
+	if ((Skill_MP[client] >= Skill_MPcost[hiddenExplosionNum]) &&
 		StrEqual(Skill_Name[Skill[client]], "Explosion 爆裂"))
 	{
 		Format(name, MAXCMD, "Explosion ☆爆裂★");
@@ -1004,7 +934,7 @@ public Skill_Notify_MPbar(const String:str[], const String:state[], client) {
 		if (State_Adrenaline_Boost[client]) {
 			Format(dot, MAXCMD, "%s/", dot);
 		}
-		else if ((Skill_MP[client] >= 100.0) &&
+		else if ((Skill_MP[client] >= Skill_MPcost[hiddenExplosionNum]) &&
 				 StrEqual(Skill_Name[Skill[client]], "Explosion 爆裂"))
 		{
 			if(i<13){
@@ -1208,11 +1138,12 @@ void NukeExplosion(int attacker, const float vPos[3] = NULL_VECTOR)
 		DataPack DP = new DataPack();
 		DP.WriteCell(attacker);
 		DP.WriteCell(i);
-		float time = GetVectorDistance(vPos, Pos) / 5000.0 * time_weight * 0.6;
+		float time = 0.0;
 		if (IsValidClient(i) && GetClientTeam(i) == 3)
 		{
 			Fade(i, 255, 50, 80, 100, 800, 1);
 			GetEntPropVector(i, Prop_Send, "m_vecOrigin", Pos);
+			time = GetVectorDistance(vPos, Pos) / 5000.0 * 0.36;
 			if (GetVectorDistance(beaPos, Pos) > g_hNukeRadius)
 				return;
 			CreateTimer(time, ShockWave, DP);
@@ -1221,37 +1152,42 @@ void NukeExplosion(int attacker, const float vPos[3] = NULL_VECTOR)
 		{
 			Fade(i, 255, 120, 80, 100, 800, 1);
 			GetEntPropVector(i, Prop_Send, "m_vecOrigin", Pos);
+			time = GetVectorDistance(vPos, Pos) / 5000.0 * 0.36;
 			if (GetVectorDistance(beaPos, Pos) > g_hNukeRadius)
 				return;
 			CreateTimer(time, ShockWave, DP);
 		}
-
 		else
 		{
 			GetEntityClassname(i, tName, sizeof(tName));
 			if (StrEqual(tName, "witch", false))
 			{
 				GetEntPropVector(i, Prop_Send, "m_vecOrigin", Pos);
+				time = GetVectorDistance(vPos, Pos) / 5000.0 * 0.36;
 				CreateTimer(time, ShockWave, DP);
 			}
 			else if (StrEqual(tName, "infected", false))
 			{
 				GetEntPropVector(i, Prop_Send, "m_vecOrigin", Pos);
+				time = GetVectorDistance(vPos, Pos) / 5000.0 * 0.36;
 				CreateTimer(time, ShockWave, DP);
 			}
 			else if (StrEqual(tName, "prop_physics", false))
 			{
 				GetEntPropVector(i, Prop_Send, "m_vecOrigin", Pos);
+				time = GetVectorDistance(vPos, Pos) / 5000.0 * 0.36;
 				CreateTimer(time, ShockWave, DP);
 			}
 			else if (StrEqual(tName, "prop_physics_multiplayer", false))
 			{
 				GetEntPropVector(i, Prop_Send, "m_vecOrigin", Pos);
+				time = GetVectorDistance(vPos, Pos) / 5000.0 * 0.36;
 				CreateTimer(time, ShockWave, DP);
 			}
 			else if (StrEqual(tName, "prop_physics_override", false))
 			{
 				GetEntPropVector(i, Prop_Send, "m_vecOrigin", Pos);
+				time = GetVectorDistance(vPos, Pos) / 5000.0 * 0.36;
 				CreateTimer(time, ShockWave, DP);
 			}
 		}
@@ -1354,7 +1290,7 @@ public Action ShockWave(Handle timer, DataPack DP)
 		StaggerClient(GetClientUserId(entity), beaPos);
 		if (!IsFakeClient(entity))
 			Shake(entity, 32.0);
-		damage *= 0.06;
+		damage *= 0.1;
 		switch (GetRandomInt(0, 1))
 		{
 		case 0:
@@ -1466,28 +1402,50 @@ public Action:Timer_ExAfter(Handle timer, DataPack:DP)
 	CreateParticle(PARTICLE_EXPLOSION2, 5.0, Pos);
 }
 
-public Action:Timer_Skill_EX_Start(Handle:timer, any:client) {
-	PrintToChatAll("\x04%N \x01エクスプロージョン!", client);
-	new Float:Pos[3];
-	SlowForSecs(explosion_ex_delay_secs, client);
-	GetClientAbsOrigin(client, Pos);
-	CreateParticle(PARTICLE_EX_GLOW, explosion_ex_delay_secs, Pos);
-	CreateParticle(PARTICLE_EX_LIGHT, explosion_ex_delay_secs, Pos);
-	CreateParticle(PARTICLE_MAGIC_CIRCLE, explosion_ex_delay_secs-4.0, Pos);
-	// PrepareAndEmitSoundtoAll("skills\\explosion_full.mp3", .entity = client, .volume = 1.0);
-	// EmitSoundToAll("skills\\explosion_full.mp3", client, SNDCHAN_AUTO, SNDLEVEL_HELICOPTER);
-	for (int i = 1; i <= MaxClients; i++)
+void ParticleFollow(char[] particleName, int client, float time)
+{
+	float pos[3];
+	if(GetClientTeam(client) == 2 && IsPlayerAlive(client))
 	{
-		if (i > 0 && IsClientInGame(i) && !IsFakeClient(i))
-		{
-			EmitSoundToClient(i, "skills\\explosion_full.mp3");
-		}
-	}
-	GlowForSecs(client, 255, 0, 0, explosion_ex_delay_secs);
-	FreezeForSecs(client, explosion_ex_delay_secs);
-	Invulnerable[client]=true;
+		int entity = CreateEntityByName("info_particle_system");
+		DispatchKeyValue(entity, "effect_name", particleName);
+		GetEntPropVector(client, Prop_Send, "m_vecOrigin", pos);
+		TeleportEntity(entity, pos, NULL_VECTOR, NULL_VECTOR);
+		DispatchSpawn(entity);
+		SetVariantString("!activator");
+		AcceptEntityInput(entity, "SetParent", client);
+		ActivateEntity(entity);
+		AcceptEntityInput(entity, "Start"); 
 
-	if (GetAimOrigin(client, Pos, 10.0) == 0) return Plugin_Stop;
+		CreateTimer(time, DeleteParticles, entity);
+	}
+}
+
+void MagicActivates(int client)
+{
+	ParticleFollow(PARTICLE_EX_GLOW, client, explosion_ex_delay_secs);
+	ParticleFollow(PARTICLE_EX_LIGHT, client, explosion_ex_delay_secs);
+	// ParticleFollow(PARTICLE_MAGIC_CIRCLE, client, explosion_ex_delay_secs-4.0);
+}
+
+public Action:Timer_Skill_EX_Start(Handle:timer, any:client)
+{
+	float Pos[3];
+	if (GetAimOrigin(client, Pos, 10.0) == 0) {
+		PrintToChatAll("\x04%N \x01施放爆裂失敗", client);
+		return Plugin_Stop;
+	}
+	PrintToChatAll("\x04%N \x01エクスプロージョン!", client);
+
+	SlowForSecs(explosion_ex_delay_secs, client);
+	// CreateParticle(PARTICLE_EX_GLOW, explosion_ex_delay_secs, Pos);
+	// CreateParticle(PARTICLE_EX_LIGHT, explosion_ex_delay_secs, Pos);
+	// CreateParticle(PARTICLE_MAGIC_CIRCLE, explosion_ex_delay_secs-4.0, Pos);
+	EmitSoundToAll("skills\\explosion_full.mp3");
+	GlowForSecs(client, 255, 0, 0, explosion_ex_delay_secs);
+	// FreezeForSecs(client, explosion_ex_delay_secs);
+	Invulnerable[client] = true;
+	MagicActivates(client);
 	CreateParticle(PARTICLE_EX_GLOW_BIG, explosion_ex_delay_secs, Pos);
 	DataPack DP = new DataPack();
 	DP.WriteCell(client);
@@ -1527,30 +1485,7 @@ public Action:Timer_UndeadRush(Handle:timer, DataPack:DP) {
 
 	// g_hCvarPanicForever.SetBool(false, false, false);
 	StripAndExecuteClientCommand(client, "z_spawn_old", "mob");
-	static int director = INVALID_ENT_REFERENCE;
-
-	if (director == INVALID_ENT_REFERENCE || EntRefToEntIndex(director) == INVALID_ENT_REFERENCE)
-	{
-		director = FindEntityByClassname(-1, "info_director");
-		if (director != INVALID_ENT_REFERENCE)
-		{
-			director = EntIndexToEntRef(director);
-		}
-	}
-
-	if (director != INVALID_ENT_REFERENCE)
-	{
-		AcceptEntityInput(director, "ForcePanicEvent");
-	}
-	// L4D_CTerrorPlayer_OnVomitedUpon(client, client);
-	// SDKCall(g_hSDKUnVomit, client);
-	// g_hCvarPanicForever.SetBool(true, false, false);
-	// if (State_TurnUndead &&
-	// 	TurnUndead_Timer != null &&
-	// 	TurnUndead_Timer != INVALID_HANDLE)
-	// {
-	// 	KillTimer(TurnUndead_Timer);
-	// }
+	L4D_ForcePanicEvent();
 	State_TurnUndead = true;
 	if (Skill_TurnUndead_Timer[client] != null &&
 		Skill_TurnUndead_Timer[client] != INVALID_HANDLE)
@@ -1578,12 +1513,7 @@ public Action:Timer_UndeadRush(Handle:timer, DataPack:DP) {
 		AcceptEntityInput(entity, "AddOutput");
 		AcceptEntityInput(entity, "FireUser4");
 	}
-	// TurnUndead_Timer = CreateTimer(PANIC_SEC, Timer:Timer_UndeadRushEnd);
-	// SetVariantString("OnTrigger director:ForcePanicEvent::1:-1");
-	// AcceptEntityInput(client, "AddOutput");
-	// SetVariantString("OnTrigger @director:ForcePanicEvent::1:-1");
-	// AcceptEntityInput(client, "AddOutput");
-	// AcceptEntityInput(client, "Trigger");
+
 	PrintToChatAll("\x04%N \x01施放淨化引來屍潮！", client);
 }
 public Action:Timer_TurnUndeadAimDelay(Handle:timer, DataPack:DP) {
@@ -2325,14 +2255,6 @@ public ExplodeAim(client, Float:delay) {
 	
 	DataPack DP = new DataPack();
 	DP.WriteCell(client);
-	if(useDP[client]==true)
-	{
-		useDP[client]=false;
-		playerDP[client].Reset();
-		Pos[0] = playerDP[client].ReadCell();
-		Pos[1] = playerDP[client].ReadCell();
-		Pos[2] = playerDP[client].ReadCell();
-	}
 	DP.WriteCell(Pos[0]);
 	DP.WriteCell(Pos[1]);
 	DP.WriteCell(Pos[2]);
