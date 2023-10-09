@@ -557,7 +557,9 @@ public Init_Skill(client) {
 	if(Skill[client]<0||Skill[client]>skill_num-1)
 		Skill[client] = 0;
 	Skill_MP[client] = INIT_MP;
-	// Skill_Trigger(client);
+
+	if (Skill_Type[Skill[client]] == TYPE_PASSIVE)
+		Skill_Trigger(client);
 }
 
 public Delete_Skill(client) {
@@ -873,6 +875,10 @@ public Action:Skill_Notify(Handle:timer, any:client) {
 	new String:state[MAXCMD] = "";
 	new String:name[MAXCMD] = "";
 	new skill_using = Skill[client];
+
+	if (StrEqual(Skill_Name[Skill[client]], "Mana Shield 魔心護盾") &&
+		!State_ManaShield[client])
+		Skill_Trigger(client);
 	if ((Skill_MP[client] >= Skill_MPcost[hiddenExplosionNum]) &&
 		StrEqual(Skill_Name[Skill[client]], "Explosion 爆裂"))
 	{
@@ -1479,14 +1485,12 @@ StripAndExecuteClientCommand(client, const String:command[], const String:argume
 	FakeClientCommand(client, "%s %s", command, arguments);
 	SetCommandFlags(command, flags);
 }
-public Action:Timer_UndeadRush(Handle:timer, DataPack:DP) {
-	DP.Reset();
-	new client = DP.ReadCell();
-
+public Action:Timer_UndeadRush(Handle:timer, int client) {
 	// g_hCvarPanicForever.SetBool(false, false, false);
 	StripAndExecuteClientCommand(client, "z_spawn_old", "mob");
 	L4D_ForcePanicEvent();
 	State_TurnUndead = true;
+
 	if (Skill_TurnUndead_Timer[client] != null &&
 		Skill_TurnUndead_Timer[client] != INVALID_HANDLE)
 	{
@@ -1554,9 +1558,7 @@ public Action:Timer_TurnUndeadAimDelay(Handle:timer, DataPack:DP) {
 		}
 	}
 
-	DataPack DP2 = new DataPack();
-	DP2.WriteCell(client);
-	CreateTimer(1.0, Timer:Timer_UndeadRush, DP2);
+	CreateTimer(1.0, Timer:Timer_UndeadRush, client);
 	// PropaneAtPos(Pos);
 	
 	return Plugin_Stop;
@@ -1917,6 +1919,8 @@ public Action:Timer_Skill_Explosion_Start(Handle:timer, any:client) {
 //----------Mana Shield (魔心護盾)----------//
 public Action:Timer_Skill_ManaShield_Start(Handle:timer, any:client) {
 	// GlowForSecs(client, 100, 100, 0, 10.0);
+	if(!IsValidEntity(client) || !HasEntProp(client, Prop_Send, "m_glowColorOverride"))return Plugin_Stop;
+	State_Glow[client] = true;
 	int glowcolor = 255 | (255 << 8) | (0 << 16);
 	SetEntProp(client, Prop_Send, "m_glowColorOverride", glowcolor);
 	SetEntProp(client, Prop_Send, "m_iGlowType", 3);
@@ -1940,13 +1944,13 @@ public Action:Event_DmgReducedByManaShield(Handle:event, const String:name[], bo
 	int dmg_health = GetEventInt(event, "dmg_health");
 	new client = GetClientOfUserId(GetEventInt(event, "userid"));
 	if (!State_ManaShield[client]) return Plugin_Continue;
-	
+
 	if (IsAliveHumanPlayer(client)) {
 		new hp = GetEntProp(client, Prop_Data, "m_iHealth");
 		//new maxhp = GetEntProp(client, Prop_Data, "m_iMaxHealth");
 
 		if (MP_Decrease(client, dmg_health * 4.0))
-			hp += dmg_health;
+			hp += (dmg_health-1);
 		// if (hp > 100) 
 		// 	hp = 100;
 		SetEntProp(client, Prop_Data, "m_iHealth", hp);
