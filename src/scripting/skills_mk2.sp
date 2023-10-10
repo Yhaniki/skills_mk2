@@ -74,8 +74,6 @@ bool Skill_EX_Using[MAXENTITIES];
 new Slow_Ent;
 new bool:State_Slow;
 new Handle:Slow_Timer;
-bool State_TurnUndead;
-new Handle:TurnUndead_Timer;
 
 enum skill_type { TYPE_NORMAL = 0, TYPE_PASSIVE = 1 }
 
@@ -280,11 +278,7 @@ public OnPluginStart() {
 	// g_hCvarPanicForever = FindConVar("director_panic_forever");
 	// g_hCvarPanicForever.SetBool(false, false, false);
 	g_iStockRange = g_hCvarMeleeRange.IntValue;
-	if (State_TurnUndead && TurnUndead_Timer != null)
-	{
-		KillTimer(TurnUndead_Timer);
-	}
-	State_TurnUndead = false;
+
 	State_Slow = false;
 	for(int i=0; i<MAXENTITIES; i++)
 	{
@@ -345,10 +339,6 @@ public OnMapStart() {
 	Setup_Materials();
 	TrunUndeadMapStart();
 	CheckPlayerConnections();
-	if (State_TurnUndead && TurnUndead_Timer != null)
-	{
-		KillTimer(TurnUndead_Timer);
-	}
 }
 
 public Setup_Materials() {
@@ -1466,7 +1456,6 @@ public Action:Timer_Skill_EX_Start(Handle:timer, any:client)
 //------------------------------------//
 //------------trun undead-------------//
 public Action:Timer_UndeadRushEnd(Handle:timer, any userid) {
-	State_TurnUndead = false;
 	// g_hCvarPanicForever.SetBool(false, false, false);
 	// PrintToChatAll("\x01屍潮結束");
 	int client = GetClientOfUserId(userid);
@@ -1478,6 +1467,7 @@ public Action:Timer_UndeadRushEnd(Handle:timer, any userid) {
 		if( entity && EntRefToEntIndex(entity) != INVALID_ENT_REFERENCE )
 			RemoveEntity(entity);
 	}
+	Skill_TurnUndead_Timer[client] = null;
 }
 StripAndExecuteClientCommand(client, const String:command[], const String:arguments[]) {
 	new flags = GetCommandFlags(command);
@@ -1489,7 +1479,6 @@ public Action:Timer_UndeadRush(Handle:timer, int client) {
 	// g_hCvarPanicForever.SetBool(false, false, false);
 	StripAndExecuteClientCommand(client, "z_spawn_old", "mob");
 	L4D_ForcePanicEvent();
-	State_TurnUndead = true;
 
 	if (Skill_TurnUndead_Timer[client] != null &&
 		Skill_TurnUndead_Timer[client] != INVALID_HANDLE)
@@ -2026,7 +2015,14 @@ public Action:Event_DmgInflicted(Handle:event, const String:name[], bool:dontBro
 
 public void GlowForSecs(entity, r, g, b, Float:time) {
 	if(!IsValidEntity(entity))return;
-	if (State_Glow[entity]&&Glow_Timer[entity]!=null) KillTimer(Glow_Timer[entity]);
+	if (entity < MAXENTITIES &&
+		entity > 0 &&
+		State_Glow[entity] &&
+		Glow_Timer[entity] != null &&
+		Glow_Timer[entity] != INVALID_HANDLE)
+	{
+		KillTimer(Glow_Timer[entity]);
+	}
 	State_Glow[entity] = true;
 
 	// new glowcolor = r + g * 256 + b * 65536;
@@ -2054,17 +2050,31 @@ public Action:Timer_Unglow(Handle:timer, any:entity) {
 	if (!HasEntProp(entity, Prop_Send, "m_glowColorOverride")) return Plugin_Stop;
 	SetEntProp(entity, Prop_Send, "m_glowColorOverride", 0);
 	SetEntProp(entity, Prop_Send, "m_iGlowType", 0);
-
+	Glow_Timer[entity] = null;
 	return Plugin_Stop;
+}
+
+void UnGlow(int entity)
+{
+	if (entity < MAXENTITIES &&
+		entity > 0 &&
+		State_Glow[entity] &&
+		Glow_Timer[entity] != null &&
+		Glow_Timer[entity] != INVALID_HANDLE)
+	{
+		KillTimer(Glow_Timer[entity]);
+	}
+	State_Glow[entity] = false;
+	Glow_Timer[entity] = CreateTimer(0.0, Timer:Timer_Unglow, entity);
 }
 
 public Action:Event_DeathUnglow(Handle:event, const String:name[], bool:dontBroadcast) {
 	new client = GetClientOfUserId(GetEventInt(event, "userid"));
 	new entity = GetEventInt(event, "entityid");
 	if (IsSpecialInf(client) || IsPlayer(client)) {
-		if (State_Glow[client]) TriggerTimer(Glow_Timer[client]);
+		if (State_Glow[client]) UnGlow(client);
 	} else if (IsInf(entity)) {
-		if (State_Glow[entity]) TriggerTimer(Glow_Timer[entity]);
+		if (State_Glow[entity]) UnGlow(entity);
 	}
 }
 
@@ -2093,7 +2103,7 @@ public Action:Timer_Unfreeze(Handle:timer, any:client) {
 	if (!(IsPlayer(client) || IsInf(client) || IsSpecialInf(client))) return Plugin_Stop;
 	SetEntPropFloat(client, Prop_Data, "m_flLaggedMovementValue", 1.0);
 	//AcceptEntityInput(client, "");
-	
+	Freeze_Timer[client] = null;
 	return Plugin_Stop;
 }
 
@@ -2125,7 +2135,7 @@ public Action:Timer_Unslow(Handle:timer, any:client) {
 	PrepareAndEmitSoundtoAll("skills\\slomo_end.mp3", .entity = client, .volume = 1.0);
 	
 	AcceptEntityInput(Slow_Ent, "Stop");
-
+	Slow_Timer = null;
 	return Plugin_Stop;
 }
 
