@@ -311,7 +311,7 @@ public OnPluginStart() {
 	HookEvent("heal_success",				Event_MPGain);
 	HookEvent("adrenaline_used",			Event_MPGain);
 	HookEvent("pills_used",					Event_MPGain);
-	HookEvent("player_hurt", 				Event_DmgReducedByManaShield);
+	// HookEvent("player_hurt", 				Event_DmgReducedByManaShield);
 	HookEvent("player_death", 				Event_DeathUnglow);
 
 	RegConsoleCmd("skill1",					Event_SkillStateTransition);
@@ -1929,26 +1929,20 @@ public Action:Timer_Skill_ManaShield_End(Handle:timer, any:client) {
 	return Plugin_Stop;
 }
 
-public Action:Event_DmgReducedByManaShield(Handle:event, const String:name[], bool:dontBroadcast) {
-	int dmg_health = GetEventInt(event, "dmg_health");
-	new client = GetClientOfUserId(GetEventInt(event, "userid"));
-	if (!State_ManaShield[client]) return Plugin_Continue;
-
-	if (IsAliveHumanPlayer(client)) {
-		new hp = GetEntProp(client, Prop_Data, "m_iHealth");
-		//new maxhp = GetEntProp(client, Prop_Data, "m_iMaxHealth");
-
-		if (MP_Decrease(client, dmg_health * 4.0))
-			hp += (dmg_health-1);
-		// if (hp > 100) 
-		// 	hp = 100;
-		SetEntProp(client, Prop_Data, "m_iHealth", hp);
+public float DmgReduce(int client, float dmg)
+{
+	const float dmgGain = 4.0;
+	float result = dmg;
+	float mpCost = dmg * dmgGain;
+	if (IsAliveHumanPlayer(client) && MP_Decrease(client, mpCost))
+	{
+		result = 0.0;
 	}
 	if(Skill_Notify_Timer[client]!=null)
 		TriggerTimer(Skill_Notify_Timer[client]);
 	else
 		OnClientConnected(client);
-	return Plugin_Continue;
+	return result;
 }
 
 //----------Eagle Eye (鷹眼)----------//
@@ -2452,5 +2446,8 @@ public Action:Event_Hurt(victim, &attacker, &inflictor, &Float:damage, &damagety
 
 	if(Invulnerable[victim])
 		damage = 0.0;
+
+	if(State_ManaShield[victim])
+		damage = DmgReduce(victim, damage);
 	return Plugin_Changed;
 }
