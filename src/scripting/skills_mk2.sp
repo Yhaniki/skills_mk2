@@ -16,6 +16,7 @@
 #define MAXSKILLS                       (64)
 #define MAXENTITIES                     (4096)
 #define PANIC_SEC                       (120.0)
+#define EAGLE_EYES_RANGE                (2000.0)
 #define PARTICLE_EXPLOSION              ("Skill_Explosion")
 #define PARTICLE_EXPLOSION2             ("Skill_Explosion_2")
 #define PARTICLE_EAGLEEYE               ("Skill_EagleEye")
@@ -293,7 +294,7 @@ public OnPluginStart() {
 	//Setup_Materials();
 	RegisterSkill("Explosion 爆裂" ,Timer_Skill_Explosion_Start, Timer_Skill_Null_End, Timer_Skill_Null_Ready, 3.0, 2.0, 30.0);
 	RegisterSkill("Mana Shield 魔心護盾" ,Timer_Skill_ManaShield_Start, Timer_Skill_ManaShield_End, Timer_Skill_Null_Ready, 0.0, -1.0, 0.0);
-	RegisterSkill("Eagle Eye 鷹眼" ,Timer_Skill_EagleEye_Start, Timer_Skill_Null_End, Timer_Skill_Null_Ready, 7.0, 2.0, 40.0);
+	RegisterSkill("Eagle Eye 鷹眼" ,Timer_Skill_EagleEye_Start, Timer_Skill_EagleEye_End, Timer_Skill_Null_Ready, 7.0, 2.0, 40.0);
 	RegisterSkill("Steal 偷竊" ,Timer_Skill_Steal_Start, Timer_Skill_Null_End, Timer_Skill_Null_Ready, 6.0, 2.0, 20.0);// Float:skill_duration, Float:skill_cooldown, Float:skill_mpcost
 	RegisterSkill("Sacred Turn Undead 淨化" , Timer_Skill_TurnUndead_Start, Timer_Skill_Null_End, Timer_Skill_Null_Ready, 3.5, 2.0, 50.0);
 	RegisterSkill("爆裂ex" , Timer_Skill_EX_Start, Timer_Skill_EX_End, Timer_Skill_Null_Ready, explosion_ex_delay_secs+2.0, 2.0, 100.0);
@@ -868,7 +869,14 @@ public Action:Skill_Notify(Handle:timer, any:client) {
 
 	if (StrEqual(Skill_Name[Skill[client]], "Mana Shield 魔心護盾") &&
 		!State_ManaShield[client])
+	{
 		Skill_Trigger(client);
+	}
+	else if (StrEqual(Skill_Name[Skill[client]], "Eagle Eye 鷹眼") &&
+			 Skill_State[client] == SKILL_ACT)
+	{
+		DetectInfect(client);
+	}
 	if ((Skill_MP[client] >= Skill_MPcost[hiddenExplosionNum]) &&
 		StrEqual(Skill_Name[Skill[client]], "Explosion 爆裂"))
 	{
@@ -1374,7 +1382,8 @@ public Action:Timer_ExExplosion(Handle:timer, DataPack:DP)
 
 public Action:Timer_Skill_EX_End(Handle:timer, any:client)
 {
-	Invulnerable[client]=false;
+	Invulnerable[client] = false;
+	Skill_State[client] = SKILL_CD;
 	if (IsAliveHumanPlayer(client) &&
 		!IsIncapped(client))
 	{
@@ -1947,6 +1956,26 @@ public float DmgReduce(int client, float dmg)
 
 //----------Eagle Eye (鷹眼)----------//
 
+public Action:Timer_Skill_EagleEye_End(Handle timer, int client)
+{
+	int entity = 0;
+	Skill_State[client] = SKILL_CD;
+	while ((entity = FindEntityByClassname(entity, "infected")) != INVALID_ENT_REFERENCE)
+	{
+		if (IsAliveInf(entity))
+		{
+			UnGlow(entity);
+		}
+	}
+	for (int i = 1; i <= MAXPLAYERS; i++)
+	{
+		if (IsAliveSpecialInf(i))
+		{
+			UnGlow(i);
+		}
+	}
+}
+
 public Action:Timer_Skill_EagleEye_Start(Handle:timer, any:client) {
 	//PrepareAndEmitSoundtoAll("skills\\eagleeye.mp3", .entity = client, .volume = 1.0);
 	
@@ -1957,33 +1986,36 @@ public Action:Timer_Skill_EagleEye_Start(Handle:timer, any:client) {
 	return Plugin_Stop;
 }
 
-public EagleEye(client) {
-	new Float:Range = 2000.0;
-	new Float:Pos[3];
-	GetAimOrigin(client, Pos, 0.1);
-	
-	Pos[2] += 10;
-	CreateParticle(PARTICLE_EAGLEEYE, 1.0, Pos);
-	
-	SlowForSecs(6.0, client);
-	
-	new entity = -1;
+void DetectInfect(int client)
+{
+	float range = EAGLE_EYES_RANGE;
+	float pos[3];
+
+	GetClientAbsOrigin(client, pos);
+
+	int entity = -1;
 	while ((entity = FindEntityByClassname(entity, "infected")) != INVALID_ENT_REFERENCE) {
 		if (IsAliveInf(entity)) {
-			if (GetEntityPosDistance(entity, Pos) <= Range) {
-				GlowForSecs(entity, 200, 0, 0, 6.0);
+			if (GetEntityPosDistance(entity, pos) <= range) {
+				GlowForSecs(entity, 200, 0, 0, 6.0); //TODO define the durning time
 				//FreezeForSecs(entity, 8.0);
 			}
 		}
 	}
 	for (new i = 1; i <= MAXPLAYERS; i++) {
 		if (IsAliveSpecialInf(i)) {
-			if (GetEntityPosDistance(i, Pos) <= Range) {
+			if (GetEntityPosDistance(i, pos) <= range) {
 				//PrintToChatAll("Special infected found!");
 				GlowForSecs(i, 150, 100, 0, 6.0);
 			}
 		}
 	}
+}
+
+public void EagleEye(int client) {
+	SlowForSecs(6.0, client);
+	ParticleFollow(PARTICLE_EAGLEEYE, client, 1.0);
+	DetectInfect(client);
 }
 
 //===========================================================
@@ -2058,7 +2090,6 @@ void UnGlow(int entity)
 	{
 		KillTimer(Glow_Timer[entity]);
 	}
-	State_Glow[entity] = false;
 	Glow_Timer[entity] = CreateTimer(0.0, Timer:Timer_Unglow, entity);
 }
 
