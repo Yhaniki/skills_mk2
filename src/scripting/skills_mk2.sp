@@ -65,13 +65,14 @@ new Skill_Notify_Ani_State[MAXPLAYERS + 1];
 new Handle:Skill_MPrecover_Timer[MAXPLAYERS + 1];
 new Handle:Skill_Adrenaline_Boost_Timer[MAXPLAYERS + 1];
 new Handle:Skill_TurnUndead_Timer[MAXPLAYERS + 1];
-int g_iChase[MAXPLAYERS+1];
+int g_iChase[MAXPLAYERS + 1];
+bool Skill_EX_Using[MAXPLAYERS + 1];
+bool Invulnerable[MAXPLAYERS + 1];
 new bool:State_Glow[MAXENTITIES];
 new Handle:Glow_Timer[MAXENTITIES];
 new bool:State_Freeze[MAXENTITIES];
 new Handle:Freeze_Timer[MAXENTITIES];
-bool Invulnerable[MAXENTITIES];
-bool Skill_EX_Using[MAXENTITIES];
+
 new Slow_Ent;
 new bool:State_Slow;
 new Handle:Slow_Timer;
@@ -281,12 +282,15 @@ public OnPluginStart() {
 	g_iStockRange = g_hCvarMeleeRange.IntValue;
 
 	State_Slow = false;
-	for(int i=0; i<MAXENTITIES; i++)
+	for (int i = 0; i < MAXENTITIES; i++)
 	{
-		State_Glow[i]=false;
-		State_Freeze[i]=false;
-		Invulnerable[i]=false;
-		Skill_EX_Using[i]=false;
+		State_Glow[i] = false;
+		State_Freeze[i] = false;
+	}
+	for (int i = 0; i < MAXPLAYERS + 1; i++)
+	{
+		Invulnerable[i] = false;
+		Skill_EX_Using[i] = false;
 	}
 	SetWeaponNameId();
 	OnWeaponDrop = CreateGlobalForward("OnWeaponDrop", ET_Event, Param_Cell, Param_CellByRef);
@@ -297,7 +301,7 @@ public OnPluginStart() {
 	RegisterSkill("Eagle Eye 鷹眼" ,Timer_Skill_EagleEye_Start, Timer_Skill_EagleEye_End, Timer_Skill_Null_Ready, 7.0, 2.0, 40.0);
 	RegisterSkill("Steal 偷竊" ,Timer_Skill_Steal_Start, Timer_Skill_Null_End, Timer_Skill_Null_Ready, 6.0, 2.0, 20.0);// Float:skill_duration, Float:skill_cooldown, Float:skill_mpcost
 	RegisterSkill("Sacred Turn Undead 淨化" , Timer_Skill_TurnUndead_Start, Timer_Skill_Null_End, Timer_Skill_Null_Ready, 3.5, 2.0, 50.0);
-	RegisterSkill("爆裂ex" , Timer_Skill_EX_Start, Timer_Skill_EX_End, Timer_Skill_Null_Ready, explosion_ex_delay_secs+2.0, 2.0, 100.0);
+	RegisterSkill("Explosion ☆爆裂★" , Timer_Skill_EX_Start, Timer_Skill_EX_End, Timer_Skill_EX_Ready, explosion_ex_delay_secs+2.0, 2.0, 100.0);
 	//RegisterSkill("Sixth Sense 第六感" ,Timer_Skill_EagleEye_Start, Timer_Skill_EagleEye_End, Timer_Skill_Null_Ready, 10.0, 60.0, 80.0);
 	hiddenExplosionNum = skill_num-1;
 	//Function: OnClientConnected
@@ -314,6 +318,7 @@ public OnPluginStart() {
 	HookEvent("pills_used",					Event_MPGain);
 	// HookEvent("player_hurt", 				Event_DmgReducedByManaShield);
 	HookEvent("player_death", 				Event_DeathUnglow);
+	HookEvent("infected_death", 			Event_DeathUnglow);
 
 	RegConsoleCmd("skill1",					Event_SkillStateTransition);
 	RegConsoleCmd("skill2",					Event_SkillStateTransition);
@@ -573,7 +578,6 @@ public Skill_Trigger(client) {
 	if(Skill_EX_Using[client])
 	{
 		skill_using = skill_num-1;
-		Skill_EX_Using[client]=false;
 	}
 	switch (Skill_Type[skill_using])
 	{
@@ -866,7 +870,10 @@ public Action:Skill_Notify(Handle:timer, any:client) {
 	new String:state[MAXCMD] = "";
 	new String:name[MAXCMD] = "";
 	new skill_using = Skill[client];
-
+	if(Skill_EX_Using[client])
+	{
+		skill_using = skill_num-1;
+	}
 	if (StrEqual(Skill_Name[Skill[client]], "Mana Shield 魔心護盾") &&
 		!State_ManaShield[client])
 	{
@@ -1103,6 +1110,7 @@ public Action:Timer_Skill_Null_Ready(Handle:timer, any:client) {
 float beaPos[3];
 void NukeExplosion(int attacker, const float vPos[3] = NULL_VECTOR)
 {
+	const float distanceConstant = 13888.0;
 	beaPos[0] = vPos[0];
 	beaPos[1] = vPos[1];
 	beaPos[2] = vPos[2];
@@ -1147,7 +1155,7 @@ void NukeExplosion(int attacker, const float vPos[3] = NULL_VECTOR)
 		{
 			Fade(i, 255, 50, 80, 100, 800, 1);
 			GetEntPropVector(i, Prop_Send, "m_vecOrigin", Pos);
-			time = GetVectorDistance(vPos, Pos) / 5000.0 * 0.36;
+			time = GetVectorDistance(vPos, Pos) / distanceConstant;
 			if (GetVectorDistance(beaPos, Pos) > g_hNukeRadius)
 				return;
 			CreateTimer(time, ShockWave, DP);
@@ -1156,7 +1164,7 @@ void NukeExplosion(int attacker, const float vPos[3] = NULL_VECTOR)
 		{
 			Fade(i, 255, 120, 80, 100, 800, 1);
 			GetEntPropVector(i, Prop_Send, "m_vecOrigin", Pos);
-			time = GetVectorDistance(vPos, Pos) / 5000.0 * 0.36;
+			time = GetVectorDistance(vPos, Pos) / distanceConstant;
 			if (GetVectorDistance(beaPos, Pos) > g_hNukeRadius)
 				return;
 			CreateTimer(time, ShockWave, DP);
@@ -1167,31 +1175,31 @@ void NukeExplosion(int attacker, const float vPos[3] = NULL_VECTOR)
 			if (StrEqual(tName, "witch", false))
 			{
 				GetEntPropVector(i, Prop_Send, "m_vecOrigin", Pos);
-				time = GetVectorDistance(vPos, Pos) / 5000.0 * 0.36;
+				time = GetVectorDistance(vPos, Pos) / distanceConstant;
 				CreateTimer(time, ShockWave, DP);
 			}
 			else if (StrEqual(tName, "infected", false))
 			{
 				GetEntPropVector(i, Prop_Send, "m_vecOrigin", Pos);
-				time = GetVectorDistance(vPos, Pos) / 5000.0 * 0.36;
+				time = GetVectorDistance(vPos, Pos) / distanceConstant;
 				CreateTimer(time, ShockWave, DP);
 			}
 			else if (StrEqual(tName, "prop_physics", false))
 			{
 				GetEntPropVector(i, Prop_Send, "m_vecOrigin", Pos);
-				time = GetVectorDistance(vPos, Pos) / 5000.0 * 0.36;
+				time = GetVectorDistance(vPos, Pos) / distanceConstant;
 				CreateTimer(time, ShockWave, DP);
 			}
 			else if (StrEqual(tName, "prop_physics_multiplayer", false))
 			{
 				GetEntPropVector(i, Prop_Send, "m_vecOrigin", Pos);
-				time = GetVectorDistance(vPos, Pos) / 5000.0 * 0.36;
+				time = GetVectorDistance(vPos, Pos) / distanceConstant;
 				CreateTimer(time, ShockWave, DP);
 			}
 			else if (StrEqual(tName, "prop_physics_override", false))
 			{
 				GetEntPropVector(i, Prop_Send, "m_vecOrigin", Pos);
-				time = GetVectorDistance(vPos, Pos) / 5000.0 * 0.36;
+				time = GetVectorDistance(vPos, Pos) / distanceConstant;
 				CreateTimer(time, ShockWave, DP);
 			}
 		}
@@ -1268,8 +1276,9 @@ public Action ShockWave(Handle timer, DataPack DP)
 		return Plugin_Continue;
 	float distance = GetEntityPosDistance(entity, beaPos);
 	float damage = ComputeShakeDmg(g_hNukeDamage, distance, nukeDamageRange);
-	if (IsValidClient(entity) && GetClientTeam(entity) == 3)
+	if (IsValidClient(entity) && GetClientTeam(entity) == 3)//special infected
 	{
+		damage*=damage;
 		IgniteEntity(entity, 999.9);
 		if (!IsFakeClient(entity))
 			EmitSoundToClient(entity, NUKE_SOUND);
@@ -1377,6 +1386,13 @@ public Action:Timer_ExExplosion(Handle:timer, DataPack:DP)
 	vPos[1] = DP.ReadCell();
 	vPos[2] = DP.ReadCell();
 	NukeExplosion(client, vPos);
+	return Plugin_Stop;
+}
+
+public Action Timer_Skill_EX_Ready(Handle timer, int client)
+{
+	Skill_EX_Using[client] = false;
+	Skill_State[client] = SKILL_RDY;
 	return Plugin_Stop;
 }
 
@@ -1955,21 +1971,50 @@ public float DmgReduce(int client, float dmg)
 }
 
 //----------Eagle Eye (鷹眼)----------//
+void DetectInfect(int client)
+{
+	const float durningTime = 10.0;
+	// This number of seconds is longer than eagleeye's casting time, 
+	// so that it will not be interrupted during the casting process.
+	float range = EAGLE_EYES_RANGE;
+	float pos[3];
+
+	GetClientAbsOrigin(client, pos);
+	
+	for (int i = 1; i <= GetEntityCount(); i++)
+	{
+		if (!IsValidEntity(i) || State_Glow[i] || !IsAlive(i)) continue;
+		if (IsWitch(i))
+		{
+			if (GetEntityPosDistance(i, pos) <= range)
+			{
+				GlowForSecs(i, 255, 0, 255, durningTime);
+			}
+		}
+		else if (IsInf(i))
+		{
+			if (GetEntityPosDistance(i, pos) <= range)
+			{
+				GlowForSecs(i, 200, 0, 0, durningTime);
+			}
+		}
+		else if (IsAliveSpecialInf(i))
+		{
+			if (GetEntityPosDistance(i, pos) <= range)
+			{
+				GlowForSecs(i, 150, 100, 0, durningTime);
+			}
+		}
+	}
+}
 
 public Action:Timer_Skill_EagleEye_End(Handle timer, int client)
 {
-	int entity = 0;
 	Skill_State[client] = SKILL_CD;
-	while ((entity = FindEntityByClassname(entity, "infected")) != INVALID_ENT_REFERENCE)
+	for (int i = 1; i <= GetEntityCount(); i++)
 	{
-		if (IsAliveInf(entity))
-		{
-			UnGlow(entity);
-		}
-	}
-	for (int i = 1; i <= MAXPLAYERS; i++)
-	{
-		if (IsAliveSpecialInf(i))
+		if (!IsValidEntity(i)) continue;
+		if (IsWitch(i) || IsInf(i) || IsAliveSpecialInf(i))
 		{
 			UnGlow(i);
 		}
@@ -1980,42 +2025,12 @@ public Action:Timer_Skill_EagleEye_Start(Handle:timer, any:client) {
 	//PrepareAndEmitSoundtoAll("skills\\eagleeye.mp3", .entity = client, .volume = 1.0);
 	
 	GlowForSecs(client, 0, 100, 0, 10.0);
-	EagleEye(client);
-	PrintToChatAll("\x04%N \x01Eagle Eye!", client);
-	
-	return Plugin_Stop;
-}
-
-void DetectInfect(int client)
-{
-	float range = EAGLE_EYES_RANGE;
-	float pos[3];
-
-	GetClientAbsOrigin(client, pos);
-
-	int entity = -1;
-	while ((entity = FindEntityByClassname(entity, "infected")) != INVALID_ENT_REFERENCE) {
-		if (IsAliveInf(entity)) {
-			if (GetEntityPosDistance(entity, pos) <= range) {
-				GlowForSecs(entity, 200, 0, 0, 6.0); //TODO define the durning time
-				//FreezeForSecs(entity, 8.0);
-			}
-		}
-	}
-	for (new i = 1; i <= MAXPLAYERS; i++) {
-		if (IsAliveSpecialInf(i)) {
-			if (GetEntityPosDistance(i, pos) <= range) {
-				//PrintToChatAll("Special infected found!");
-				GlowForSecs(i, 150, 100, 0, 6.0);
-			}
-		}
-	}
-}
-
-public void EagleEye(int client) {
 	SlowForSecs(6.0, client);
 	ParticleFollow(PARTICLE_EAGLEEYE, client, 1.0);
 	DetectInfect(client);
+	PrintToChatAll("\x04%N \x01Eagle Eye!", client);
+	
+	return Plugin_Stop;
 }
 
 //===========================================================
@@ -2094,12 +2109,14 @@ void UnGlow(int entity)
 }
 
 public Action:Event_DeathUnglow(Handle:event, const String:name[], bool:dontBroadcast) {
-	new client = GetClientOfUserId(GetEventInt(event, "userid"));
-	new entity = GetEventInt(event, "entityid");
-	if (IsSpecialInf(client) || IsPlayer(client)) {
+	int client = GetClientOfUserId(GetEventInt(event, "userid"));
+	int entity = GetEventInt(event, "entityid");
+	if (IsSpecialInf(client) ||
+		IsPlayer(client)||
+		IsInf(entity) ||
+		IsWitch(entity))
+	{
 		if (State_Glow[client]) UnGlow(client);
-	} else if (IsInf(entity)) {
-		if (State_Glow[entity]) UnGlow(entity);
 	}
 }
 
@@ -2177,6 +2194,15 @@ public bool:IsPlayer(client) {
 public PrintPlayerState(const String:name[], client) {	
 	PrintToServer("========== EVENT: %s %N", name, client);
 	PrintToServer("========== STATE: %d %d %d", State_Connection[client], State_Transition[client], State_Player[client]);
+}
+
+public bool IsAlive(entity)
+{
+	if(!IsValidEntity(entity))return false;
+	if(!IsInf(entity)&&!IsWitch(entity)&&!IsSpecialInf(entity))return false;
+	int hp = GetEntProp(entity, Prop_Data, "m_iHealth");
+	if(hp<=0) return false;
+	else return true;
 }
 
 public bool:IsAliveInf(client) {
@@ -2321,24 +2347,17 @@ public Action:Timer_ExplodeAimDelay(Handle:timer, DataPack:DP) {
 	PropaneAtPos(Pos);
 	int dmg = 0;
 	float distance = 0.0;
-	for (new i = 1; i < MAXPLAYERS; i++) {
-		if (IsAliveSpecialInf(i)) {
+
+	for (int i = 1; i <= GetEntityCount(); i++)
+	{
+		if (!IsValidEntity(i)) continue;
+		if (IsWitch(i) || IsInf(i) || IsAliveSpecialInf(i))
+		{
 			distance = GetEntityPosDistance(i, Pos);
-			if (distance <= EXPLOSION_DIST) {
+			if (distance <= EXPLOSION_DIST)
+			{
 				dmg = ComputeExploDmg(distance);
 				DealDamage(i, dmg, client, DMG_BURN);
-			}
-		}
-	}
-	
-	new entity = -1;
-	while ((entity = FindEntityByClassname(entity, "infected")) != INVALID_ENT_REFERENCE) {
-		new health = GetEntProp(entity, Prop_Data, "m_iHealth");
-		if (health > 0) {
-			distance = GetEntityPosDistance(entity, Pos);
-			if (distance <= EXPLOSION_DIST) {
-				dmg = ComputeExploDmg(distance);
-				DealDamage(entity, dmg, client, DMG_BURN);
 			}
 		}
 	}
