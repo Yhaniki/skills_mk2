@@ -1,5 +1,6 @@
 #define PLUGIN_VERSION                  "0.6"
 #define SKILL_DEBUG                     (false)
+#define MAX_PLAYERS                     (20)
 #define INIT_MP                         (50.0)
 #define GAMEDATA_MELEE                  ("l4d2_melee_range")
 #define TURN_UNDEAD_DIST                (1000.0)
@@ -42,32 +43,32 @@
 
 enum player_state { PLAYER_ALIVE = 2, PLAYER_INCAP = 1, PLAYER_DEAD = 0 }
 
-new bool:State_Connection[MAXPLAYERS + 1];
-new bool:State_Transition[MAXPLAYERS + 1];
-new player_state:State_Player[MAXPLAYERS + 1];
+new bool:State_Connection[MAX_PLAYERS + 1];
+new bool:State_Transition[MAX_PLAYERS + 1];
+new player_state:State_Player[MAX_PLAYERS + 1];
 
-new bool:State_Adrenaline_Boost[MAXPLAYERS + 1];
-new bool:State_ManaShield[MAXPLAYERS + 1];
+new bool:State_Adrenaline_Boost[MAX_PLAYERS + 1];
+new bool:State_ManaShield[MAX_PLAYERS + 1];
 
 enum skill_state { SKILL_CD = 2, SKILL_ACT = 1, SKILL_RDY = 0 }
 
-new Skill[MAXPLAYERS + 1];
-new skill_state:Skill_State[MAXPLAYERS + 1];
-new Float:Skill_LastUseTime[MAXPLAYERS + 1];
-new Float:Skill_MP[MAXPLAYERS + 1];
+new Skill[MAX_PLAYERS + 1];
+new skill_state:Skill_State[MAX_PLAYERS + 1];
+new Float:Skill_LastUseTime[MAX_PLAYERS + 1];
+new Float:Skill_MP[MAX_PLAYERS + 1];
 
-new Handle:Skill_Notify_Timer[MAXPLAYERS + 1];
-new Handle:Skill_Duration_Timer[MAXPLAYERS + 1];
-new Handle:Skill_Cooldown_Timer[MAXPLAYERS + 1];
-new Handle:Skill_Notify_Ani_Timer[MAXPLAYERS + 1];
-new Skill_Notify_Ani_State[MAXPLAYERS + 1];
+new Handle:Skill_Notify_Timer[MAX_PLAYERS + 1];
+new Handle:Skill_Duration_Timer[MAX_PLAYERS + 1];
+new Handle:Skill_Cooldown_Timer[MAX_PLAYERS + 1];
+new Handle:Skill_Notify_Ani_Timer[MAX_PLAYERS + 1];
+new Skill_Notify_Ani_State[MAX_PLAYERS + 1];
 
-new Handle:Skill_MPrecover_Timer[MAXPLAYERS + 1];
-new Handle:Skill_Adrenaline_Boost_Timer[MAXPLAYERS + 1];
-new Handle:Skill_TurnUndead_Timer[MAXPLAYERS + 1];
-int g_iChase[MAXPLAYERS + 1];
-bool Skill_EX_Using[MAXPLAYERS + 1];
-bool Invulnerable[MAXPLAYERS + 1];
+new Handle:Skill_MPrecover_Timer[MAX_PLAYERS + 1];
+new Handle:Skill_Adrenaline_Boost_Timer[MAX_PLAYERS + 1];
+new Handle:Skill_TurnUndead_Timer[MAX_PLAYERS + 1];
+int g_iChase[MAX_PLAYERS + 1];
+bool Skill_EX_Using[MAX_PLAYERS + 1];
+bool Invulnerable[MAX_PLAYERS + 1];
 new bool:State_Glow[MAXENTITIES];
 new Handle:Glow_Timer[MAXENTITIES];
 new bool:State_Freeze[MAXENTITIES];
@@ -90,7 +91,7 @@ new Float:Skill_Duration[MAXSKILLS];
 new Float:Skill_MPcost[MAXSKILLS];
 new skill_num = 0;
 int hiddenExplosionNum = 0;
-new bool:Hooked[MAXPLAYERS];
+new bool:Hooked[MAX_PLAYERS];
 float explosion_ex_delay_secs = 25.0;
 float time_weight = 1.0;
 Handle g_hDetour;
@@ -287,7 +288,7 @@ public OnPluginStart() {
 		State_Glow[i] = false;
 		State_Freeze[i] = false;
 	}
-	for (int i = 0; i < MAXPLAYERS + 1; i++)
+	for (int i = 0; i < MAX_PLAYERS + 1; i++)
 	{
 		Invulnerable[i] = false;
 		Skill_EX_Using[i] = false;
@@ -301,7 +302,7 @@ public OnPluginStart() {
 	RegisterSkill("Eagle Eye 鷹眼" ,Timer_Skill_EagleEye_Start, Timer_Skill_EagleEye_End, Timer_Skill_Null_Ready, 7.0, 2.0, 40.0);
 	RegisterSkill("Steal 偷竊" ,Timer_Skill_Steal_Start, Timer_Skill_Null_End, Timer_Skill_Null_Ready, 6.0, 2.0, 20.0);// Float:skill_duration, Float:skill_cooldown, Float:skill_mpcost
 	RegisterSkill("Sacred Turn Undead 淨化" , Timer_Skill_TurnUndead_Start, Timer_Skill_Null_End, Timer_Skill_Null_Ready, 3.5, 2.0, 50.0);
-	RegisterSkill("Explosion ☆爆裂★" , Timer_Skill_EX_Start, Timer_Skill_EX_End, Timer_Skill_EX_Ready, explosion_ex_delay_secs+2.0, 2.0, 100.0);
+	RegisterSkill("EXPLOSION ☆爆裂★" , Timer_Skill_EX_Start, Timer_Skill_EX_End, Timer_Skill_EX_Ready, explosion_ex_delay_secs+2.0, 2.0, 100.0);
 	//RegisterSkill("Sixth Sense 第六感" ,Timer_Skill_EagleEye_Start, Timer_Skill_EagleEye_End, Timer_Skill_Null_Ready, 10.0, 60.0, 80.0);
 	hiddenExplosionNum = skill_num-1;
 	//Function: OnClientConnected
@@ -312,6 +313,7 @@ public OnPluginStart() {
 	HookEvent("revive_success",				Event_StateTransition);
 	HookEvent("map_transition",				Event_StateTransition);
 	HookEvent("player_transitioned",		Event_StateTransition);
+	HookEvent("player_afk",					Event_StateTransition, EventHookMode_Pre);
 	HookEvent("player_death",				Event_MPleech);
 	HookEvent("heal_success",				Event_MPGain);
 	HookEvent("adrenaline_used",			Event_MPGain);
@@ -333,7 +335,7 @@ public OnPluginStart() {
 }
 
 public CheckPlayerConnections() {
-	for (new i = 1; i < MaxClients; i++) {
+	for (new i = 1; i < MAX_PLAYERS; i++) {
 		if (IsClientInGame(i)){
 			OnClientConnected(i);
 			SDKHook(i, SDKHook_OnTakeDamage, Event_Hurt);
@@ -477,16 +479,22 @@ public OnClientDisconnect(client)
 
 public void Event_Draw(Event event, const char[] name, bool dontBroadcast)
 {
-	for (new i = 1; i < MaxClients; i++) {
+	for (new i = 1; i < MAX_PLAYERS; i++) {
 		State_Transition[i] = false;
 	}
 }
 
 public void Event_NoDraw(Event event, const char[] name, bool dontBroadcast)
 {
-	for (new i = 1; i < MaxClients; i++) {
+	for (new i = 1; i < MAX_PLAYERS; i++) {
 		State_Transition[i] = true;
 	}
+}
+
+public void Event_PlayerAFK(Handle:event, const char[] sName, bool bDontBroadcast )
+{
+	int client = GetClientOfUserId(GetEventInt(event, "player"));
+	UnGlow(client);
 }
 
 public Event_StateTransition(Handle:event, const String:name[], bool:dontBroadcast) {
@@ -504,6 +512,10 @@ public Event_StateTransition(Handle:event, const String:name[], bool:dontBroadca
 	{
 		client = GetClientOfUserId(GetEventInt(event, "subject"));
 	}
+	else if (StrEqual(name, "player_afk"))
+	{
+		client = GetClientOfUserId(GetEventInt(event, "player"));
+	}
 
 	if (!IsPlayer(client)) return;
 	
@@ -514,7 +526,7 @@ public Event_StateTransition(Handle:event, const String:name[], bool:dontBroadca
 	} else if (StrEqual(name, "map_transition")) {
 		State_Transition[client] = true;
 		Interrupt_Skill(client);
-		// for (new i = 0; i < MAXPLAYERS + 1; i++) {
+		// for (new i = 0; i < MAX_PLAYERS + 1; i++) {
 		// 	State_Transition[i] = true;
 		// 	Interrupt_Skill(client);
 		// }
@@ -528,6 +540,8 @@ public Event_StateTransition(Handle:event, const String:name[], bool:dontBroadca
 	} else if (StrEqual(name, "player_death")) {
 		State_Player[client] = PLAYER_DEAD;
 		Interrupt_Skill(client);
+	} else if (StrEqual(name, "player_afk")) {
+		UnGlow(client);
 	}
 	
 	//if (!StrEqual(name, "player_disconnect")) TriggerTimer(Skill_Notify_Timer[client], true);
@@ -770,7 +784,7 @@ void DropWeapon(int client, int weapon)
 		RemoveEntity(weapon);
 
 		int single_pistol = CreateEntityByName("weapon_pistol");
-		if(single_pistol <= MaxClients) return;
+		if(single_pistol <= MAX_PLAYERS) return;
 
 		DispatchSpawn(single_pistol);
 		EquipPlayerWeapon(client, single_pistol);
@@ -778,7 +792,7 @@ void DropWeapon(int client, int weapon)
 		SetEntProp(single_pistol, Prop_Send, "m_iClip1", clip);
 
 		single_pistol = CreateEntityByName("weapon_pistol");
-		if(single_pistol <= MaxClients) return;
+		if(single_pistol <= MAX_PLAYERS) return;
 
 		DispatchSpawn(single_pistol);
 		EquipPlayerWeapon(client, single_pistol);
@@ -844,7 +858,11 @@ public Action:Event_SkillStateTransition(client, args) {
 	}
 	else if (StrEqual(cmd, "change_skill"))
 	{
-		Skill_Change_Menu(client);
+		if (Skill_State[client] != SKILL_ACT ||
+			Skill_Type[skill_num] != TYPE_PASSIVE)
+			Skill_Change_Menu(client);
+		else
+			PrintToChat(client, "技能施放中");
 	}
 	else if (StrEqual(cmd, "drop"))
 	{
@@ -874,10 +892,18 @@ public Action:Skill_Notify(Handle:timer, any:client) {
 	{
 		skill_using = skill_num-1;
 	}
-	if (StrEqual(Skill_Name[Skill[client]], "Mana Shield 魔心護盾") &&
-		!State_ManaShield[client])
+	if (StrEqual(Skill_Name[Skill[client]], "Mana Shield 魔心護盾"))
 	{
-		Skill_Trigger(client);
+		if(!State_ManaShield[client])
+			Skill_Trigger(client);
+		else if(!State_Glow[client] && IsPlayerAlive(client))
+		{
+			// if(!IsValidEntity(client) || !HasEntProp(client, Prop_Send, "m_glowColorOverride"))return Plugin_Stop;
+			State_Glow[client] = true;
+			int glowcolor = 255 | (255 << 8) | (0 << 16);
+			SetEntProp(client, Prop_Send, "m_glowColorOverride", glowcolor);
+			SetEntProp(client, Prop_Send, "m_iGlowType", 3);
+		}
 	}
 	else if (StrEqual(Skill_Name[Skill[client]], "Eagle Eye 鷹眼") &&
 			 Skill_State[client] == SKILL_ACT)
@@ -887,7 +913,7 @@ public Action:Skill_Notify(Handle:timer, any:client) {
 	if ((Skill_MP[client] >= Skill_MPcost[hiddenExplosionNum]) &&
 		StrEqual(Skill_Name[Skill[client]], "Explosion 爆裂"))
 	{
-		Format(name, MAXCMD, "Explosion ☆爆裂★");
+		Format(name, MAXCMD, "EXPLOSION ☆爆裂★");
 	}
 	else
 	{
@@ -1016,11 +1042,11 @@ public Action:Event_MPleech(Handle:event, const String:name[], bool:dontBroadcas
 	new client = GetClientOfUserId(GetEventInt(event, "userid"));
 	new entity = GetEventInt(event, "entityid");
 	if (IsSpecialInf(client)) {
-		for (new i = 1; i <= MAXPLAYERS; i++) {
+		for (new i = 1; i <= MAX_PLAYERS; i++) {
 			if (State_Connection[i]) MP_Increase(i, 5.0);
 		}
 	} else if (IsInf(entity)) {
-		for (new i = 1; i <= MAXPLAYERS; i++) {
+		for (new i = 1; i <= MAX_PLAYERS; i++) {
 			if (State_Connection[i]) MP_Increase(i, 0.5);
 		}
 	}
@@ -1542,7 +1568,7 @@ public Action:Timer_TurnUndeadAimDelay(Handle:timer, DataPack:DP) {
 	Pos[1] = DP.ReadCell();
 	Pos[2] = DP.ReadCell();
 	CreateParticle(PARTICLE_TURNUNDEAD, 1.0, Pos);
-	for (new i = 1; i < MAXPLAYERS; i++) {
+	for (new i = 1; i < MAX_PLAYERS; i++) {
 		if (IsAliveSpecialInf(i)) {
 			new Float:distance = GetEntityPosDistance(i, Pos);
 			if (distance <= TURN_UNDEAD_DIST) {
@@ -1988,7 +2014,7 @@ void DetectInfect(int client)
 		{
 			if (GetEntityPosDistance(i, pos) <= range)
 			{
-				GlowForSecs(i, 255, 0, 255, durningTime);
+				GlowForSecs(i, 255, 255, 255, durningTime);
 			}
 		}
 		else if (IsInf(i))
@@ -2155,7 +2181,6 @@ public Action:Timer_Unfreeze(Handle:timer, any:client) {
 
 public SlowForSecs(Float:time, client) {
 	if (State_Slow&&Slow_Timer!=null)KillTimer(Slow_Timer);
-	
 	State_Slow = true;
 	time_weight = 0.6;
 	PrepareAndEmitSoundtoAll("skills\\slomo.mp3", .entity = client, .volume = 1.0);
@@ -2186,7 +2211,7 @@ public Action:Timer_Unslow(Handle:timer, any:client) {
 //===========================================================
 
 public bool:IsPlayer(client) {
-	if ((client < 1) || (client > MAXPLAYERS)) return false;
+	if ((client < 1) || (client > MAX_PLAYERS)) return false;
 	if (client>0&&IsValidEntity(client)&&IsFakeClient(client)) return false;
 	return true;
 }
@@ -2221,7 +2246,7 @@ public bool IsWitch(int entity)
 }
 
 public bool:IsAliveSpecialInf(client) {
-	if (client > MaxClients || client <= 0) 
+	if (client > MAX_PLAYERS || client <= 0) 
 	return false;
 	return (IsClientInGame(client) == true)
 	&& (IsPlayerAlive(client) == true)
@@ -2235,7 +2260,7 @@ public bool:IsInf(client) {
 }
 
 public bool:IsSpecialInf(client) {
-	if (client > MaxClients || client <= 0) return false;
+	if (client > MAX_PLAYERS || client <= 0) return false;
 	return (IsClientInGame(client) == true)
 	&& (GetClientTeam(client) == 3);
 }
@@ -2257,7 +2282,7 @@ bool IsSurvivor(int client)
 
 bool IsValidClient(int client, bool replaycheck = true)
 {
-	if (client > 0 && client <= MaxClients && IsClientInGame(client))
+	if (client > 0 && client <= MAX_PLAYERS && IsClientInGame(client))
 	{
 		if (replaycheck)
 		{
@@ -2305,7 +2330,7 @@ public GetAimOrigin(client, Float:hOrigin[3], Float:back_offset) {
 }
 
 public bool:TraceEntityFilterPlayer(entity, contentsMask) {
-	if (entity > MaxClients) {
+	if (entity > MAX_PLAYERS) {
 		return true;
 	} else {
 		return IsAliveSpecialInf(entity);
@@ -2491,7 +2516,7 @@ Action Timer_OnPummelResetAnim(Handle timer, int client)
 
 public Action:Event_Hurt(victim, &attacker, &inflictor, &Float:damage, &damagetype, &weapon, Float:damageForce[3], Float:damagePosition[3], damagecustom)
 {
-	if(victim > MaxClients || victim < 1)
+	if(victim > MAX_PLAYERS || victim < 1)
 		return Plugin_Continue;
 
 	if(Invulnerable[victim])
