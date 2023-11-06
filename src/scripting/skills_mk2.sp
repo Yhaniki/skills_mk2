@@ -17,7 +17,7 @@
 #define MAXSKILLS                       (64)
 #define MAXENTITIES                     (4096)
 #define PANIC_SEC                       (120.0)
-#define EAGLE_EYES_RANGE                (2000.0)
+#define EAGLE_EYE_RANGE                 (2000.0)
 #define PARTICLE_EXPLOSION              ("Skill_Explosion")
 #define PARTICLE_EXPLOSION2             ("Skill_Explosion_2")
 #define PARTICLE_EAGLEEYE               ("Skill_EagleEye")
@@ -244,10 +244,15 @@ MRESReturn TestMeleeSwingCollisionPre(int pThis, Handle hReturn)
 	if( IsValidEntity(pThis) )
 	{
 		int owner = GetEntPropEnt(pThis, Prop_Send, "m_hOwnerEntity");
-		if(StrEqual(Skill_Name[Skill[owner]], "Mana Shield 魔心護盾"))
+		if(State_ManaShield[owner])
+		{
 			g_hCvarMeleeRange.SetInt(10);
+			PrintToChat(owner,"Miss!");
+		}
 		else
+		{
 			g_hCvarMeleeRange.SetInt(g_iStockRange);
+		}
 	}
 
 	return MRES_Ignored;
@@ -638,8 +643,7 @@ public Skill_Change_Menu(client) {
 }
 
 public Skill_Change(client, skill) {
-	SetEntProp(client, Prop_Send, "m_glowColorOverride", 0);
-	SetEntProp(client, Prop_Send, "m_iGlowType", 0);
+	UnGlow(client);
 	new skill_using = Skill[client];
 	
 	if (skill == skill_using) return;
@@ -2002,14 +2006,29 @@ void DetectInfect(int client)
 	const float durningTime = 10.0;
 	// This number of seconds is longer than eagleeye's casting time, 
 	// so that it will not be interrupted during the casting process.
-	float range = EAGLE_EYES_RANGE;
+	float range = EAGLE_EYE_RANGE;
 	float pos[3];
 
 	GetClientAbsOrigin(client, pos);
 	
-	for (int i = 1; i <= GetEntityCount(); i++)
+	for(int i = 1; i <= MAX_PLAYERS; i++)
 	{
-		if (!IsValidEntity(i) || State_Glow[i] || !IsAlive(i)) continue;
+		if(!IsClientInGame(i) || !IsPlayerAlive(i) || State_Glow[i]) continue;
+
+		if (GetClientTeam(i) == 3)
+		{
+			if (GetEntityPosDistance(i, pos) <= range)
+			{
+				GlowForSecs(i, 150, 100, 0, durningTime);
+			}
+		}
+	}
+	int EntityCount = GetEntityCount();
+	for (int i = MAX_PLAYERS + 1; i <= EntityCount; i++)
+	{
+		if (!IsValidEntity(i) || !IsAlive(i) || State_Glow[i])
+			continue;
+
 		if (IsWitch(i))
 		{
 			if (GetEntityPosDistance(i, pos) <= range)
@@ -2022,13 +2041,6 @@ void DetectInfect(int client)
 			if (GetEntityPosDistance(i, pos) <= range)
 			{
 				GlowForSecs(i, 200, 0, 0, durningTime);
-			}
-		}
-		else if (IsAliveSpecialInf(i))
-		{
-			if (GetEntityPosDistance(i, pos) <= range)
-			{
-				GlowForSecs(i, 150, 100, 0, durningTime);
 			}
 		}
 	}
@@ -2079,14 +2091,12 @@ public Action:Event_DmgInflicted(Handle:event, const String:name[], bool:dontBro
 //===========================================================
 //========================== Glow ===========================
 //===========================================================
-
 public void GlowForSecs(entity, r, g, b, Float:time) {
 	if(!IsValidEntity(entity))return;
 	if (entity < MAXENTITIES &&
 		entity > 0 &&
 		State_Glow[entity] &&
-		Glow_Timer[entity] != null &&
-		Glow_Timer[entity] != INVALID_HANDLE)
+		Glow_Timer[entity] != null)
 	{
 		KillTimer(Glow_Timer[entity]);
 	}
@@ -2095,8 +2105,10 @@ public void GlowForSecs(entity, r, g, b, Float:time) {
 	// new glowcolor = r + g * 256 + b * 65536;
 	int glowcolor = r | (g << 8) | (b << 16);
 	if (!HasEntProp(entity, Prop_Send, "m_glowColorOverride")) return;
+	SetEntProp(entity, Prop_Send, "m_nGlowRange", 3000);
 	SetEntProp(entity, Prop_Send, "m_glowColorOverride", glowcolor);
 	SetEntProp(entity, Prop_Send, "m_iGlowType", 3);
+	AcceptEntityInput(entity, "StartGlowing");
 	Glow_Timer[entity] = CreateTimer(time, Timer:Timer_Unglow, entity);
 }
 public void OnEntityDestroyed(int entity)
@@ -2104,34 +2116,21 @@ public void OnEntityDestroyed(int entity)
 	if (entity < 0)
 		return;
 
-	// ge_bMoveUp[entity] = false;
-	if (!HasEntProp(entity, Prop_Send, "m_glowColorOverride")) return;
-	SetEntProp(entity, Prop_Send, "m_glowColorOverride", 0);
-	SetEntProp(entity, Prop_Send, "m_iGlowType", 0);
+	UnGlow(entity);
 }
 public Action:Timer_Unglow(Handle:timer, any:entity) {
-	State_Glow[entity] = false;
-
-	if (!IsValidEntity(entity)) return Plugin_Stop;
-	// if (!(IsPlayer(entity) || IsInf(entity) || IsSpecialInf(entity))) return Plugin_Stop;
-	if (!HasEntProp(entity, Prop_Send, "m_glowColorOverride")) return Plugin_Stop;
-	SetEntProp(entity, Prop_Send, "m_glowColorOverride", 0);
-	SetEntProp(entity, Prop_Send, "m_iGlowType", 0);
+	UnGlow(entity);
 	Glow_Timer[entity] = null;
 	return Plugin_Stop;
 }
 
 void UnGlow(int entity)
 {
-	if (entity < MAXENTITIES &&
-		entity > 0 &&
-		State_Glow[entity] &&
-		Glow_Timer[entity] != null &&
-		Glow_Timer[entity] != INVALID_HANDLE)
-	{
-		KillTimer(Glow_Timer[entity]);
-	}
-	Glow_Timer[entity] = CreateTimer(0.0, Timer:Timer_Unglow, entity);
+	State_Glow[entity] = false;
+
+	if (!IsValidEntity(entity)) return;
+	if (!HasEntProp(entity, Prop_Send, "m_iGlowType")) return;
+	SetEntProp(entity, Prop_Send, "m_iGlowType", 0);
 }
 
 public Action:Event_DeathUnglow(Handle:event, const String:name[], bool:dontBroadcast) {
@@ -2409,7 +2408,15 @@ public Float:GetEntityEntityDistance(entity1, entity2) {
 public Float:GetEntityPosDistance(entity, Float:pos[3]) {
 	new Float:Pos1[3];
 	GetEntPropVector(entity, Prop_Send, "m_vecOrigin", Pos1);
-	return GetVectorDistance(Pos1, pos);
+	//TODO: when jockey is riding we cannot get the origin so set the speacil case to it
+	if (Pos1[0] == 0.0 && Pos1[1] == 0.0 && Pos1[2] == 0.0)
+	{
+		return 0.0;
+	}
+	else
+	{
+		return GetVectorDistance(Pos1, pos);
+	}
 }
 
 public
