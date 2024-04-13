@@ -1333,7 +1333,7 @@ public Action ShockWave(Handle timer, DataPack DP)
 		StaggerClient(GetClientUserId(entity), beaPos);
 		if (!IsFakeClient(entity))
 			Shake(entity, 32.0);
-		damage *= 0.1;
+		damage *= 0.07;
 		switch (GetRandomInt(0, 1))
 		{
 		case 0:
