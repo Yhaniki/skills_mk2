@@ -1,6 +1,6 @@
 #define PLUGIN_VERSION                  "0.6"
 #define SKILL_DEBUG                     (false)
-#define MAX_PLAYERS                     (20)
+#define MAX_PLAYERS                     (18)
 #define INIT_MP                         (50.0)
 #define GAMEDATA_MELEE                  ("l4d2_melee_range")
 #define TURN_UNDEAD_DIST                (1000.0)
