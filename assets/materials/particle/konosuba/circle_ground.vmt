@@ -1,0 +1,32 @@
+// 給「腳下水平魔法陣」使用的材質
+//
+// 重點修正紀錄：
+//  - 移除 $translucent      : 跟 $additive 互斥（兩個都開會引發 vertex format 錯誤）
+//  - 移除 $vertexcolor / $vertexalpha : 模型本身沒帶 vertex color，shader 不該要求
+//  - 加入 $model 1          : 明確告訴 shader「這是模型用，不是 brush」
+//  - $basetexture 改指向 circle_ground.vtf (4 幀動畫專用，跟 PCF 用的 circle.vtf 隔離)
+//  - frameRate 拉到 15      : 4 幀以 15fps 跑 → 每 0.27 秒一輪，視覺有「閃爍感」
+//
+// !! 重要 !!
+//   $additive 1 完全不看 alpha 通道，是把 RGB 直接「加進」畫面。
+//   所以 VTF 內部的透明區 (alpha=0) 必須在像素層面 RGB 也=0
+//   (= "premultiplied alpha")，否則畫面上會看到方塊狀的發光區。
+//   這個工作由 split_circle_vtf.py 在生成 VTF 時處理。
+"UnlitGeneric"
+{
+	"$basetexture"   "particle/konosuba/circle_ground"
+	"$additive"      "1"
+	"$nocull"        "1"
+	"$model"         "1"
+	"$nofog"         "1"
+
+	"Proxies"
+	{
+		"AnimatedTexture"
+		{
+			"animatedTextureVar"          "$basetexture"
+			"animatedTextureFrameNumVar"  "$frame"
+			"animatedTextureFrameRate"    "15"
+		}
+	}
+}

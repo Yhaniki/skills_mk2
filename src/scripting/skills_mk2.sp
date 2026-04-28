@@ -30,6 +30,14 @@
 #define PARTICLE_NUKE2                  ("nuke_core")
 #define NUKE_SOUND                      ("nuke/explosion.mp3")
 
+// === 腳下水平魔法陣 (薄片 mdl + UnlitGeneric 材質) ===
+// 重要：用 circle_ground.vtf (4 幀動畫版)，跟原本 PCF 用的 circle.vtf (atlas) 是兩個獨立檔
+#define MAGIC_CIRCLE_MODEL              ("models/konosuba/magic_circle_plane.mdl")
+#define MAGIC_CIRCLE_VMT_GROUND         ("materials/particle/konosuba/circle_ground.vmt")
+#define MAGIC_CIRCLE_VTF                ("materials/particle/konosuba/circle_ground.vtf")
+#define MAGIC_CIRCLE_TICK               (0.03)        // 旋轉更新頻率 (秒)
+#define MAGIC_CIRCLE_FOOT_OFFSET        (1.5)         // 高過腳底多少 (避免 z-fighting)
+
 #include <sourcemod>
 #include <sdktools>
 #include <sdkhooks>
@@ -40,6 +48,7 @@
 #include "resourcemanager.sp"
 // #include "damage.sp"
 #include "l4d_dissolve_infected.sp"
+#include "magic_atmosphere.sp"
 
 enum player_state { PLAYER_ALIVE = 2, PLAYER_INCAP = 1, PLAYER_DEAD = 0 }
 
@@ -78,6 +87,10 @@ new Slow_Ent;
 new bool:State_Slow;
 new Handle:Slow_Timer;
 
+// 每位玩家「腳下魔法陣」的 ent ref 與當前 yaw 角度
+new g_iMagicCircleRef[MAX_PLAYERS + 1];
+new Float:g_fMagicCircleYaw[MAX_PLAYERS + 1];
+
 enum skill_type { TYPE_NORMAL = 0, TYPE_PASSIVE = 1 }
 
 new skill_type:Skill_Type[MAXSKILLS];
@@ -105,7 +118,7 @@ public Plugin myinfo = {
 	url = "https://github.com/Yhaniki/skills_mk2"
 }
 
-static char g_sWeaponNames[ALL_WEAPONS][] = 
+static char g_sWeaponNames[ALL_WEAPONS][] =
 {
 	"weapon_autoshotgun",
 	"weapon_grenade_launcher" ,
@@ -163,63 +176,15 @@ static char g_sWeaponNames[ALL_WEAPONS][] =
 	"weapon_cola_bottles"
 };
 
-static char g_sWeaponTranslate[ALL_WEAPONS][] = 
+// 透過 translations/skills_mk2.phrases.txt 取得武器翻譯名稱
+// idx 對應 g_sWeaponNames 的索引；target 為要翻譯給哪個 client（LANG_SERVER 為伺服器語言）
+stock void GetWeaponTranslate(int idx, int target, char[] buffer, int maxlen)
 {
-	"自動霰彈槍",
-	"榴彈發射器" ,
-	"獵槍",
-	"手槍" ,
-	"麥格農手槍" ,
-	"泵式霰彈槍" ,
-	"M-16突擊步槍" ,
-	"AK47" ,
-	"SCAR戰術步槍" ,
-	"M60機槍" ,
-	"SG552步槍" ,
-	"鉻管霰彈槍",
-	"戰術霰彈槍" ,
-	"烏茲衝鋒槍" ,
-	"MP5衝鋒槍" ,
-	"滅音衝鋒槍" ,
-	"麥格農狙擊槍",
-	"狙擊步槍" ,
-	"斯泰爾斥侯步槍" ,
-
-	"球棒",
-	"板球棒",
-	"鐵撬",
-	"電吉他",
-	"消防斧",
-	"平底鍋",
-	"高爾夫球棒",
-	"武士刀",
-	"砍刀",
-	"警棍",
-	"小刀",
-
-	"電鋸",
-
-	"腎上腺素",
-	"電擊器",
-	"急救包",
-	"止痛藥",
-
-	"煙火",
-	"瓦斯桶",
-	"氧氣瓶",
-	"煤氣罐",
-
-	"汽油彈",
-	"土製炸彈",
-	"膽汁罐",
-
-	"彈藥",
-	"高爆彈藥",
-	"燃燒彈藥",
-
-	"小矮人",
-	"可樂"
-};
+	if (idx >= 0 && idx < ALL_WEAPONS)
+		Format(buffer, maxlen, "%T", g_sWeaponNames[idx], target);
+	else
+		strcopy(buffer, maxlen, "");
+}
 
 static char g_sWeapons[MAX_WEAPONS][] =
 {
@@ -267,6 +232,7 @@ MRESReturn TestMeleeSwingCollisionPost(int pThis, Handle hReturn)
 public OnPluginStart() {
 	PrintToServer("=============Plugin Start===============");
 //------------------------------
+	LoadTranslations("skills_mk2.phrases");
 	char sPath[PLATFORM_MAX_PATH];
 	BuildPath(Path_SM, sPath, sizeof(sPath), "gamedata/%s.txt", GAMEDATA_MELEE);
 	if( FileExists(sPath) == false ) SetFailState("\n==========\nMissing required file: \"%s\".\nRead installation instructions again.\n==========", sPath);
@@ -297,6 +263,8 @@ public OnPluginStart() {
 	{
 		Invulnerable[i] = false;
 		Skill_EX_Using[i] = false;
+		g_iMagicCircleRef[i] = INVALID_ENT_REFERENCE;
+		g_fMagicCircleYaw[i] = 0.0;
 	}
 	SetWeaponNameId();
 	OnWeaponDrop = CreateGlobalForward("OnWeaponDrop", ET_Event, Param_Cell, Param_CellByRef);
@@ -333,10 +301,35 @@ public OnPluginStart() {
 	RegConsoleCmd("drop",					Event_SkillStateTransition);
 	RegConsoleCmd("fix",					Event_SkillStateTransition);
 
+	// 管理員：瞬間將所有真人玩家魔力補滿（控制台或遊戲內均需 ADMFLAG_ROOT）
+	RegAdminCmd("sm_skills_fillmp", Cmd_SkillsFillAllMP, ADMFLAG_ROOT, "[skills_mk2] Instant max MP for all human players.");
+
 	HookEvent("gameinstructor_nodraw", Event_NoDraw, EventHookMode_PostNoCopy);
 	HookEvent("gameinstructor_draw", Event_Draw, EventHookMode_PostNoCopy);
 	TurnUndeadInit();
 	CheckPlayerConnections();
+}
+
+// sm_skills_fillmp — 將所有真人玩家魔力設為上限（插件只對非 Bot 初始化技能）
+public Action Cmd_SkillsFillAllMP(int client, int args)
+{
+	int n = 0;
+	for (int i = 1; i <= MAX_PLAYERS; i++)
+	{
+		if (!IsClientInGame(i))
+			continue;
+		if (!IsPlayer(i))
+			continue;
+		Skill_MP[i] = MP_MAX;
+		n++;
+	}
+
+	if (!client)
+		PrintToServer("[skills_mk2] Filled MP to max for %d human player(s).", n);
+	else
+		ReplyToCommand(client, "\x04[skills_mk2]\x01 已將 %d 名玩家的魔力補滿。", n);
+
+	return Plugin_Handled;
 }
 
 public CheckPlayerConnections() {
@@ -352,19 +345,20 @@ public OnMapStart() {
 	Setup_Materials();
 	TrunUndeadMapStart();
 	CheckPlayerConnections();
+	ResetMagicAtmosphere();
 }
 
 public Setup_Materials() {
 	PrintToServer("=============Material Setup=============");
 	SetupMaterial("sound\\skills\\explosion.mp3");
 	SetupSound("skills\\explosion.mp3", true);
-	
+
 	SetupMaterial("sound\\skills\\eagleeye.mp3");
 	SetupSound("skills\\eagleeye.mp3", true);
-	
+
 	SetupMaterial("sound\\skills\\slomo.mp3");
 	SetupSound("skills\\slomo.mp3", true);
-	
+
 	SetupMaterial("sound\\skills\\slomo_end.mp3");
 	SetupSound("skills\\slomo_end.mp3", true);
 
@@ -393,6 +387,15 @@ public Setup_Materials() {
 	PrecacheParticle(PARTICLE_MAGIC_CIRCLE);
 	PrecacheParticle(PARTICLE_NUKE1);
 	PrecacheParticle(PARTICLE_NUKE2);
+
+	// 腳下水平魔法陣 (mdl + 動畫材質)
+	SetupMaterial(MAGIC_CIRCLE_VTF);
+	SetupMaterial(MAGIC_CIRCLE_VMT_GROUND);
+	SetupMaterial(MAGIC_CIRCLE_MODEL);
+	SetupMaterial("models/konosuba/magic_circle_plane.vvd");
+	SetupMaterial("models/konosuba/magic_circle_plane.dx90.vtx");
+	if (FileExists(MAGIC_CIRCLE_MODEL, true))
+		PrecacheModel(MAGIC_CIRCLE_MODEL, true);
 	PrintToServer("===========Material Setup End===========");
 }
 
@@ -480,6 +483,7 @@ public OnClientDisconnect(client)
 {
 	if(Hooked[client])
 		SDKUnhook(client, SDKHook_OnTakeDamage, Event_Hurt);
+	KillMagicCircle(client);
 }
 
 public void Event_Draw(Event event, const char[] name, bool dontBroadcast)
@@ -523,7 +527,7 @@ public Event_StateTransition(Handle:event, const String:name[], bool:dontBroadca
 	}
 
 	if (!IsPlayer(client)) return;
-	
+
 	if (StrEqual(name, "player_disconnect")) {
 		State_Connection[client] = false;
 		State_Player[client] = PLAYER_DEAD;
@@ -541,14 +545,14 @@ public Event_StateTransition(Handle:event, const String:name[], bool:dontBroadca
 	} else if (StrEqual(name, "player_spawn") || StrEqual(name, "revive_success")) {
 		State_Player[client] = PLAYER_ALIVE;
 	} else if (StrEqual(name, "player_incapacitated")) {
-		State_Player[client] = PLAYER_INCAP; 
+		State_Player[client] = PLAYER_INCAP;
 	} else if (StrEqual(name, "player_death")) {
 		State_Player[client] = PLAYER_DEAD;
 		Interrupt_Skill(client);
 	} else if (StrEqual(name, "player_afk")) {
 		UnGlow(client);
 	}
-	
+
 	//if (!StrEqual(name, "player_disconnect")) TriggerTimer(Skill_Notify_Timer[client], true);
 	PrintPlayerState(name, client);
 }
@@ -645,9 +649,9 @@ public Skill_Change_Menu(client) {
 public Skill_Change(client, skill) {
 	UnGlow(client);
 	new skill_using = Skill[client];
-	
+
 	if (skill == skill_using) return;
-	
+
 	switch (Skill_State[client]) {
 		case SKILL_RDY: {
 		}
@@ -661,7 +665,7 @@ public Skill_Change(client, skill) {
 			TriggerTimer(Skill_Cooldown_Timer[client]);
 		}
 	}
-	
+
 	switch (Skill_Type[skill_using]) {
 		case TYPE_NORMAL: {
 		}
@@ -692,7 +696,7 @@ public Interrupt_Skill(client) {
 	new skill_using = Skill[client];
 	if (Skill_Type[skill_using]==TYPE_NORMAL)
 	{
-		if ((Skill_State[client] == SKILL_CD) || (Skill_State[client] == SKILL_ACT)) 
+		if ((Skill_State[client] == SKILL_CD) || (Skill_State[client] == SKILL_ACT))
 		{
 			if(Skill_Cooldown_Timer[client]!=null&&
 				Skill_Cooldown_Timer[client]!= INVALID_HANDLE)
@@ -703,7 +707,7 @@ public Interrupt_Skill(client) {
 			if(Skill_Duration_Timer[client]!=null&&
 				Skill_Duration_Timer[client]!= INVALID_HANDLE)
 				TriggerTimer(Skill_Duration_Timer[client]);
-		} 
+		}
 	}
 	if (State_Adrenaline_Boost[client])
 	{
@@ -738,11 +742,11 @@ int GetPlayerReserveAmmo(int client, int weapon)
 void DropActiveWeapon(int client)
 {
 	if (!IsValidClient(client) || !IsSurvivor(client) || !IsPlayerAlive(client) || IsIncapped(client)) return;
-	
+
 	//static char classname[64];
 	//GetEntityClassname(GetPlayerWeaponSlot(client, tester_wep_slot), classname, sizeof(classname));
 	//PrintToChatAll("slot: %s", classname);
-	
+
 	int weapon = GetEntPropEnt(client, Prop_Data, "m_hActiveWeapon");
 	if (RealValidEntity(weapon))
 		DropWeapon(client, weapon);
@@ -783,7 +787,7 @@ void DropWeapon(int client, int weapon)
 			second_clip = clip / 2 + 1;
 			clip = clip / 2;
 		}
-		
+
 		RemovePlayerItem(client, weapon);
 		RemoveEntity(weapon);
 
@@ -802,16 +806,16 @@ void DropWeapon(int client, int weapon)
 		EquipPlayerWeapon(client, single_pistol);
 		SetEntProp(single_pistol, Prop_Send, "m_iClip1", second_clip);
 
-		return;	
+		return;
 	}
-	
+
 	int ammo = GetPlayerReserveAmmo(client, weapon);
 	SDKHooks_DropWeapon(client, weapon);
 	SetPlayerReserveAmmo(client, weapon, 0);
 	SetEntProp(weapon, Prop_Send, "m_iExtraPrimaryAmmo", ammo);
-	
+
 	// if (!g_isSequel) return;
-	
+
 	if (strcmp(classname, "weapon_defibrillator") == 0)
 	{
 		int modelindex = GetEntProp(weapon, Prop_Data, "m_nModelIndex");
@@ -887,7 +891,7 @@ public Action:Event_SkillStateTransition(client, args) {
 
 public Action:Skill_Notify(Handle:timer, any:client) {
 	if (State_Transition[client] || (State_Player[client] == PLAYER_DEAD) || !IsClientInGame(client) || !IsPlayer(client)) return;
-	
+
 	new String:str[MAXCMD] = "";
 	new String:state[MAXCMD] = "";
 	new String:name[MAXCMD] = "";
@@ -1066,7 +1070,7 @@ public Action:Event_MPGain(Handle:event, const String:name[], bool:dontBroadcast
 		if (State_Connection[client]) MP_Increase(client, 50.0);
 	} else if (StrEqual(name, "adrenaline_used")) {
 		client = GetClientOfUserId(GetEventInt(event, "userid"));
-		if (State_Connection[client]) { 
+		if (State_Connection[client]) {
 			MP_Increase(client, 25.0);
 			Skill_Adrenaline_Boost(client);
 		}
@@ -1089,19 +1093,19 @@ public Action:Skill_Adrenaline_Boost_End(Handle:timer, any:client) {
 //----------UTIL----------//
 
 public RegisterSkill(String:skill_name[MAXSKILLNAME],
-					Timer:timer_skill_start, 
-					Timer:timer_skill_end, 
-					Timer:timer_skill_ready, 
+					Timer:timer_skill_start,
+					Timer:timer_skill_end,
+					Timer:timer_skill_ready,
 					Float:skill_duration, Float:skill_cooldown, Float:skill_mpcost)
 {
 	if (skill_num == MAXSKILLS) return;
 
 	Skill_Name[skill_num] = skill_name;
-	
+
 	Timer_Skill_Start[skill_num] = timer_skill_start;
 	Timer_Skill_End[skill_num] = timer_skill_end;
 	Timer_Skill_Ready[skill_num] = timer_skill_ready;
-	
+
 	if (skill_cooldown <= 0.0) {
 		Skill_Type[skill_num] = TYPE_PASSIVE;
 		Skill_Duration[skill_num] = 0.0;
@@ -1113,7 +1117,7 @@ public RegisterSkill(String:skill_name[MAXSKILLNAME],
 		Skill_Cooldown[skill_num] = skill_cooldown;
 		Skill_MPcost[skill_num] = skill_mpcost;
 	}
-	
+
 	skill_num++;
 }
 
@@ -1438,6 +1442,9 @@ public Action:Timer_Skill_EX_End(Handle:timer, any:client)
 		L4D_SetPlayerIncappedDamage(client, client);
 	}
 
+	// 備援還原：萬一前面的 Timer 沒跑到（被砍 / 異常），這裡仍會把氛圍復原
+	RestoreMagicAtmosphere();
+
 	return Plugin_Stop;
 }
 
@@ -1466,10 +1473,142 @@ void ParticleFollow(char[] particleName, int client, float time)
 		SetVariantString("!activator");
 		AcceptEntityInput(entity, "SetParent", client);
 		ActivateEntity(entity);
-		AcceptEntityInput(entity, "Start"); 
+		AcceptEntityInput(entity, "Start");
 
 		CreateTimer(time, DeleteParticles, entity);
 	}
+}
+
+//------------------------------------//
+//----------腳下水平魔法陣-------------//
+//------------------------------------//
+// 立即把該玩家身上的魔法陣移除
+stock void KillMagicCircle(int client)
+{
+	if (client < 0 || client > MAX_PLAYERS) return;
+	int ent = EntRefToEntIndex(g_iMagicCircleRef[client]);
+	if (ent != INVALID_ENT_REFERENCE && IsValidEntity(ent))
+	{
+		AcceptEntityInput(ent, "kill");
+	}
+	g_iMagicCircleRef[client] = INVALID_ENT_REFERENCE;
+	g_fMagicCircleYaw[client] = 0.0;
+}
+
+// 在玩家腳下生成持續 duration 秒的水平魔法陣
+//   scale       : 大小倍率 (1.0 = mdl 原始 64x64 單位)
+//   rotateSpeed : 每秒旋轉度數 (正:逆時針, 負:順時針)
+//
+// 為什麼「不 SetParent」：
+//   parent 機制每 frame 會用 compose(parent.abs, local) 重算 child.abs，
+//   parent 的視角 pitch 變化會把 prop 拉斜，看起來像立起來。
+//   不 parent 直接每 tick 用 TeleportEntity 設世界座標 + 世界角度，
+//   prop.abs 永遠由我們強制鎖在 (0, yaw_accum, 0)，絕對水平。
+//
+// 平滑性：
+//   TeleportEntity 走 SetAbsOrigin / SetAbsAngles，會正確 networked 給 client。
+//   Client 端對 m_vecOrigin / m_angRotation 預設有插值 (cl_interp)，
+//   所以 30Hz 更新在 client 看到的還是平滑連續移動。
+void MagicCircleAtFeet(int client, float duration, float scale = 3.6, float rotateSpeed = 35.0)
+{
+	if (!IsClientInGame(client) || !IsPlayerAlive(client)) return;
+	if (!FileExists(MAGIC_CIRCLE_MODEL, true))
+	{
+		// 還沒部署 mdl 時直接靜默跳過，不要中斷爆裂流程
+		LogMessage("[skills_mk2] %s 不存在，跳過腳下魔法陣。請先部署模型。", MAGIC_CIRCLE_MODEL);
+		return;
+	}
+
+	KillMagicCircle(client); // 避免疊加到舊的
+
+	int prop = CreateEntityByName("prop_dynamic_override");
+	if (prop == -1) return;
+
+	DispatchKeyValue(prop, "model", MAGIC_CIRCLE_MODEL);
+	DispatchKeyValue(prop, "solid", "0");
+	DispatchKeyValue(prop, "DefaultAnim", "idle");
+	DispatchKeyValue(prop, "disableshadows", "1");
+	DispatchKeyValue(prop, "disablereceiveshadows", "1");
+	DispatchKeyValue(prop, "spawnflags", "256"); // ignore +use
+
+	char buf[16];
+	FormatEx(buf, sizeof buf, "%.3f", scale);
+	DispatchKeyValue(prop, "modelscale", buf);
+
+	DispatchSpawn(prop);
+	ActivateEntity(prop);
+
+	// 白色不染色：讓貼圖原本的紅色直接發光，不會被再乘一次紅
+	SetEntityRenderMode(prop, RENDER_TRANSADDFRAMEBLEND);
+	SetEntityRenderColor(prop, 255, 255, 255, 255);
+
+	// 初始位置：玩家腳邊 + 1.5z 避免 z-fighting，世界角度 (0,0,0) 平躺
+	float pos[3];
+	GetClientAbsOrigin(client, pos);
+	pos[2] += MAGIC_CIRCLE_FOOT_OFFSET;
+
+	float zeroAng[3] = {0.0, 0.0, 0.0};
+	TeleportEntity(prop, pos, zeroAng, NULL_VECTOR);
+
+	g_iMagicCircleRef[client] = EntIndexToEntRef(prop);
+	g_fMagicCircleYaw[client] = 0.0;
+
+	// timer 每 tick 同時更新「位置」+「世界角度」，兩個一起鎖死
+	DataPack dp = new DataPack();
+	dp.WriteCell(GetClientUserId(client));
+	dp.WriteFloat(rotateSpeed);
+	dp.WriteFloat(GetGameTime() + duration);
+	CreateTimer(MAGIC_CIRCLE_TICK, Timer_UpdateMagicCircle, dp,
+		TIMER_REPEAT | TIMER_FLAG_NO_MAPCHANGE | TIMER_DATA_HNDL_CLOSE);
+}
+
+// 每 tick 更新位置 (跟玩家腳下) + 世界角度 (永遠 0,0,0 + yaw)
+public Action Timer_UpdateMagicCircle(Handle timer, DataPack dp)
+{
+	dp.Reset();
+	int userid       = dp.ReadCell();
+	float rotateSpeed = dp.ReadFloat();
+	float endTime    = dp.ReadFloat();
+
+	int client = GetClientOfUserId(userid);
+	if (client <= 0 || !IsClientInGame(client))
+	{
+		if (client > 0) KillMagicCircle(client);
+		return Plugin_Stop;
+	}
+	if (g_iMagicCircleRef[client] == INVALID_ENT_REFERENCE)
+		return Plugin_Stop;
+
+	int prop = EntRefToEntIndex(g_iMagicCircleRef[client]);
+	if (prop == INVALID_ENT_REFERENCE)
+	{
+		g_iMagicCircleRef[client] = INVALID_ENT_REFERENCE;
+		return Plugin_Stop;
+	}
+
+	if (!IsPlayerAlive(client) || GetGameTime() >= endTime)
+	{
+		KillMagicCircle(client);
+		return Plugin_Stop;
+	}
+
+	// 累進 yaw
+	g_fMagicCircleYaw[client] += rotateSpeed * MAGIC_CIRCLE_TICK;
+	if (g_fMagicCircleYaw[client] >= 360.0)  g_fMagicCircleYaw[client] -= 360.0;
+	if (g_fMagicCircleYaw[client] < 0.0)     g_fMagicCircleYaw[client] += 360.0;
+
+	// 同時設位置 + 世界角度 (沒 parent，所以 abs 不會被任何人拉走)
+	float pos[3];
+	GetClientAbsOrigin(client, pos);
+	pos[2] += MAGIC_CIRCLE_FOOT_OFFSET;
+
+	float ang[3];
+	ang[0] = 0.0;                       // pitch: 永遠平躺
+	ang[1] = g_fMagicCircleYaw[client]; // yaw  : 我們自己控
+	ang[2] = 0.0;                       // roll : 永遠不歪
+
+	TeleportEntity(prop, pos, ang, NULL_VECTOR);
+	return Plugin_Continue;
 }
 
 void MagicActivates(int client)
@@ -1477,6 +1616,9 @@ void MagicActivates(int client)
 	ParticleFollow(PARTICLE_EX_GLOW, client, explosion_ex_delay_secs);
 	ParticleFollow(PARTICLE_EX_LIGHT, client, explosion_ex_delay_secs);
 	// ParticleFollow(PARTICLE_MAGIC_CIRCLE, client, explosion_ex_delay_secs-4.0);
+
+	// 腳下水平魔法陣 (在爆裂結束前 0.5 秒收回，免得跟爆炸閃光打架)
+	MagicCircleAtFeet(client, explosion_ex_delay_secs - 0.5, 3.6, 35.0);
 }
 
 public Action:Timer_Skill_EX_Start(Handle:timer, any:client)
@@ -1489,14 +1631,16 @@ public Action:Timer_Skill_EX_Start(Handle:timer, any:client)
 	PrintToChatAll("\x04%N \x01エクスプロージョン!", client);
 
 	SlowForSecs(explosion_ex_delay_secs, client);
-	// CreateParticle(PARTICLE_EX_GLOW, explosion_ex_delay_secs, Pos);
-	// CreateParticle(PARTICLE_EX_LIGHT, explosion_ex_delay_secs, Pos);
-	// CreateParticle(PARTICLE_MAGIC_CIRCLE, explosion_ex_delay_secs-4.0, Pos);
 	EmitSoundToAll("skills\\explosion_full.mp3");
 	GlowForSecs(client, 255, 0, 0, explosion_ex_delay_secs);
 	// FreezeForSecs(client, explosion_ex_delay_secs);
 	Invulnerable[client] = true;
 	MagicActivates(client);
+
+	// 套用魔法氛圍，並在爆炸完成後再還原（讓爆裂後的明亮對比更強烈）
+	ApplyMagicAtmosphere();
+	ScheduleRestoreAtmosphere(explosion_ex_delay_secs + 0.5);
+
 	CreateParticle(PARTICLE_EX_GLOW_BIG, explosion_ex_delay_secs, Pos);
 	DataPack DP = new DataPack();
 	DP.WriteCell(client);
@@ -1581,7 +1725,7 @@ public Action:Timer_TurnUndeadAimDelay(Handle:timer, DataPack:DP) {
 			}
 		}
 	}
-	
+
 	new entity = -1;
 	while ((entity = FindEntityByClassname(entity, "infected")) != INVALID_ENT_REFERENCE) {
 		new health = GetEntProp(entity, Prop_Data, "m_iHealth");
@@ -1604,7 +1748,7 @@ public Action:Timer_TurnUndeadAimDelay(Handle:timer, DataPack:DP) {
 
 	CreateTimer(1.0, Timer:Timer_UndeadRush, client);
 	// PropaneAtPos(Pos);
-	
+
 	return Plugin_Stop;
 }
 public TurnUndeadAim(client, Float:delay) {
@@ -1772,7 +1916,7 @@ public SetItemToPlayer(int client, char[] item, int index, int ammo, int clip)
 			havePistol = true;
 		}
 	}
-	if((slot>=0&&slot!=1)||(slot==1&&!havePistol)) 
+	if((slot>=0&&slot!=1)||(slot==1&&!havePistol))
 	{
 		ForceWeaponDropBySlot(client, slot);
 	}
@@ -1801,7 +1945,7 @@ public SetItemToPlayer(int client, char[] item, int index, int ammo, int clip)
 				{
 					bool m_isDualWielding = view_as<bool>(GetEntProp(wep_Secondary, Prop_Send, "m_isDualWielding"));
 					GetEdictClassname(wep_Secondary, item, MAXCMD);
-					
+
 					if (StrEqual(item, "weapon_pistol") &&
 						m_isDualWielding)
 					{
@@ -1891,7 +2035,9 @@ public Action:Skill_Steal(Handle:timer, DataPack:DP)
 					int idx = GetItemTranslateIdx(item);
 					if (idx >= 0)
 					{
-						PrintToChatAll("\x04%N \x01從 \x04%N \x01身上偷了 \x04%s", client, entityId, g_sWeaponTranslate[idx]);
+						char wname[MAXCMD];
+						GetWeaponTranslate(idx, LANG_SERVER, wname, sizeof(wname));
+						PrintToChatAll("\x04%N \x01從 \x04%N \x01身上偷了 \x04%s", client, entityId, wname);
 					}
 					else if(weaponIdx<ALL_WEAPONS)
 					{
@@ -1925,7 +2071,9 @@ public Action:Skill_Steal(Handle:timer, DataPack:DP)
 			int idx = GetItemIdx(weaponIdx);
 			if (idx >= 0)
 			{
-				PrintToChatAll("\x04%N \x01從 \x04殭屍 \x01身上偷了 \x04%s", client, g_sWeaponTranslate[idx]);
+				char wname[MAXCMD];
+				GetWeaponTranslate(idx, LANG_SERVER, wname, sizeof(wname));
+				PrintToChatAll("\x04%N \x01從 \x04殭屍 \x01身上偷了 \x04%s", client, wname);
 			}
 			else
 			{
@@ -1968,17 +2116,17 @@ public Action:Timer_Skill_ManaShield_Start(Handle:timer, any:client) {
 	int glowcolor = 255 | (255 << 8) | (0 << 16);
 	SetEntProp(client, Prop_Send, "m_glowColorOverride", glowcolor);
 	SetEntProp(client, Prop_Send, "m_iGlowType", 3);
-	
+
 	State_ManaShield[client] = true;
 	//PrintToChatAll("%N - Mana Shield!", client);
 	TriggerTimer(Skill_Notify_Timer[client]);
-	
+
 	return Plugin_Stop;
 }
 
 public Action:Timer_Skill_ManaShield_End(Handle:timer, any:client) {
 	State_ManaShield[client] = false;
-	
+
 	Skill_State[client] = SKILL_CD;
 	TriggerTimer(Skill_Notify_Timer[client]);
 	return Plugin_Stop;
@@ -2004,13 +2152,13 @@ public float DmgReduce(int client, float dmg)
 void DetectInfect(int client)
 {
 	const float durningTime = 10.0;
-	// This number of seconds is longer than eagleeye's casting time, 
+	// This number of seconds is longer than eagleeye's casting time,
 	// so that it will not be interrupted during the casting process.
 	float range = EAGLE_EYE_RANGE;
 	float pos[3];
 
 	GetClientAbsOrigin(client, pos);
-	
+
 	for(int i = 1; i <= MAX_PLAYERS; i++)
 	{
 		if(!IsClientInGame(i) || !IsPlayerAlive(i) || State_Glow[i]) continue;
@@ -2061,13 +2209,13 @@ public Action:Timer_Skill_EagleEye_End(Handle timer, int client)
 
 public Action:Timer_Skill_EagleEye_Start(Handle:timer, any:client) {
 	//PrepareAndEmitSoundtoAll("skills\\eagleeye.mp3", .entity = client, .volume = 1.0);
-	
+
 	GlowForSecs(client, 0, 100, 0, 10.0);
 	SlowForSecs(6.0, client);
 	ParticleFollow(PARTICLE_EAGLEEYE, client, 1.0);
 	DetectInfect(client);
 	PrintToChatAll("\x04%N \x01Eagle Eye!", client);
-	
+
 	return Plugin_Stop;
 }
 
@@ -2082,9 +2230,9 @@ public Action:Event_DmgInflicted(Handle:event, const String:name[], bool:dontBro
 	} else if (StrEqual(name, "infected_hurt")) {
 		dmg = GetEventFloat(event, "amount");
 	}
-	
+
 	if (dmg > 0.0) PrintToChatAll("DMG: %.1f", dmg);
-	
+
 	return Plugin_Continue;
 }
 
@@ -2183,7 +2331,7 @@ public SlowForSecs(Float:time, client) {
 	State_Slow = true;
 	time_weight = 0.6;
 	PrepareAndEmitSoundtoAll("skills\\slomo.mp3", .entity = client, .volume = 1.0);
-	
+
 	Slow_Ent = CreateEntityByName("func_timescale");
 	DispatchKeyValue(Slow_Ent, "desiredTimescale", "0.6");
 	DispatchKeyValue(Slow_Ent, "acceleration", "0.3");
@@ -2199,7 +2347,7 @@ public Action:Timer_Unslow(Handle:timer, any:client) {
 	State_Slow = false;
 	time_weight = 1.0;
 	PrepareAndEmitSoundtoAll("skills\\slomo_end.mp3", .entity = client, .volume = 1.0);
-	
+
 	AcceptEntityInput(Slow_Ent, "Stop");
 	Slow_Timer = null;
 	return Plugin_Stop;
@@ -2215,7 +2363,7 @@ public bool:IsPlayer(client) {
 	return true;
 }
 
-public PrintPlayerState(const String:name[], client) {	
+public PrintPlayerState(const String:name[], client) {
 	PrintToServer("========== EVENT: %s %N", name, client);
 	PrintToServer("========== STATE: %d %d %d", State_Connection[client], State_Transition[client], State_Player[client]);
 }
@@ -2245,7 +2393,7 @@ public bool IsWitch(int entity)
 }
 
 public bool:IsAliveSpecialInf(client) {
-	if (client > MAX_PLAYERS || client <= 0) 
+	if (client > MAX_PLAYERS || client <= 0)
 	return false;
 	return (IsClientInGame(client) == true)
 	&& (IsPlayerAlive(client) == true)
@@ -2301,21 +2449,21 @@ public GetAimOrigin(client, Float:hOrigin[3], Float:back_offset) {
 	GetClientEyeAngles(client, vAngles);
 
 	//PrintToChatAll("%f %f %f", vAngles[0], vAngles[1], vAngles[2]);
-	
+
 	new Handle:trace = TR_TraceRayFilterEx(fOrigin, vAngles, MASK_SHOT, RayType_Infinite, TraceEntityFilterPlayer);
 
-	if(TR_DidHit(trace)) 
+	if(TR_DidHit(trace))
 	{
 		TR_GetEndPosition(hOrigin, trace);
 
 		new Float:offset[3];
-		
+
 		offset[0] = hOrigin[0] - fOrigin[0];
 		offset[1] = hOrigin[1] - fOrigin[1];
 		offset[2] = hOrigin[2] - fOrigin[2];
-		
+
 		NormalizeVector(offset, offset);
-		
+
 		hOrigin[0] -= offset[0] * back_offset;
 		hOrigin[1] -= offset[1] * back_offset;
 		hOrigin[2] -= offset[2] * back_offset;
@@ -2341,7 +2489,7 @@ public ExplodeAim(client, Float:delay) {
 	if (GetAimOrigin(client, Pos, 10.0) == 0) return;
 
 	//ExplodeAtPos(Pos);
-	
+
 	DataPack DP = new DataPack();
 	DP.WriteCell(client);
 	DP.WriteCell(Pos[0]);
@@ -2397,26 +2545,31 @@ public PropaneAtPos(Float:Pos[3]) {
 	AcceptEntityInput(prop, "break");
 }
 
+// 取得實體的世界座標
+// 玩家被 parent 時 (Jockey 騎乘 / Charger 抓 / Smoker 拉 / Hunter 撲)
+// m_vecOrigin 會變成相對父實體的座標，必須改用 GetClientAbsOrigin 才能拿到世界座標
+stock bool:GetEntityWorldOrigin(entity, Float:pos[3]) {
+	if (entity >= 1 && entity <= MaxClients) {
+		if (!IsClientInGame(entity)) return false;
+		GetClientAbsOrigin(entity, pos);
+		return true;
+	}
+	if (!IsValidEntity(entity)) return false;
+	GetEntPropVector(entity, Prop_Send, "m_vecOrigin", pos);
+	return true;
+}
+
 public Float:GetEntityEntityDistance(entity1, entity2) {
-	new Float:Pos1[3];
-	GetEntPropVector(entity1, Prop_Send, "m_vecOrigin", Pos1);
-	new Float:Pos2[3];
-	GetEntPropVector(entity2, Prop_Send, "m_vecOrigin", Pos2);
+	new Float:Pos1[3], Float:Pos2[3];
+	if (!GetEntityWorldOrigin(entity1, Pos1)) return 0.0;
+	if (!GetEntityWorldOrigin(entity2, Pos2)) return 0.0;
 	return GetVectorDistance(Pos1, Pos2);
 }
 
 public Float:GetEntityPosDistance(entity, Float:pos[3]) {
 	new Float:Pos1[3];
-	GetEntPropVector(entity, Prop_Send, "m_vecOrigin", Pos1);
-	//TODO: when jockey is riding we cannot get the origin so set the speacil case to it
-	if (Pos1[0] == 0.0 && Pos1[1] == 0.0 && Pos1[2] == 0.0)
-	{
-		return 0.0;
-	}
-	else
-	{
-		return GetVectorDistance(Pos1, pos);
-	}
+	if (!GetEntityWorldOrigin(entity, Pos1)) return 0.0;
+	return GetVectorDistance(Pos1, pos);
 }
 
 public
@@ -2513,7 +2666,7 @@ Action OnPummelOnAnimPre(int client, int &anim)
 
 Action Timer_OnPummelResetAnim(Handle timer, int client)
 {
-	// Don't need client userID since 
+	// Don't need client userID since
 	// it's not going to be validated just removed
 	// if ((client = GetClientOfUserId(client)))
 	AnimHookDisable(client, OnPummelOnAnimPre);

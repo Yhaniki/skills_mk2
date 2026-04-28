@@ -10,13 +10,13 @@
 + 進入 `sourcemod/script` 目錄後執行以下指令：
 
 ```
-spcomp.exe skills_mk2.sp -o ../plugins
+.\spcomp.exe skills_mk2.sp -o ../plugins/skills_mk2.smx
 ```
 
 ## 常用指令
 ```
 sm plugins reload skills_mk2
-sm plugins refress skills_mk2
+sm plugins refresh skills_mk2
 sm_version
 meta_vertion
 ```
@@ -42,7 +42,7 @@ meta_vertion
 + 隱藏版爆裂: 消費100MP使用skill2，施放隱藏版爆裂。施放過程中無敵，~~結束後會因魔力枯竭倒地。~~
 
 ## 開發中
-- [ ] 惠惠：升級原本的爆裂技能（施放過程中改變天氣狀態）
+- [x] 惠惠：升級原本的爆裂技能（施放過程中改變天氣狀態）
 - [x] 和真：偷竊 → 偷取隊友或者殭屍的物品（完成）
 - [x] 阿克婭：淨化 → 殺死周圍殭屍（完成）
 - [x] 達克尼斯：魔心護盾（完成）

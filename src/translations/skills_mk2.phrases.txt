@@ -1,0 +1,331 @@
+"Phrases"
+{
+	"weapon_autoshotgun"
+	{
+		"en"		"Auto Shotgun"
+		"chi"		"自動霰彈槍"
+		"zho"		"自动霰弹枪"
+	}
+
+	"weapon_grenade_launcher"
+	{
+		"en"		"Grenade Launcher"
+		"chi"		"榴彈發射器"
+		"zho"		"榴弹发射器"
+	}
+
+	"weapon_hunting_rifle"
+	{
+		"en"		"Hunting Rifle"
+		"chi"		"獵槍"
+		"zho"		"猎枪"
+	}
+
+	"weapon_pistol"
+	{
+		"en"		"Pistol"
+		"chi"		"手槍"
+		"zho"		"手枪"
+	}
+
+	"weapon_pistol_magnum"
+	{
+		"en"		"Magnum Pistol"
+		"chi"		"麥格農手槍"
+		"zho"		"麦格农手枪"
+	}
+
+	"weapon_pumpshotgun"
+	{
+		"en"		"Pump Shotgun"
+		"chi"		"泵式霰彈槍"
+		"zho"		"泵式霰弹枪"
+	}
+
+	"weapon_rifle"
+	{
+		"en"		"M-16 Assault Rifle"
+		"chi"		"M-16突擊步槍"
+		"zho"		"M-16突击步枪"
+	}
+
+	"weapon_rifle_ak47"
+	{
+		"en"		"AK-47"
+		"chi"		"AK47"
+		"zho"		"AK47"
+	}
+
+	"weapon_rifle_desert"
+	{
+		"en"		"SCAR Combat Rifle"
+		"chi"		"SCAR戰術步槍"
+		"zho"		"SCAR战术步枪"
+	}
+
+	"weapon_rifle_m60"
+	{
+		"en"		"M60"
+		"chi"		"M60機槍"
+		"zho"		"M60机枪"
+	}
+
+	"weapon_rifle_sg552"
+	{
+		"en"		"SG552"
+		"chi"		"SG552步槍"
+		"zho"		"SG552步枪"
+	}
+
+	"weapon_shotgun_chrome"
+	{
+		"en"		"Chrome Shotgun"
+		"chi"		"鉻管霰彈槍"
+		"zho"		"铬管霰弹枪"
+	}
+
+	"weapon_shotgun_spas"
+	{
+		"en"		"Tactical Shotgun"
+		"chi"		"戰術霰彈槍"
+		"zho"		"战术霰弹枪"
+	}
+
+	"weapon_smg"
+	{
+		"en"		"Submachine Gun"
+		"chi"		"烏茲衝鋒槍"
+		"zho"		"乌兹冲锋枪"
+	}
+
+	"weapon_smg_mp5"
+	{
+		"en"		"MP5"
+		"chi"		"MP5衝鋒槍"
+		"zho"		"MP5冲锋枪"
+	}
+
+	"weapon_smg_silenced"
+	{
+		"en"		"Silenced SMG"
+		"chi"		"滅音衝鋒槍"
+		"zho"		"灭音冲锋枪"
+	}
+
+	"weapon_sniper_awp"
+	{
+		"en"		"AWP Sniper"
+		"chi"		"麥格農狙擊槍"
+		"zho"		"麦格农狙击枪"
+	}
+
+	"weapon_sniper_military"
+	{
+		"en"		"Military Sniper"
+		"chi"		"狙擊步槍"
+		"zho"		"狙击步枪"
+	}
+
+	"weapon_sniper_scout"
+	{
+		"en"		"Scout"
+		"chi"		"斯泰爾斥侯步槍"
+		"zho"		"斯泰尔斥候步枪"
+	}
+
+	"weapon_baseball_bat"
+	{
+		"en"		"Baseball Bat"
+		"chi"		"球棒"
+		"zho"		"球棒"
+	}
+
+	"weapon_cricket_bat"
+	{
+		"en"		"Cricket Bat"
+		"chi"		"板球棒"
+		"zho"		"板球棒"
+	}
+
+	"weapon_crowbar"
+	{
+		"en"		"Crowbar"
+		"chi"		"鐵撬"
+		"zho"		"铁撬"
+	}
+
+	"weapon_electric_guitar"
+	{
+		"en"		"Electric Guitar"
+		"chi"		"電吉他"
+		"zho"		"电吉他"
+	}
+
+	"weapon_fireaxe"
+	{
+		"en"		"Fire Axe"
+		"chi"		"消防斧"
+		"zho"		"消防斧"
+	}
+
+	"weapon_frying_pan"
+	{
+		"en"		"Frying Pan"
+		"chi"		"平底鍋"
+		"zho"		"平底锅"
+	}
+
+	"weapon_golfclub"
+	{
+		"en"		"Golf Club"
+		"chi"		"高爾夫球棒"
+		"zho"		"高尔夫球棒"
+	}
+
+	"weapon_katana"
+	{
+		"en"		"Katana"
+		"chi"		"武士刀"
+		"zho"		"武士刀"
+	}
+
+	"weapon_machete"
+	{
+		"en"		"Machete"
+		"chi"		"砍刀"
+		"zho"		"砍刀"
+	}
+
+	"weapon_tonfa"
+	{
+		"en"		"Tonfa"
+		"chi"		"警棍"
+		"zho"		"警棍"
+	}
+
+	"weapon_knife"
+	{
+		"en"		"Knife"
+		"chi"		"小刀"
+		"zho"		"小刀"
+	}
+
+	"weapon_chainsaw"
+	{
+		"en"		"Chainsaw"
+		"chi"		"電鋸"
+		"zho"		"电锯"
+	}
+
+	"weapon_adrenaline"
+	{
+		"en"		"Adrenaline"
+		"chi"		"腎上腺素"
+		"zho"		"肾上腺素"
+	}
+
+	"weapon_defibrillator"
+	{
+		"en"		"Defibrillator"
+		"chi"		"電擊器"
+		"zho"		"电击器"
+	}
+
+	"weapon_first_aid_kit"
+	{
+		"en"		"First Aid Kit"
+		"chi"		"急救包"
+		"zho"		"急救包"
+	}
+
+	"weapon_pain_pills"
+	{
+		"en"		"Pain Pills"
+		"chi"		"止痛藥"
+		"zho"		"止痛药"
+	}
+
+	"weapon_fireworkcrate"
+	{
+		"en"		"Firework Crate"
+		"chi"		"煙火"
+		"zho"		"烟火"
+	}
+
+	"weapon_gascan"
+	{
+		"en"		"Gas Can"
+		"chi"		"瓦斯桶"
+		"zho"		"瓦斯桶"
+	}
+
+	"weapon_oxygentank"
+	{
+		"en"		"Oxygen Tank"
+		"chi"		"氧氣瓶"
+		"zho"		"氧气瓶"
+	}
+
+	"weapon_propanetank"
+	{
+		"en"		"Propane Tank"
+		"chi"		"煤氣罐"
+		"zho"		"煤气罐"
+	}
+
+	"weapon_molotov"
+	{
+		"en"		"Molotov"
+		"chi"		"汽油彈"
+		"zho"		"汽油弹"
+	}
+
+	"weapon_pipe_bomb"
+	{
+		"en"		"Pipe Bomb"
+		"chi"		"土製炸彈"
+		"zho"		"土制炸弹"
+	}
+
+	"weapon_vomitjar"
+	{
+		"en"		"Bile Jar"
+		"chi"		"膽汁罐"
+		"zho"		"胆汁罐"
+	}
+
+	"weapon_ammo_spawn"
+	{
+		"en"		"Ammo"
+		"chi"		"彈藥"
+		"zho"		"弹药"
+	}
+
+	"weapon_upgradepack_explosive"
+	{
+		"en"		"Explosive Ammo"
+		"chi"		"高爆彈藥"
+		"zho"		"高爆弹药"
+	}
+
+	"weapon_upgradepack_incendiary"
+	{
+		"en"		"Incendiary Ammo"
+		"chi"		"燃燒彈藥"
+		"zho"		"燃烧弹药"
+	}
+
+	"weapon_gnome"
+	{
+		"en"		"Gnome"
+		"chi"		"小矮人"
+		"zho"		"小矮人"
+	}
+
+	"weapon_cola_bottles"
+	{
+		"en"		"Cola Bottles"
+		"chi"		"可樂"
+		"zho"		"可乐"
+	}
+}
