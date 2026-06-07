@@ -19,6 +19,7 @@
 
 // 內部狀態
 static bool   s_bAtmosphereOn     = false;
+static int    s_iPostProcessRef   = INVALID_ENT_REFERENCE; // postprocess_controller
 static float  s_fOriFogStart      = -1.0;
 static float  s_fOriFogEnd        = -1.0;
 static float  s_fOriFogMaxDensity = -1.0;
@@ -26,6 +27,7 @@ static int    s_iOriFogColorR     = -1;
 static int    s_iOriFogColorG     = -1;
 static int    s_iOriFogColorB     = -1;
 static bool   s_bOriFogEnabled    = false;
+static float  s_fOriFogFarZ       = -1.0;
 static bool   s_bFogBacked        = false;
 static Handle s_hRestoreTimer     = null;
 
@@ -187,41 +189,70 @@ stock void ApplyMagicAtmosphere()
 		s_iOriFogColorG = (color >> 8)  & 0xFF;
 		s_iOriFogColorB = (color >> 16) & 0xFF;
 		s_bOriFogEnabled = view_as<bool>(GetEntProp(fog, Prop_Send, "m_fog.enable"));
+		s_fOriFogFarZ    = GetEntPropFloat(fog, Prop_Send, "m_fog.farz");
 		s_bFogBacked = true;
 
-		SetVariantString("80");
+		// Fog start 1500 + end 2000：魔法陣 (通常 < 800) 完全在霧外，遠景開始變黑
+		SetVariantString("1500");
 		AcceptEntityInput(fog, "SetStartDist");
-		SetVariantString("1200");
+		SetVariantString("2000");
 		AcceptEntityInput(fog, "SetEndDist");
-		SetVariantString("0.85");
+		SetVariantString("1.0");
 		AcceptEntityInput(fog, "SetMaxDensity");
-		SetVariantString("25 15 50");
+
+		// 關鍵：farz 強制截斷 2200 外的所有像素為 fog color，包含 skybox
+		// 比 fog density 更暴力 → 真正讓天空變黑
+		SetVariantString("2200");
+		AcceptEntityInput(fog, "SetFarZ");
+		// 純黑帶一點紫，讓魔法陣的紅 / 橘對比更強烈
+		SetVariantString("5 2 12");
 		AcceptEntityInput(fog, "SetColor");
-		SetVariantString("25 15 50");
+		SetVariantString("5 2 12");
 		AcceptEntityInput(fog, "SetColorSecondary");
 		AcceptEntityInput(fog, "TurnOn");
 	}
 
+	// 完全不動 tonemap autoexposure：
+	// 經測試任何 exposure 改動都會讓 particle 被 HDR 壓暗。
+	// 維持地圖原本 tonemap → particle 顯色最鮮豔，天空黑由 fog 完成。
+	// 僅輕度加 bloom 強化發光暈染。
 	int tonemap = FindEntityByClassname(-1, "env_tonemap_controller");
 	if (tonemap != -1)
 	{
 		SnapshotTonemapBeforeModify(tonemap);
-
-		SetVariantString("0.05");
-		AcceptEntityInput(tonemap, "SetAutoExposureMin");
-		SetVariantString("0.20");
-		AcceptEntityInput(tonemap, "SetAutoExposureMax");
-
-		SetVariantString("30.0");
-		AcceptEntityInput(tonemap, "SetTonemapPercentTarget");
-		SetVariantString("1.0");
-		AcceptEntityInput(tonemap, "SetTonemapMinAvgLum");
-
-		SetVariantString("8.0");
-		AcceptEntityInput(tonemap, "SetTonemapPercentBrightPixels");
-
-		SetVariantString("0.60");
+		SetVariantString("2.0");
 		AcceptEntityInput(tonemap, "SetBloomScale");
+	}
+
+	// === l4d2_storm 同款大殺器 ===
+	// (1) SetLightStyle(0, "a") → 全地圖預設光源 (style 0) 改最暗 ("a"=最暗, "m"=正常, "z"=最亮)
+	//     →整個世界 brush 都變黑，但 particle 自發光不受影響 → 對比拉到極限
+	SetLightStyle(0, "a");
+
+	// (2) postprocess_controller → 真正的 post-process effect，加 vignette 邊角暗化 + grain 顆粒感
+	if (s_iPostProcessRef == INVALID_ENT_REFERENCE || !IsValidEntity(EntRefToEntIndex(s_iPostProcessRef)))
+	{
+		int pp = CreateEntityByName("postprocess_controller");
+		if (pp != -1)
+		{
+			DispatchKeyValue(pp, "targetname",                "magic_atmosphere_pp");
+			DispatchKeyValue(pp, "vignettestart",             "0.6");  // 邊緣多遠開始暗
+			DispatchKeyValue(pp, "vignetteend",               "1.4");
+			DispatchKeyValue(pp, "vignetteblurstrength",      "0.5");
+			DispatchKeyValue(pp, "topvignettestrength",       "1");
+			DispatchKeyValue(pp, "localcontraststrength",     "-0.5"); // 負值 = 降對比 → 配合 light style 變暗
+			DispatchKeyValue(pp, "localcontrastedgestrength", "-0.3");
+			DispatchKeyValue(pp, "grainstrength",             "1");
+			DispatchKeyValue(pp, "fadetime",                  "1");
+			DispatchKeyValue(pp, "spawnflags",                "1");    // master = 強制所有玩家套用
+
+			float vPos[3] = {0.0, 0.0, 0.0};
+			DispatchSpawn(pp);
+			ActivateEntity(pp);
+			TeleportEntity(pp, vPos, NULL_VECTOR, NULL_VECTOR);
+			AcceptEntityInput(pp, "TurnOn");
+			s_iPostProcessRef = EntIndexToEntRef(pp);
+		}
 	}
 
 	EmitSoundToAll("ambient/atmosphere/thunder1.wav");
@@ -259,6 +290,11 @@ stock void RestoreMagicAtmosphere()
 		AcceptEntityInput(fog, "SetColorSecondary");
 
 		AcceptEntityInput(fog, s_bOriFogEnabled ? "TurnOn" : "TurnOff");
+
+		// 還原 farz：原值 < 0 通常代表「不限制」，傳 -1 給 SetFarZ 達成相同效果
+		FormatEx(buf, sizeof(buf), "%f", s_fOriFogFarZ);
+		SetVariantString(buf);
+		AcceptEntityInput(fog, "SetFarZ");
 	}
 	s_bFogBacked = false;
 
@@ -273,11 +309,32 @@ stock void RestoreMagicAtmosphere()
 	}
 	ToneClearBackup();
 
+	// 還原 light style 0 到預設正常亮度 "m"
+	SetLightStyle(0, "m");
+
+	// 移除 postprocess_controller
+	if (s_iPostProcessRef != INVALID_ENT_REFERENCE)
+	{
+		int pp = EntRefToEntIndex(s_iPostProcessRef);
+		if (pp != INVALID_ENT_REFERENCE && IsValidEntity(pp))
+		{
+			AcceptEntityInput(pp, "TurnOff");
+			RemoveEntity(pp);
+		}
+		s_iPostProcessRef = INVALID_ENT_REFERENCE;
+	}
+
 	s_bAtmosphereOn = false;
 }
 
 stock void ResetMagicAtmosphere()
 {
+	// 換圖時：light style / postprocess entity 都會被 engine 清掉，但變數可能殘留
+	if (s_bAtmosphereOn)
+	{
+		SetLightStyle(0, "m"); // 保險：避免新地圖一開始仍是暗的
+	}
+	s_iPostProcessRef = INVALID_ENT_REFERENCE;
 	s_bAtmosphereOn = false;
 	s_bFogBacked = false;
 	ToneClearBackup();

@@ -245,6 +245,7 @@ public void TurnUndeadInit()
 public void OnPluginEnd()
 {
 	ResetPlugin();
+	Skills_PluginEndCleanup();
 }
 
 // public void OnMapStart()
@@ -258,6 +259,7 @@ public void OnMapEnd()
 {
 	g_bMapStarted = false;
 	ResetPlugin();
+	Skills_MapEndCleanup();
 }
 
 
@@ -283,6 +285,7 @@ void Event_RoundStart(Event event, const char[] name, bool dontBroadcast)
 	if( g_iPlayerSpawn == 1 && g_iRoundStart == 0 )
 		CreateTimer(2.0, TimerLoad, _, TIMER_FLAG_NO_MAPCHANGE);
 	g_iRoundStart = 1;
+	Skills_RoundStartCleanup();
 }
 
 void Event_PlayerSpawn(Event event, const char[] name, bool dontBroadcast)

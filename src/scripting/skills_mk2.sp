@@ -78,6 +78,15 @@ new Handle:Skill_TurnUndead_Timer[MAX_PLAYERS + 1];
 int g_iChase[MAX_PLAYERS + 1];
 bool Skill_EX_Using[MAX_PLAYERS + 1];
 bool Invulnerable[MAX_PLAYERS + 1];
+
+// EX 爆裂★ 追蹤：timer handles + particle entity refs + 爆炸座標
+Handle g_hExExplosionTimer[MAX_PLAYERS + 1];
+Handle g_hExAfterTimer[MAX_PLAYERS + 1];
+float  g_fExPos[MAX_PLAYERS + 1][3];
+int    g_iExGlowBigRef[MAX_PLAYERS + 1]; // PARTICLE_EX_GLOW_BIG
+int    g_iExGlowRef[MAX_PLAYERS + 1];    // PARTICLE_EX_GLOW (ParticleFollow)
+int    g_iExLightRef[MAX_PLAYERS + 1];   // PARTICLE_EX_LIGHT (ParticleFollow)
+int    g_iExDynLightRef[MAX_PLAYERS + 1];// light_dynamic 強光照亮魔法陣
 new bool:State_Glow[MAXENTITIES];
 new Handle:Glow_Timer[MAXENTITIES];
 new bool:State_Freeze[MAXENTITIES];
@@ -265,6 +274,12 @@ public OnPluginStart() {
 		Skill_EX_Using[i] = false;
 		g_iMagicCircleRef[i] = INVALID_ENT_REFERENCE;
 		g_fMagicCircleYaw[i] = 0.0;
+		g_hExExplosionTimer[i] = null;
+		g_hExAfterTimer[i]     = null;
+		g_iExGlowBigRef[i]     = INVALID_ENT_REFERENCE;
+		g_iExGlowRef[i]        = INVALID_ENT_REFERENCE;
+		g_iExLightRef[i]       = INVALID_ENT_REFERENCE;
+		g_iExDynLightRef[i]    = INVALID_ENT_REFERENCE;
 	}
 	SetWeaponNameId();
 	OnWeaponDrop = CreateGlobalForward("OnWeaponDrop", ET_Event, Param_Cell, Param_CellByRef);
@@ -308,6 +323,18 @@ public OnPluginStart() {
 	HookEvent("gameinstructor_draw", Event_Draw, EventHookMode_PostNoCopy);
 	TurnUndeadInit();
 	CheckPlayerConnections();
+
+	// reload 時把上一次執行殘留的遊戲狀態全部清掉
+	RestoreTimeScale();
+	for (int i = 1; i <= MAX_PLAYERS; i++)
+	{
+		if (!IsClientInGame(i)) continue;
+		if (State_ManaShield[i]) UnGlow(i);
+		State_ManaShield[i] = false;
+		Invulnerable[i]     = false;
+		KillMagicCircle(i);
+		CleanupEXSkill(i);
+	}
 }
 
 // sm_skills_fillmp — 將所有真人玩家魔力設為上限（插件只對非 Bot 初始化技能）
@@ -339,6 +366,120 @@ public CheckPlayerConnections() {
 			SDKHook(i, SDKHook_OnTakeDamage, Event_Hurt);
 		}
 	}
+}
+
+// 安全刪除 timer 並歸零 handle，避免換圖後殭屍 handle
+// 注意：SourceMod 對「自然結束的 timer」會自動回收 handle，但 plugin 端的變數不會自動歸零
+// → callback 結束時必須自行 set null，否則這裡的 delete 會踩到 invalid handle
+stock void SafeDeleteTimer(Handle &h)
+{
+	Handle tmp = h;
+	h = null; // 先歸零，避免 delete 失敗後變數仍指向殭屍 handle
+	if (tmp == null) return;
+	delete tmp;
+}
+
+void Skills_MapEndCleanup()
+{
+	// 無條件還原遊戲速度並重置狀態變數
+	SafeDeleteTimer(Slow_Timer);
+	RestoreTimeScale();
+	Slow_Ent = 0;
+
+	// 清理所有玩家 timer 與狀態
+	for (int i = 1; i <= MAX_PLAYERS; i++)
+	{
+		SafeDeleteTimer(Skill_Notify_Timer[i]);
+		SafeDeleteTimer(Skill_Notify_Ani_Timer[i]);
+		SafeDeleteTimer(Skill_MPrecover_Timer[i]);
+		SafeDeleteTimer(Skill_Cooldown_Timer[i]);
+		SafeDeleteTimer(Skill_Duration_Timer[i]);
+		SafeDeleteTimer(Skill_Adrenaline_Boost_Timer[i]);
+		SafeDeleteTimer(Skill_TurnUndead_Timer[i]);
+
+		Skill_State[i]            = SKILL_RDY;
+		Invulnerable[i]           = false;
+		Skill_EX_Using[i]         = false;
+		State_Adrenaline_Boost[i] = false;
+		State_ManaShield[i]       = false;
+
+		CleanupEXSkill(i); // 殺掉 EX timer + particle
+		KillMagicCircle(i);
+	}
+
+	// 清理所有 entity 的 glow / freeze timer
+	for (int i = 0; i < MAXENTITIES; i++)
+	{
+		SafeDeleteTimer(Glow_Timer[i]);
+		SafeDeleteTimer(Freeze_Timer[i]);
+		State_Glow[i]   = false;
+		State_Freeze[i] = false;
+	}
+
+	// 換圖前先 reset 天氣狀態，避免 s_hRestoreTimer 變殭屍 handle 後被 OnMapStart 再 KillTimer
+	ResetMagicAtmosphere();
+}
+
+// 刪所有舊 func_timescale，然後建一個 desiredTimescale=1.0 + 超高 acceleration 的新 entity
+// 引擎刪掉舊 entity 不會自動還原速度，必須主動 Start 一個指向 1.0 的 entity 來覆蓋
+void RestoreTimeScale()
+{
+	PrintToServer("[skills_mk2] RestoreTimeScale called (State_Slow=%d Slow_Ent=%d)", State_Slow, Slow_Ent);
+
+	// 先清掉所有現存的（包含前次 reset entity 殘留）
+	// 注意：移除後不重置 ent，繼續往後搜尋；重置成 -1 會重頭找到同一個 entity → 無限迴圈
+	int found = 0;
+	int ent   = -1;
+	while ((ent = FindEntityByClassname(ent, "func_timescale")) != INVALID_ENT_REFERENCE)
+	{
+		if (IsValidEntity(ent)) { RemoveEntity(ent); found++; }
+	}
+	PrintToServer("[skills_mk2] Removed %d func_timescale(s)", found);
+
+	// 建一個「瞬間拉回 1.0」的 func_timescale
+	int reset = CreateEntityByName("func_timescale");
+	if (reset > 0 && IsValidEntity(reset))
+	{
+		DispatchKeyValue(reset, "desiredTimescale",     "1.0");
+		DispatchKeyValue(reset, "acceleration",         "99999.0");
+		DispatchKeyValue(reset, "minBlendRate",         "0.0");
+		DispatchKeyValue(reset, "blendDeltaMultiplier", "99999.0");
+		DispatchSpawn(reset);
+		AcceptEntityInput(reset, "Start");
+		PrintToServer("[skills_mk2] Reset func_timescale started (ent=%d)", reset);
+		// 0.5s 後刪掉；若 plugin 在此之前 unload，下次 RestoreTimeScale 會找到並清理
+		CreateTimer(0.5, Timer_KillTimescaleReset, EntIndexToEntRef(reset));
+	}
+
+	Slow_Ent    = 0;
+	State_Slow  = false;
+	time_weight = 1.0;
+}
+
+public Action Timer_KillTimescaleReset(Handle timer, int ref)
+{
+	int e = EntRefToEntIndex(ref);
+	if (e != INVALID_ENT_REFERENCE && IsValidEntity(e))
+		RemoveEntity(e);
+	return Plugin_Stop;
+}
+
+void Skills_PluginEndCleanup()
+{
+	RestoreTimeScale();
+
+	for (int i = 1; i <= MAX_PLAYERS; i++)
+	{
+		if (!IsClientInGame(i)) continue;
+		if (State_ManaShield[i]) UnGlow(i);
+		State_ManaShield[i] = false;
+		Invulnerable[i]     = false;
+		KillMagicCircle(i);
+		CleanupEXSkill(i);
+	}
+
+	if (g_hCvarMeleeRange != null)
+		g_hCvarMeleeRange.SetInt(g_iStockRange);
 }
 
 public OnMapStart() {
@@ -433,21 +574,27 @@ Action DeleteParticles(Handle timer, int ref)
 	return Plugin_Continue;
 }
 
-public Action:CreateParticle(String:particlename[], Float:time, Float:Pos[3]) {
-	new particle = CreateEntityByName("info_particle_system");
-	if (IsValidEntity(particle))
-	{
-		DispatchKeyValue(particle, "scale", "");
-		DispatchKeyValue(particle, "effect_name", particlename);
-		DispatchKeyValue(particle, "targetname", "particle");
-		TeleportEntity(particle, Pos, NULL_VECTOR, NULL_VECTOR);
-		DispatchSpawn(particle);
-		ActivateEntity(particle);
+// 建立粒子並自動定時刪除（內部使用 entity ref 而非 raw index）
+// 回傳 entity index（-1 代表失敗），若需追蹤請在外部轉 EntIndexToEntRef
+int CreateParticleEnt(const char[] particlename, float time, const float Pos[3])
+{
+	int particle = CreateEntityByName("info_particle_system");
+	if (!IsValidEntity(particle)) return -1;
 
-		AcceptEntityInput(particle, "Enable");
-		AcceptEntityInput(particle, "start");
-		CreateTimer(time, DeleteParticles, particle);
-	}
+	DispatchKeyValue(particle, "scale", "");
+	DispatchKeyValue(particle, "effect_name", particlename);
+	DispatchKeyValue(particle, "targetname", "particle");
+	TeleportEntity(particle, Pos, NULL_VECTOR, NULL_VECTOR);
+	DispatchSpawn(particle);
+	ActivateEntity(particle);
+	AcceptEntityInput(particle, "Enable");
+	AcceptEntityInput(particle, "start");
+	CreateTimer(time, DeleteParticles, EntIndexToEntRef(particle));
+	return particle;
+}
+
+public Action:CreateParticle(String:particlename[], Float:time, Float:Pos[3]) {
+	CreateParticleEnt(particlename, time, Pos);
 }
 //===========================================================
 //==================== State Transition =====================
@@ -493,6 +640,30 @@ public void Event_Draw(Event event, const char[] name, bool dontBroadcast)
 	}
 }
 
+// 由 l4d_dissolve_infected.sp 的 Event_RoundStart 呼叫
+// 捕捉 vote restart / RestartScenario 等不走 OnMapEnd 的軟重置
+void Skills_RoundStartCleanup()
+{
+	PrintToServer("[skills_mk2] round_start cleanup: EX + skill timers + timescale");
+	RestoreTimeScale();
+	for (int i = 1; i <= MAX_PLAYERS; i++)
+	{
+		// 殺掉所有技能 timer（含 Cooldown / Duration），避免 Timer_Skill_EX_End 等 callback 在新回合觸發
+		SafeDeleteTimer(Skill_Cooldown_Timer[i]);
+		SafeDeleteTimer(Skill_Duration_Timer[i]);
+		SafeDeleteTimer(Skill_Adrenaline_Boost_Timer[i]);
+		SafeDeleteTimer(Skill_TurnUndead_Timer[i]);
+
+		CleanupEXSkill(i);
+		Skill_State[i]            = SKILL_RDY;
+		Invulnerable[i]           = false;
+		Skill_EX_Using[i]         = false;
+		State_Adrenaline_Boost[i] = false;
+		State_ManaShield[i]       = false;
+		KillMagicCircle(i);
+	}
+}
+
 public void Event_NoDraw(Event event, const char[] name, bool dontBroadcast)
 {
 	for (new i = 1; i < MAX_PLAYERS; i++) {
@@ -507,6 +678,19 @@ public void Event_PlayerAFK(Handle:event, const char[] sName, bool bDontBroadcas
 }
 
 public Event_StateTransition(Handle:event, const String:name[], bool:dontBroadcast) {
+	// map_transition 沒有 userid，需要對所有玩家做清理後直接 return
+	if (StrEqual(name, "map_transition"))
+	{
+		for (int i = 1; i <= MAX_PLAYERS; i++)
+		{
+			if (!State_Connection[i]) continue;
+			State_Transition[i] = true;
+			Interrupt_Skill(i);
+			CleanupEXSkill(i);
+		}
+		return;
+	}
+
 	new client = 0;
 
 	if (StrEqual(name, "player_disconnect") ||
@@ -532,13 +716,6 @@ public Event_StateTransition(Handle:event, const String:name[], bool:dontBroadca
 		State_Connection[client] = false;
 		State_Player[client] = PLAYER_DEAD;
 		Delete_Skill(client);
-	} else if (StrEqual(name, "map_transition")) {
-		State_Transition[client] = true;
-		Interrupt_Skill(client);
-		// for (new i = 0; i < MAX_PLAYERS + 1; i++) {
-		// 	State_Transition[i] = true;
-		// 	Interrupt_Skill(client);
-		// }
 	} else if (StrEqual(name, "player_transitioned")) {
 		State_Transition[client] = false;
 		Setup_Materials();
@@ -692,28 +869,20 @@ public Skill_Change(client, skill) {
 }
 
 public Interrupt_Skill(client) {
-	//Delete timers
 	new skill_using = Skill[client];
 	if (Skill_Type[skill_using]==TYPE_NORMAL)
 	{
+		// 直接 delete，不 TriggerTimer — 換圖後 handle 已被 engine 回收，TriggerTimer 會 crash
 		if ((Skill_State[client] == SKILL_CD) || (Skill_State[client] == SKILL_ACT))
-		{
-			if(Skill_Cooldown_Timer[client]!=null&&
-				Skill_Cooldown_Timer[client]!= INVALID_HANDLE)
-				TriggerTimer(Skill_Cooldown_Timer[client]);
-		}
+			SafeDeleteTimer(Skill_Cooldown_Timer[client]);
+
 		if (Skill_State[client] == SKILL_ACT)
-		{
-			if(Skill_Duration_Timer[client]!=null&&
-				Skill_Duration_Timer[client]!= INVALID_HANDLE)
-				TriggerTimer(Skill_Duration_Timer[client]);
-		}
+			SafeDeleteTimer(Skill_Duration_Timer[client]);
 	}
 	if (State_Adrenaline_Boost[client])
 	{
-		if (Skill_Adrenaline_Boost_Timer[client] != null &&
-			Skill_Adrenaline_Boost_Timer[client] != INVALID_HANDLE)
-			TriggerTimer(Skill_Adrenaline_Boost_Timer[client]);
+		SafeDeleteTimer(Skill_Adrenaline_Boost_Timer[client]);
+		State_Adrenaline_Boost[client] = false;
 	}
 
 	Skill_State[client] = SKILL_RDY;
@@ -1005,7 +1174,8 @@ public Skill_Notify_MPbar(const String:str[], const String:state[], client) {
 public Action:Skill_Notify_Ani(Handle:timer, any:client) {
 	Skill_Notify_Ani_State[client]++;
 	if (Skill_Notify_Ani_State[client] > 2) Skill_Notify_Ani_State[client] = 0;
-	TriggerTimer(Skill_Notify_Timer[client], true);
+	if (Skill_Notify_Timer[client] != null)
+		TriggerTimer(Skill_Notify_Timer[client], true);
 }
 
 //===========================================================
@@ -1083,6 +1253,7 @@ public Skill_Adrenaline_Boost(client) {
 }
 
 public Action:Skill_Adrenaline_Boost_End(Handle:timer, any:client) {
+	Skill_Adrenaline_Boost_Timer[client] = null;
 	State_Adrenaline_Boost[client] = false;
 }
 
@@ -1122,6 +1293,7 @@ public RegisterSkill(String:skill_name[MAXSKILLNAME],
 }
 
 public Action:Timer_Skill_Null_End(Handle:timer, any:client) {
+	Skill_Duration_Timer[client] = null;
 	Skill_State[client] = SKILL_CD;
 	if(Skill_Notify_Timer[client]!=null)
 		TriggerTimer(Skill_Notify_Timer[client]);
@@ -1131,8 +1303,8 @@ public Action:Timer_Skill_Null_End(Handle:timer, any:client) {
 }
 
 public Action:Timer_Skill_Null_Ready(Handle:timer, any:client) {
+	Skill_Cooldown_Timer[client] = null;
 	Skill_State[client] = SKILL_RDY;
-	//PrepareAndEmitSoundToClient("skills\\explosion.mp3", .entity = client, .volume = 1.0);
 	if(Skill_Notify_Timer[client]!=null)
 		TriggerTimer(Skill_Notify_Timer[client]);
 	else
@@ -1411,20 +1583,16 @@ void StaggerClient(int iUserID, const float fPos[3])
 	RemoveEntity(iScriptLogic);
 }
 
-public Action:Timer_ExExplosion(Handle:timer, DataPack:DP)
+public Action Timer_ExExplosion(Handle timer, int client)
 {
-	float vPos[3];
-	DP.Reset();
-	int client = DP.ReadCell();
-	vPos[0] = DP.ReadCell();
-	vPos[1] = DP.ReadCell();
-	vPos[2] = DP.ReadCell();
-	NukeExplosion(client, vPos);
+	g_hExExplosionTimer[client] = null;
+	NukeExplosion(client, g_fExPos[client]);
 	return Plugin_Stop;
 }
 
 public Action Timer_Skill_EX_Ready(Handle timer, int client)
 {
+	Skill_Cooldown_Timer[client] = null;
 	Skill_EX_Using[client] = false;
 	Skill_State[client] = SKILL_RDY;
 	return Plugin_Stop;
@@ -1432,35 +1600,27 @@ public Action Timer_Skill_EX_Ready(Handle timer, int client)
 
 public Action:Timer_Skill_EX_End(Handle:timer, any:client)
 {
+	Skill_Duration_Timer[client] = null; // callback 結束 SM 會回收 handle，必須歸零避免殭屍
 	Invulnerable[client] = false;
 	Skill_State[client] = SKILL_CD;
 	if (IsAliveHumanPlayer(client) &&
 		!IsIncapped(client))
 	{
-		// int hp = GetEntProp(client, Prop_Data, "m_iHealth");
-		// DealDamage(client, hp+1, client, DMG_BURN);
 		L4D_SetPlayerIncappedDamage(client, client);
 	}
 
-	// 備援還原：萬一前面的 Timer 沒跑到（被砍 / 異常），這裡仍會把氛圍復原
 	RestoreMagicAtmosphere();
-
 	return Plugin_Stop;
 }
 
-public Action:Timer_ExAfter(Handle timer, DataPack:DP)
+public Action Timer_ExAfter(Handle timer, int client)
 {
-	DP.Reset();
-	DP.ReadCell();
-	new Float:Pos[3];
-	Pos[0] = DP.ReadCell();
-	Pos[1] = DP.ReadCell();
-	Pos[2] = DP.ReadCell();
-
-	CreateParticle(PARTICLE_EXPLOSION2, 5.0, Pos);
+	g_hExAfterTimer[client] = null;
+	CreateParticle(PARTICLE_EXPLOSION2, 5.0, g_fExPos[client]);
 }
 
-void ParticleFollow(char[] particleName, int client, float time)
+// 建立跟隨玩家的粒子，回傳 entity ref（INVALID_ENT_REFERENCE 代表失敗）
+int ParticleFollow(char[] particleName, int client, float time)
 {
 	float pos[3];
 	if(GetClientTeam(client) == 2 && IsPlayerAlive(client))
@@ -1475,13 +1635,107 @@ void ParticleFollow(char[] particleName, int client, float time)
 		ActivateEntity(entity);
 		AcceptEntityInput(entity, "Start");
 
-		CreateTimer(time, DeleteParticles, entity);
+		int ref = EntIndexToEntRef(entity);
+		CreateTimer(time, DeleteParticles, ref);
+		return ref;
 	}
+	return INVALID_ENT_REFERENCE;
+}
+
+// 安全殺掉一個 entity ref 指向的 particle
+stock void KillParticleRef(int &ref)
+{
+	if (ref == INVALID_ENT_REFERENCE) return;
+	int ent = EntRefToEntIndex(ref);
+	if (ent != INVALID_ENT_REFERENCE && IsValidEntity(ent))
+	{
+		AcceptEntityInput(ent, "stop");
+		AcceptEntityInput(ent, "kill");
+	}
+	ref = INVALID_ENT_REFERENCE;
+}
+
+// 清理 EX 爆裂★ 相關 timer + particle（換圖 / 玩家死亡 / 中斷技能時呼叫）
+void CleanupEXSkill(int client)
+{
+	SafeDeleteTimer(g_hExExplosionTimer[client]);
+	SafeDeleteTimer(g_hExAfterTimer[client]);
+	KillParticleRef(g_iExGlowBigRef[client]);
+	KillParticleRef(g_iExGlowRef[client]);
+	KillParticleRef(g_iExLightRef[client]);
+	KillParticleRef(g_iExDynLightRef[client]); // light_dynamic 用同一 helper 也能殺
+}
+
+// 在指定位置 spawn 一個高亮度 light_dynamic，照亮魔法陣四周
+// 回傳 entity ref（INVALID_ENT_REFERENCE 代表失敗）
+int SpawnExDynamicLight(const float pos[3], float duration)
+{
+	int light = CreateEntityByName("light_dynamic");
+	if (light == -1) return INVALID_ENT_REFERENCE;
+
+	DispatchKeyValue(light, "targetname",        "ex_dynlight");
+	DispatchKeyValue(light, "_light",            "255 80 30 255"); // 橘紅高飽和
+	DispatchKeyValue(light, "brightness",        "8");              // 8 = 超亮
+	DispatchKeyValue(light, "distance",          "900");            // 照射半徑
+	DispatchKeyValue(light, "spotlight_radius",  "300");
+	DispatchKeyValue(light, "style",             "0");              // 0 = normal
+	DispatchKeyValue(light, "_cone",             "0");
+	DispatchKeyValue(light, "pitch",             "-90");            // 朝下
+
+	float ang[3] = {90.0, 0.0, 0.0}; // 朝下
+	TeleportEntity(light, pos, ang, NULL_VECTOR);
+	DispatchSpawn(light);
+	ActivateEntity(light);
+	AcceptEntityInput(light, "TurnOn");
+	// SetLightStyle(0, "a") 會把所有 m_LightStyle=0 的光源變暗 → 改成 13 (unused) 不受影響
+	if (HasEntProp(light, Prop_Send, "m_LightStyle"))
+		SetEntProp(light, Prop_Send, "m_LightStyle", 13);
+
+	// duration 秒後自動 kill (格式: <output> <target>:<input>:<param>:<delay>:<refire>)
+	char outBuf[64];
+	FormatEx(outBuf, sizeof outBuf, "OnUser1 !self:Kill::%.2f:-1", duration);
+	SetVariantString(outBuf);
+	AcceptEntityInput(light, "AddOutput");
+	AcceptEntityInput(light, "FireUser1");
+
+	return EntIndexToEntRef(light);
 }
 
 //------------------------------------//
 //----------腳下水平魔法陣-------------//
 //------------------------------------//
+// trace ray 過濾：忽略玩家本人
+public bool MagicCircle_FilterIgnoreClient(int entity, int contentsMask, any data)
+{
+	return entity != data;
+}
+
+// 從玩家位置往下打 trace 找地板，回傳貼地後的位置（含小 offset 避免 z-fighting）
+// trace 失敗時 fallback 用 client origin
+stock void GetGroundedFeetPos(int client, float out[3])
+{
+	float origin[3], end[3];
+	GetClientAbsOrigin(client, origin);
+	end[0] = origin[0];
+	end[1] = origin[1];
+	end[2] = origin[2] - 256.0; // 往下 256 單位夠涵蓋樓梯 / 斜坡
+
+	Handle tr = TR_TraceRayFilterEx(origin, end, MASK_SOLID_BRUSHONLY, RayType_EndPoint,
+	                                MagicCircle_FilterIgnoreClient, client);
+	if (TR_DidHit(tr))
+	{
+		TR_GetEndPosition(out, tr);
+		out[2] += MAGIC_CIRCLE_FOOT_OFFSET;
+	}
+	else
+	{
+		out[0] = origin[0];
+		out[1] = origin[1];
+		out[2] = origin[2] + MAGIC_CIRCLE_FOOT_OFFSET;
+	}
+	delete tr;
+}
+
 // 立即把該玩家身上的魔法陣移除
 stock void KillMagicCircle(int client)
 {
@@ -1509,7 +1763,7 @@ stock void KillMagicCircle(int client)
 //   TeleportEntity 走 SetAbsOrigin / SetAbsAngles，會正確 networked 給 client。
 //   Client 端對 m_vecOrigin / m_angRotation 預設有插值 (cl_interp)，
 //   所以 30Hz 更新在 client 看到的還是平滑連續移動。
-void MagicCircleAtFeet(int client, float duration, float scale = 3.6, float rotateSpeed = 35.0)
+void MagicCircleAtFeet(int client, float duration, float scale = 7.2, float rotateSpeed = 35.0)
 {
 	if (!IsClientInGame(client) || !IsPlayerAlive(client)) return;
 	if (!FileExists(MAGIC_CIRCLE_MODEL, true))
@@ -1542,10 +1796,9 @@ void MagicCircleAtFeet(int client, float duration, float scale = 3.6, float rota
 	SetEntityRenderMode(prop, RENDER_TRANSADDFRAMEBLEND);
 	SetEntityRenderColor(prop, 255, 255, 255, 255);
 
-	// 初始位置：玩家腳邊 + 1.5z 避免 z-fighting，世界角度 (0,0,0) 平躺
+	// 初始位置：trace 往下找真實地板再 +MAGIC_CIRCLE_FOOT_OFFSET，避免浮空 / 穿地
 	float pos[3];
-	GetClientAbsOrigin(client, pos);
-	pos[2] += MAGIC_CIRCLE_FOOT_OFFSET;
+	GetGroundedFeetPos(client, pos);
 
 	float zeroAng[3] = {0.0, 0.0, 0.0};
 	TeleportEntity(prop, pos, zeroAng, NULL_VECTOR);
@@ -1598,9 +1851,9 @@ public Action Timer_UpdateMagicCircle(Handle timer, DataPack dp)
 	if (g_fMagicCircleYaw[client] < 0.0)     g_fMagicCircleYaw[client] += 360.0;
 
 	// 同時設位置 + 世界角度 (沒 parent，所以 abs 不會被任何人拉走)
+	// 每 tick 重新 trace 地板，斜坡 / 樓梯時魔法陣會服貼
 	float pos[3];
-	GetClientAbsOrigin(client, pos);
-	pos[2] += MAGIC_CIRCLE_FOOT_OFFSET;
+	GetGroundedFeetPos(client, pos);
 
 	float ang[3];
 	ang[0] = 0.0;                       // pitch: 永遠平躺
@@ -1613,12 +1866,10 @@ public Action Timer_UpdateMagicCircle(Handle timer, DataPack dp)
 
 void MagicActivates(int client)
 {
-	ParticleFollow(PARTICLE_EX_GLOW, client, explosion_ex_delay_secs);
-	ParticleFollow(PARTICLE_EX_LIGHT, client, explosion_ex_delay_secs);
-	// ParticleFollow(PARTICLE_MAGIC_CIRCLE, client, explosion_ex_delay_secs-4.0);
+	g_iExGlowRef[client]  = ParticleFollow(PARTICLE_EX_GLOW, client, explosion_ex_delay_secs);
+	g_iExLightRef[client] = ParticleFollow(PARTICLE_EX_LIGHT, client, explosion_ex_delay_secs);
 
-	// 腳下水平魔法陣 (在爆裂結束前 0.5 秒收回，免得跟爆炸閃光打架)
-	MagicCircleAtFeet(client, explosion_ex_delay_secs - 0.5, 3.6, 35.0);
+	MagicCircleAtFeet(client, explosion_ex_delay_secs - 0.5, 7.2, 35.0);
 }
 
 public Action:Timer_Skill_EX_Start(Handle:timer, any:client)
@@ -1630,26 +1881,36 @@ public Action:Timer_Skill_EX_Start(Handle:timer, any:client)
 	}
 	PrintToChatAll("\x04%N \x01エクスプロージョン!", client);
 
+	// 萬一上次 EX 還沒結束就再施放，先清掉舊的
+	CleanupEXSkill(client);
+
+	// 存爆炸座標，讓 delayed timer 讀取（不用 DataPack，避免兩個 timer 共用同一 handle）
+	g_fExPos[client][0] = Pos[0];
+	g_fExPos[client][1] = Pos[1];
+	g_fExPos[client][2] = Pos[2];
+
 	SlowForSecs(explosion_ex_delay_secs, client);
 	EmitSoundToAll("skills\\explosion_full.mp3");
 	GlowForSecs(client, 255, 0, 0, explosion_ex_delay_secs);
-	// FreezeForSecs(client, explosion_ex_delay_secs);
 	Invulnerable[client] = true;
 	MagicActivates(client);
 
-	// 套用魔法氛圍，並在爆炸完成後再還原（讓爆裂後的明亮對比更強烈）
 	ApplyMagicAtmosphere();
 	ScheduleRestoreAtmosphere(explosion_ex_delay_secs + 0.5);
 
-	CreateParticle(PARTICLE_EX_GLOW_BIG, explosion_ex_delay_secs, Pos);
-	DataPack DP = new DataPack();
-	DP.WriteCell(client);
-	DP.WriteCell(Pos[0]);
-	DP.WriteCell(Pos[1]);
-	DP.WriteCell(Pos[2]);
+	// 追蹤 PARTICLE_EX_GLOW_BIG entity ref，換圖時能主動殺掉
+	g_iExGlowBigRef[client] = EntIndexToEntRef(CreateParticleEnt(PARTICLE_EX_GLOW_BIG, explosion_ex_delay_secs, Pos));
 
-	CreateTimer(explosion_ex_delay_secs-1.0, Timer:Timer_ExExplosion, DP);
-	CreateTimer(explosion_ex_delay_secs-1.5, Timer:Timer_ExAfter, DP);
+	// 在魔法陣中心稍微上方 spawn light_dynamic 強光，視覺對比拉到極大
+	float lightPos[3];
+	lightPos[0] = Pos[0];
+	lightPos[1] = Pos[1];
+	lightPos[2] = Pos[2] + 100.0;
+	g_iExDynLightRef[client] = SpawnExDynamicLight(lightPos, explosion_ex_delay_secs);
+
+	// 追蹤兩個 delayed timer handle，換圖時能 cancel
+	g_hExExplosionTimer[client] = CreateTimer(explosion_ex_delay_secs-1.0, Timer_ExExplosion, client);
+	g_hExAfterTimer[client]     = CreateTimer(explosion_ex_delay_secs-1.5, Timer_ExAfter, client);
 	return Plugin_Stop;
 }
 //------------------------------------//
@@ -2125,10 +2386,12 @@ public Action:Timer_Skill_ManaShield_Start(Handle:timer, any:client) {
 }
 
 public Action:Timer_Skill_ManaShield_End(Handle:timer, any:client) {
+	Skill_Duration_Timer[client] = null;
 	State_ManaShield[client] = false;
 
 	Skill_State[client] = SKILL_CD;
-	TriggerTimer(Skill_Notify_Timer[client]);
+	if (Skill_Notify_Timer[client] != null)
+		TriggerTimer(Skill_Notify_Timer[client]);
 	return Plugin_Stop;
 }
 
@@ -2196,6 +2459,7 @@ void DetectInfect(int client)
 
 public Action:Timer_Skill_EagleEye_End(Handle timer, int client)
 {
+	Skill_Duration_Timer[client] = null;
 	Skill_State[client] = SKILL_CD;
 	for (int i = 1; i <= GetEntityCount(); i++)
 	{
@@ -2344,11 +2608,8 @@ public SlowForSecs(Float:time, client) {
 }
 
 public Action:Timer_Unslow(Handle:timer, any:client) {
-	State_Slow = false;
-	time_weight = 1.0;
 	PrepareAndEmitSoundtoAll("skills\\slomo_end.mp3", .entity = client, .volume = 1.0);
-
-	AcceptEntityInput(Slow_Ent, "Stop");
+	RestoreTimeScale();
 	Slow_Timer = null;
 	return Plugin_Stop;
 }
