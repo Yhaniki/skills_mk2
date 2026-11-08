@@ -563,26 +563,33 @@ void Turn_Undead(int target, int client)
 	{
 		int class = GetEntProp(target, Prop_Send, "m_zombieClass") + 1;
 		if( class == g_iClassTank ) class = 8;
+
+		// [淨化DBG] 診斷用：確認是否進入特感分支、mask 是否放行、當前血量
+		PrintToServer("[skills_mk2][淨化DBG] SI target=%d zclass=%d class=%d maskpass=%d hp=%d",
+			target, GetEntProp(target, Prop_Send, "m_zombieClass"), class,
+			(g_iCvarInfected & (1 << class)) != 0, GetEntProp(target, Prop_Data, "m_iHealth"));
+
 		if( g_iCvarInfected & (1 << class) /*&& HasChance()*/ )
 		{
+			// dissolve 視覺資源（要在擊殺前複製模型；槽滿或建不出來都不影響下面的致命傷害）
 			int index = GetDissolveIndex();
-			if( index != -1 )
-			{
-				// int ragdoll = GetEntPropEnt(target, Prop_Send, "m_hRagdoll");
-				// if( ragdoll > 0 && IsValidEntity(ragdoll) )
-				// {
-					// DissolveTarget(ragdoll);
-				// }
+			int clone = (index != -1) ? AttachFakeRagdoll(target) : -1;
 
-				int clone = AttachFakeRagdoll(target);
-				if( clone > 0)
-				{
-					int hp = GetEntProp(target, Prop_Data, "m_iHealth")+5;
-					DealDamage(target, hp, client, DMG_BULLET);
-					SetEntityRenderMode(clone, RENDER_NONE); // Hide and dissolve clone - method to show more particles
-					DissolveTarget(index, clone, class == 3 ? 0 : target); // Exclude boomer to producer gibs
-					SetEntityRenderFx(target, RENDERFX_FADE_FAST);
-				}
+			// 無條件把致命傷害打出去 —— 擊殺不該依賴 dissolve 槽或 clone 是否建得起來
+			// 原本 DealDamage 被包在 index!=-1 且 clone>0 內，任一失敗 jockey 就打不死
+			int hp = GetEntProp(target, Prop_Data, "m_iHealth")+5;
+			DealDamage(target, hp, client, DMG_BULLET);
+			SetEntityRenderFx(target, RENDERFX_FADE_FAST);
+
+			// [淨化DBG] 診斷用：致命傷害後是否真的死亡
+			PrintToServer("[skills_mk2][淨化DBG] after DealDamage target=%d index=%d clone=%d hp=%d alive=%d",
+				target, index, clone, GetEntProp(target, Prop_Data, "m_iHealth"), IsPlayerAlive(target));
+
+			// 視覺 dissolve（資源不足就略過，不影響擊殺）
+			if( index != -1 && clone > 0 )
+			{
+				SetEntityRenderMode(clone, RENDER_NONE); // Hide and dissolve clone - method to show more particles
+				DissolveTarget(index, clone, class == 3 ? 0 : target); // Exclude boomer to producer gibs
 			}
 		}
 	}

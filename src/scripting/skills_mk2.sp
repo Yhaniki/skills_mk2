@@ -436,6 +436,17 @@ void RestoreTimeScale()
 	}
 	PrintToServer("[skills_mk2] Removed %d func_timescale(s)", found);
 
+	// CreateEntityByName 需要地圖正在運行；伺服器開機時 OnPluginStart 尚無地圖 → 會丟例外導致插件載入失敗
+	// worldspawn (entity 0) 只有在地圖載入後才存在，用它判斷是否有地圖
+	if (FindEntityByClassname(-1, "worldspawn") == INVALID_ENT_REFERENCE)
+	{
+		PrintToServer("[skills_mk2] No map running, skip func_timescale creation");
+		Slow_Ent    = 0;
+		State_Slow  = false;
+		time_weight = 1.0;
+		return;
+	}
+
 	// 建一個「瞬間拉回 1.0」的 func_timescale
 	int reset = CreateEntityByName("func_timescale");
 	if (reset > 0 && IsValidEntity(reset))
@@ -1977,10 +1988,19 @@ public Action:Timer_TurnUndeadAimDelay(Handle:timer, DataPack:DP) {
 	Pos[1] = DP.ReadCell();
 	Pos[2] = DP.ReadCell();
 	CreateParticle(PARTICLE_TURNUNDEAD, 1.0, Pos);
-	for (new i = 1; i < MAX_PLAYERS; i++) {
+	for (new i = 1; i <= MaxClients; i++) {
 		if (IsAliveSpecialInf(i)) {
+			new Float:opos[3];
+			GetEntityWorldOrigin(i, opos);
 			new Float:distance = GetEntityPosDistance(i, Pos);
+			// [淨化DBG] 診斷用：確認每個特感的世界座標與距離，抓騎乘 jockey 是否因距離被漏掉
+			PrintToServer("[skills_mk2][淨化DBG] loop i=%d absO=(%.0f,%.0f,%.0f) aim=(%.0f,%.0f,%.0f) dist=%.0f inRange=%d",
+				i, opos[0], opos[1], opos[2], Pos[0], Pos[1], Pos[2], distance, distance <= TURN_UNDEAD_DIST);
 			if (distance <= TURN_UNDEAD_DIST) {
+				// workaround：先把範圍內的特感震一下（stagger）
+				// 騎乘中的 jockey / 撲人的 hunter / 壓人的 charger 都會因此脫離受害者，
+				// 保證受害隊友被解放；jockey 脫離騎乘後，下面 Turn_Undead 的致命傷害也能正常生效
+				L4D_StaggerPlayer(i, client, Pos);
 				// DealDamage(i, 500 * RoundToNearest(300.0 - distance) / 300, client, DMG_BURN);
 				Turn_Undead(i, client);
 			}
