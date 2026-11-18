@@ -1,11 +1,31 @@
 // 鷹眼 Eagle Eye：時間減慢，偵測並標示周圍所有殭屍
 
-void EagleEye_Register()
+static int s_iEagleEye;
+
+int EagleEye_Register()
 {
-	RegisterSkill("Eagle Eye 鷹眼" ,Timer_Skill_EagleEye_Start, Timer_Skill_EagleEye_End, Timer_Skill_Null_Ready, 7.0, 2.0, 40.0);
+	s_iEagleEye = Skill_Register("Eagle Eye 鷹眼", 7.0, 2.0, 40.0);
+	Skill_OnStart(s_iEagleEye, EagleEye_OnStart);
+	Skill_OnEnd(s_iEagleEye, EagleEye_OnEnd);
+	Skill_OnTick(s_iEagleEye, EagleEye_OnTick);
+	Skill_OnPrecache(s_iEagleEye, EagleEye_OnPrecache);
+	return s_iEagleEye;
 }
 
-// 施放期間由 core/hud.sp 每 0.5 秒呼叫一次，持續標示新進入範圍的殭屍
+static void EagleEye_OnPrecache()
+{
+	SetupMaterial("sound\\skills\\eagleeye.mp3");
+	SetupSound("skills\\eagleeye.mp3", true);
+	PrecacheParticle(PARTICLE_EAGLEEYE);
+}
+
+// 施放期間每 0.5 秒持續標示新進入範圍的殭屍
+static void EagleEye_OnTick(int client)
+{
+	if (Skill_GetState(client) == SKILL_ACT)
+		DetectInfect(client);
+}
+
 void DetectInfect(int client)
 {
 	const float durningTime = 10.0;
@@ -51,10 +71,8 @@ void DetectInfect(int client)
 	}
 }
 
-public Action Timer_Skill_EagleEye_End(Handle timer, int client)
+static void EagleEye_OnEnd(int client)
 {
-	Skill_Duration_Timer[client] = null;
-	Skill_State[client] = SKILL_CD;
 	for (int i = 1; i <= GetEntityCount(); i++)
 	{
 		if (!IsValidEntity(i)) continue;
@@ -63,10 +81,9 @@ public Action Timer_Skill_EagleEye_End(Handle timer, int client)
 			UnGlow(i);
 		}
 	}
-	return Plugin_Stop;
 }
 
-public Action Timer_Skill_EagleEye_Start(Handle timer, any client)
+static void EagleEye_OnStart(int client)
 {
 	//PrepareAndEmitSoundtoAll("skills\\eagleeye.mp3", .entity = client, .volume = 1.0);
 
@@ -75,6 +92,4 @@ public Action Timer_Skill_EagleEye_Start(Handle timer, any client)
 	ParticleFollow(PARTICLE_EAGLEEYE, client, 1.0);
 	DetectInfect(client);
 	PrintToChatAll("\x04%N \x01Eagle Eye!", client);
-
-	return Plugin_Stop;
 }

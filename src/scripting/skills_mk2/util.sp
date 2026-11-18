@@ -176,6 +176,13 @@ float GetEntityPosDistance(int entity, const float pos[3])
 //========================= 其他 ============================
 //===========================================================
 
+// 加進下載表並預載（音效、粒子檔、模型、材質）
+void SetupMaterial(const char[] file)
+{
+	AddFileToDownloadsTable(file);
+	PrecacheGeneric(file);
+}
+
 void StripAndExecuteClientCommand(int client, const char[] command, const char[] arguments)
 {
 	int flags = GetCommandFlags(command);

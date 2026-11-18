@@ -1,4 +1,12 @@
 // 玩家狀態：連線、死亡、倒地、過關、受傷 hook、無敵
+
+enum player_state { PLAYER_ALIVE = 2, PLAYER_INCAP = 1, PLAYER_DEAD = 0 }
+
+bool State_Connection[MAX_PLAYERS + 1];
+bool State_Transition[MAX_PLAYERS + 1];
+player_state State_Player[MAX_PLAYERS + 1];
+bool Invulnerable[MAX_PLAYERS + 1];
+
 static bool Hooked[MAX_PLAYERS];
 
 //===========================================================
@@ -17,8 +25,8 @@ void Player_OnClientConnected(int client)
 		(IsFakeClient(client) == false) &&
 		(IsPlayerAlive(client) == true))
 		State_Player[client] = PLAYER_ALIVE;
-	State_Adrenaline_Boost[client] = false;
-	State_ManaShield[client] = false;
+	MP_StopBoost(client);
+	Skills_Cleanup(client, SKILL_CLEANUP_CONNECT);
 	Hooked[client] = false;
 	Init_Skill(client);
 	PrintPlayerState("connect", client);
@@ -74,7 +82,7 @@ public void Event_StateTransition(Event event, const char[] name, bool dontBroad
 			if (!State_Connection[i]) continue;
 			State_Transition[i] = true;
 			Interrupt_Skill(i);
-			CleanupEXSkill(i);
+			Skills_Cleanup(i, SKILL_CLEANUP_TRANSITION);
 		}
 		return;
 	}
@@ -106,7 +114,7 @@ public void Event_StateTransition(Event event, const char[] name, bool dontBroad
 		Delete_Skill(client);
 	} else if (StrEqual(name, "player_transitioned")) {
 		State_Transition[client] = false;
-		Setup_Materials();
+		Skills_Precache();
 	} else if (StrEqual(name, "player_spawn") || StrEqual(name, "revive_success")) {
 		State_Player[client] = PLAYER_ALIVE;
 	} else if (StrEqual(name, "player_incapacitated")) {
@@ -118,7 +126,7 @@ public void Event_StateTransition(Event event, const char[] name, bool dontBroad
 		UnGlow(client);
 	}
 
-	//if (!StrEqual(name, "player_disconnect")) TriggerTimer(Skill_Notify_Timer[client], true);
+	//if (!StrEqual(name, "player_disconnect")) Hud_Refresh(client, true);
 	PrintPlayerState(name, client);
 }
 
@@ -140,8 +148,7 @@ public Action Event_Hurt(int victim, int &attacker, int &inflictor, float &damag
 	if(Invulnerable[victim])
 		damage = 0.0;
 
-	if(State_ManaShield[victim])
-		damage = DmgReduce(victim, damage);
+	damage = Skills_OnTakeDamage(victim, damage);
 	return Plugin_Changed;
 }
 

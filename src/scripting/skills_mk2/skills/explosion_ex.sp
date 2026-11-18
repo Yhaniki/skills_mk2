@@ -1,29 +1,80 @@
-// 隱藏版爆裂 EXPLOSION ☆爆裂★（skill2 指令施放）
+// 隱藏版爆裂 EXPLOSION ☆爆裂★：爆裂的替代技能，用 skill2 指令施放（SKILL_HIDDEN，不在選單裡）
+// 施放過程中無敵、慢動作、天氣變暗，25 秒後爆炸，結束時施法者倒地
 static float explosion_ex_delay_secs = 25.0;
 
-// EX 爆裂★ 追蹤：timer handles + particle entity refs + 爆炸座標
-static Handle g_hExExplosionTimer[MAX_PLAYERS + 1];
-static Handle g_hExAfterTimer[MAX_PLAYERS + 1];
+static int s_iExplosionEx;
+
+// EX 爆裂★ 追蹤：particle entity refs + 爆炸座標（延遲步驟由排程器追蹤）
+// 座標可以存在 static：每次施放前都會先 CleanupEXSkill 取消上一次的步驟
 static float  g_fExPos[MAX_PLAYERS + 1][3];
 static int    g_iExGlowBigRef[MAX_PLAYERS + 1]; // PARTICLE_EX_GLOW_BIG
 static int    g_iExGlowRef[MAX_PLAYERS + 1];    // PARTICLE_EX_GLOW (ParticleFollow)
 static int    g_iExLightRef[MAX_PLAYERS + 1];   // PARTICLE_EX_LIGHT (ParticleFollow)
 static int    g_iExDynLightRef[MAX_PLAYERS + 1];// light_dynamic 強光照亮魔法陣
 
-void ExplosionEx_Register()
+// base：skill2 施放這個技能時，目前選用的技能（爆裂）
+int ExplosionEx_Register(int base)
 {
-	RegisterSkill("EXPLOSION ☆爆裂★", Timer_Skill_EX_Start, Timer_Skill_EX_End, Timer_Skill_EX_Ready, explosion_ex_delay_secs+2.0, 2.0, 100.0);
+	s_iExplosionEx = Skill_Register("EXPLOSION ☆爆裂★", explosion_ex_delay_secs+2.0, 2.0, 100.0, SKILL_HIDDEN);
+	Skill_OnStart(s_iExplosionEx, ExplosionEx_OnStart);
+	Skill_OnEnd(s_iExplosionEx, ExplosionEx_OnEnd);
+	Skill_OnCleanup(s_iExplosionEx, ExplosionEx_OnCleanup);
+	Skill_OnPrecache(s_iExplosionEx, ExplosionEx_OnPrecache);
+	Skill_SetAlt(base, s_iExplosionEx);
+
+	// 重置追蹤用的 ref
+	for (int i = 0; i < MAX_PLAYERS + 1; i++)
+	{
+		g_iExGlowBigRef[i]  = INVALID_ENT_REFERENCE;
+		g_iExGlowRef[i]     = INVALID_ENT_REFERENCE;
+		g_iExLightRef[i]    = INVALID_ENT_REFERENCE;
+		g_iExDynLightRef[i] = INVALID_ENT_REFERENCE;
+	}
+	return s_iExplosionEx;
 }
 
-// OnPluginStart 時重置追蹤用的 handle / ref
-void ExplosionEx_InitState(int client)
+static void ExplosionEx_OnPrecache()
 {
-	g_hExExplosionTimer[client] = null;
-	g_hExAfterTimer[client]     = null;
-	g_iExGlowBigRef[client]     = INVALID_ENT_REFERENCE;
-	g_iExGlowRef[client]        = INVALID_ENT_REFERENCE;
-	g_iExLightRef[client]       = INVALID_ENT_REFERENCE;
-	g_iExDynLightRef[client]    = INVALID_ENT_REFERENCE;
+	SetupMaterial("sound\\skills\\explosion_full.mp3");
+	SetupSound("skills\\explosion_full.mp3", true);
+	PrecacheSound(NUKE_SOUND, true);
+
+	SetupMaterial("particles\\ex.pcf");
+	SetupMaterial("particles\\nuke.pcf");
+	SetupMaterial("particles\\nuke2.pcf");
+	PrecacheParticle(PARTICLE_EXPLOSION2);
+	PrecacheParticle(PARTICLE_EX_GLOW);
+	PrecacheParticle(PARTICLE_EX_GLOW_BIG);
+	PrecacheParticle(PARTICLE_EX_LIGHT);
+	PrecacheParticle(PARTICLE_NUKE1);
+	PrecacheParticle(PARTICLE_NUKE2);
+
+	MagicCircle_Precache();
+}
+
+static void ExplosionEx_OnCleanup(int client, SkillCleanup reason)
+{
+	switch (reason)
+	{
+		case SKILL_CLEANUP_TRANSITION:
+		{
+			CleanupEXSkill(client);
+		}
+		case SKILL_CLEANUP_ROUND_START, SKILL_CLEANUP_MAP_END, SKILL_CLEANUP_RELOAD, SKILL_CLEANUP_PLUGIN_END:
+		{
+			CleanupEXSkill(client);
+			KillMagicCircle(client);
+		}
+	}
+}
+
+// 對 entity 的衝擊波延遲 time 秒（依距離）
+static void ShockWaveAfter(float time, int attacker, int entity)
+{
+	DataPack DP;
+	CreateDataTimer(time, ShockWave, DP);
+	DP.WriteCell(attacker);
+	DP.WriteCell(entity);
 }
 
 static float beaPos[3];
@@ -66,9 +117,6 @@ void NukeExplosion(int attacker, const float vPos[3] = NULL_VECTOR)
 		if (!IsValidEntity(i))
 			continue;
 
-		DataPack DP = new DataPack();
-		DP.WriteCell(attacker);
-		DP.WriteCell(i);
 		float time = 0.0;
 		if (IsValidClient(i) && GetClientTeam(i) == 3)
 		{
@@ -77,7 +125,7 @@ void NukeExplosion(int attacker, const float vPos[3] = NULL_VECTOR)
 			time = GetVectorDistance(vPos, Pos) / distanceConstant;
 			if (GetVectorDistance(beaPos, Pos) > g_hNukeRadius)
 				return;
-			CreateTimer(time, ShockWave, DP);
+			ShockWaveAfter(time, attacker, i);
 		}
 		if (IsValidClient(i) && GetClientTeam(i) == 2)
 		{
@@ -86,7 +134,7 @@ void NukeExplosion(int attacker, const float vPos[3] = NULL_VECTOR)
 			time = GetVectorDistance(vPos, Pos) / distanceConstant;
 			if (GetVectorDistance(beaPos, Pos) > g_hNukeRadius)
 				return;
-			CreateTimer(time, ShockWave, DP);
+			ShockWaveAfter(time, attacker, i);
 		}
 		else
 		{
@@ -95,31 +143,31 @@ void NukeExplosion(int attacker, const float vPos[3] = NULL_VECTOR)
 			{
 				GetEntPropVector(i, Prop_Send, "m_vecOrigin", Pos);
 				time = GetVectorDistance(vPos, Pos) / distanceConstant;
-				CreateTimer(time, ShockWave, DP);
+				ShockWaveAfter(time, attacker, i);
 			}
 			else if (StrEqual(tName, "infected", false))
 			{
 				GetEntPropVector(i, Prop_Send, "m_vecOrigin", Pos);
 				time = GetVectorDistance(vPos, Pos) / distanceConstant;
-				CreateTimer(time, ShockWave, DP);
+				ShockWaveAfter(time, attacker, i);
 			}
 			else if (StrEqual(tName, "prop_physics", false))
 			{
 				GetEntPropVector(i, Prop_Send, "m_vecOrigin", Pos);
 				time = GetVectorDistance(vPos, Pos) / distanceConstant;
-				CreateTimer(time, ShockWave, DP);
+				ShockWaveAfter(time, attacker, i);
 			}
 			else if (StrEqual(tName, "prop_physics_multiplayer", false))
 			{
 				GetEntPropVector(i, Prop_Send, "m_vecOrigin", Pos);
 				time = GetVectorDistance(vPos, Pos) / distanceConstant;
-				CreateTimer(time, ShockWave, DP);
+				ShockWaveAfter(time, attacker, i);
 			}
 			else if (StrEqual(tName, "prop_physics_override", false))
 			{
 				GetEntPropVector(i, Prop_Send, "m_vecOrigin", Pos);
 				time = GetVectorDistance(vPos, Pos) / distanceConstant;
-				CreateTimer(time, ShockWave, DP);
+				ShockWaveAfter(time, attacker, i);
 			}
 		}
 	}
@@ -153,7 +201,7 @@ float ComputeShakeDmg(float maxDamage, float distance, float range)
 	return dmg;
 }
 
-public Action ShockWave(Handle timer, DataPack DP)
+static Action ShockWave(Handle timer, DataPack DP)
 {
 	float g_hNukeDamage = 20000.0;
 	float nukeDamageRange = 5000.0;
@@ -249,26 +297,16 @@ public Action ShockWave(Handle timer, DataPack DP)
 	return Plugin_Handled;
 }
 
-public Action Timer_ExExplosion(Handle timer, int client)
+// 施放後 24 秒：爆炸
+static void ExplosionEx_StepNuke(int client, DataPack data)
 {
-	g_hExExplosionTimer[client] = null;
 	NukeExplosion(client, g_fExPos[client]);
-	return Plugin_Stop;
 }
 
-public Action Timer_Skill_EX_Ready(Handle timer, int client)
+// 持續時間（27 秒）結束：解除無敵、施法者魔力枯竭倒地、天氣恢復
+static void ExplosionEx_OnEnd(int client)
 {
-	Skill_Cooldown_Timer[client] = null;
-	Skill_EX_Using[client] = false;
-	Skill_State[client] = SKILL_RDY;
-	return Plugin_Stop;
-}
-
-public Action Timer_Skill_EX_End(Handle timer, any client)
-{
-	Skill_Duration_Timer[client] = null; // callback 結束 SM 會回收 handle，必須歸零避免殭屍
 	Invulnerable[client] = false;
-	Skill_State[client] = SKILL_CD;
 	if (IsAliveHumanPlayer(client) &&
 		!IsIncapped(client))
 	{
@@ -276,21 +314,18 @@ public Action Timer_Skill_EX_End(Handle timer, any client)
 	}
 
 	RestoreMagicAtmosphere();
-	return Plugin_Stop;
 }
 
-public Action Timer_ExAfter(Handle timer, int client)
+// 施放後 23.5 秒：爆炸後的煙
+static void ExplosionEx_StepAfter(int client, DataPack data)
 {
-	g_hExAfterTimer[client] = null;
 	CreateParticle(PARTICLE_EXPLOSION2, 5.0, g_fExPos[client]);
-	return Plugin_Stop;
 }
 
-// 清理 EX 爆裂★ 相關 timer + particle（換圖 / 玩家死亡 / 中斷技能時呼叫）
+// 清理 EX 爆裂★ 還沒觸發的延遲步驟 + particle（換圖、回合重開、過關、卸載，以及再次施放前）
 void CleanupEXSkill(int client)
 {
-	SafeDeleteTimer(g_hExExplosionTimer[client]);
-	SafeDeleteTimer(g_hExAfterTimer[client]);
+	Skill_CancelSteps(client, s_iExplosionEx);
 	KillParticleRef(g_iExGlowBigRef[client]);
 	KillParticleRef(g_iExGlowRef[client]);
 	KillParticleRef(g_iExLightRef[client]);
@@ -340,12 +375,12 @@ void MagicActivates(int client)
 	MagicCircleAtFeet(client, explosion_ex_delay_secs - 0.5, 7.2, 35.0);
 }
 
-public Action Timer_Skill_EX_Start(Handle timer, any client)
+static void ExplosionEx_OnStart(int client)
 {
 	float Pos[3];
 	if (GetAimOrigin(client, Pos, 10.0) == 0) {
 		PrintToChatAll("\x04%N \x01施放爆裂失敗", client);
-		return Plugin_Stop;
+		return;
 	}
 	PrintToChatAll("\x04%N \x01エクスプロージョン!", client);
 
@@ -376,8 +411,7 @@ public Action Timer_Skill_EX_Start(Handle timer, any client)
 	lightPos[2] = Pos[2] + 100.0;
 	g_iExDynLightRef[client] = SpawnExDynamicLight(lightPos, explosion_ex_delay_secs);
 
-	// 追蹤兩個 delayed timer handle，換圖時能 cancel
-	g_hExExplosionTimer[client] = CreateTimer(explosion_ex_delay_secs-1.0, Timer_ExExplosion, client);
-	g_hExAfterTimer[client]     = CreateTimer(explosion_ex_delay_secs-1.5, Timer_ExAfter, client);
-	return Plugin_Stop;
+	// 兩個延遲步驟由排程器追蹤，CleanupEXSkill 時取消
+	Skill_Schedule(s_iExplosionEx, client, explosion_ex_delay_secs-1.0, ExplosionEx_StepNuke);
+	Skill_Schedule(s_iExplosionEx, client, explosion_ex_delay_secs-1.5, ExplosionEx_StepAfter);
 }

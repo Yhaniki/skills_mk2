@@ -3,6 +3,18 @@
 int g_iMagicCircleRef[MAX_PLAYERS + 1];
 float g_fMagicCircleYaw[MAX_PLAYERS + 1];
 
+// 魔法陣的模型與動畫材質
+void MagicCircle_Precache()
+{
+	SetupMaterial(MAGIC_CIRCLE_VTF);
+	SetupMaterial(MAGIC_CIRCLE_VMT_GROUND);
+	SetupMaterial(MAGIC_CIRCLE_MODEL);
+	SetupMaterial("models/konosuba/magic_circle_plane.vvd");
+	SetupMaterial("models/konosuba/magic_circle_plane.dx90.vtx");
+	if (FileExists(MAGIC_CIRCLE_MODEL, true))
+		PrecacheModel(MAGIC_CIRCLE_MODEL, true);
+}
+
 // trace ray 過濾：忽略玩家本人
 public bool MagicCircle_FilterIgnoreClient(int entity, int contentsMask, any data)
 {

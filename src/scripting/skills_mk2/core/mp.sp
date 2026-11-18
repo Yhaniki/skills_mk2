@@ -1,5 +1,11 @@
 // MP 系統：增減、每秒回復、擊殺吸取、補給品回復、腎上腺素加倍
 
+float Skill_MP[MAX_PLAYERS + 1];
+bool State_Adrenaline_Boost[MAX_PLAYERS + 1];
+
+static Handle s_hBoost[MAX_PLAYERS + 1];
+static Handle s_hRecover[MAX_PLAYERS + 1];
+
 bool MP_Decrease(int client, float mp)
 {
 	if (Skill_MP[client] < mp) {
@@ -20,15 +26,20 @@ void MP_Increase(int client, float mp)
 		Skill_MP[client] += mp;
 	}
 	if (Skill_MP[client] > MP_MAX) Skill_MP[client] = MP_MAX;
-	if (Skill_Notify_Timer[client] != null &&
-		Skill_Notify_Timer[client] != INVALID_HANDLE)
-	{
-		TriggerTimer(Skill_Notify_Timer[client], true);
-	}
-	else
-	{
+	if (!Hud_Refresh(client, true))
 		Player_OnClientConnected(client);
-	}
+}
+
+void MP_StartRecover(int client)
+{
+	if (s_hRecover[client] != null)
+		delete s_hRecover[client];
+	s_hRecover[client] = CreateTimer(1.0, Skill_MPrecover, client, TIMER_REPEAT);
+}
+
+void MP_StopRecover(int client)
+{
+	SafeDeleteTimer(s_hRecover[client]);
 }
 
 // 每秒回復（TIMER_REPEAT，必須回傳 Plugin_Continue）
@@ -75,12 +86,19 @@ public void Event_MPGain(Event event, const char[] name, bool dontBroadcast)
 void Skill_Adrenaline_Boost(int client)
 {
 	State_Adrenaline_Boost[client] = true;
-	Skill_Adrenaline_Boost_Timer[client] = CreateTimer(20.0, Skill_Adrenaline_Boost_End, client);
+	s_hBoost[client] = CreateTimer(20.0, Skill_Adrenaline_Boost_End, client);
 }
 
 public Action Skill_Adrenaline_Boost_End(Handle timer, any client)
 {
-	Skill_Adrenaline_Boost_Timer[client] = null;
+	s_hBoost[client] = null;
 	State_Adrenaline_Boost[client] = false;
 	return Plugin_Stop;
+}
+
+// 中斷技能、換圖、回合重開時取消腎上腺素加倍
+void MP_StopBoost(int client)
+{
+	SafeDeleteTimer(s_hBoost[client]);
+	State_Adrenaline_Boost[client] = false;
 }

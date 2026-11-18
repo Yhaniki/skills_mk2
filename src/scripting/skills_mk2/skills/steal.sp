@@ -1,8 +1,19 @@
 // 偷竊 Steal：對準隊友偷走手上武器，或對準殭屍隨機取得物品
 
-void Steal_Register()
+static int s_iSteal;
+
+int Steal_Register()
 {
-	RegisterSkill("Steal 偷竊" ,Timer_Skill_Steal_Start, Timer_Skill_Null_End, Timer_Skill_Null_Ready, 6.0, 2.0, 20.0);// Float:skill_duration, Float:skill_cooldown, Float:skill_mpcost
+	s_iSteal = Skill_Register("Steal 偷竊", 6.0, 2.0, 20.0);
+	Skill_OnStart(s_iSteal, Steal_OnStart);
+	Skill_OnPrecache(s_iSteal, Steal_OnPrecache);
+	return s_iSteal;
+}
+
+static void Steal_OnPrecache()
+{
+	SetupMaterial("sound\\skills\\steal.mp3");
+	SetupSound("skills\\steal.mp3", true);
 }
 
 // 從殭屍身上偷到的物品表
@@ -52,7 +63,7 @@ int CheckStealType(int entityId)
 	}
 	return result;
 }
-public Action Timer_Skill_Steal_Start(Handle timer, any client)
+static void Steal_OnStart(int client)
 {
 	// FakeClientCommand(client, "give katana");
 	PrepareAndEmitSoundtoAll("skills\\steal.mp3", .entity = client, .volume = 1.0);
@@ -61,12 +72,9 @@ public Action Timer_Skill_Steal_Start(Handle timer, any client)
 	GlowForSecs(client, 0, 100, 0, 6.0*time_weight);//rgb sec
 	// Skill_Steal(client);
 	int entityId = GetClientAimTarget(client, false);//return Entity
-	DataPack DP = new DataPack();
-	DP.WriteCell(client);
-	DP.WriteCell(entityId);
-	DP.WriteCell(CheckStealType(entityId));
-	CreateTimer(5.2*time_weight, Skill_Steal, DP);
-	return Plugin_Stop;
+	DataPack data = Skill_Schedule(s_iSteal, client, 5.2*time_weight, Steal_StepSteal);
+	data.WriteCell(entityId);
+	data.WriteCell(CheckStealType(entityId));
 }
 
 int GetItemIdx(int idx)
@@ -83,12 +91,10 @@ int GetItemIdx(int idx)
 	return rst;
 }
 
-public Action Skill_Steal(Handle timer, DataPack DP)
+static void Steal_StepSteal(int client, DataPack data)
 {
-	DP.Reset();
-	int client = DP.ReadCell();
-	int entityId = DP.ReadCell();
-	int type = DP.ReadCell();
+	int entityId = data.ReadCell();
+	int type = data.ReadCell();
 	// 1. Read the type and coordinates of the object aimed by the player
 	// new entityId = GetClientAimTarget(client, false);//return Entity
 	char item[MAXCMD];
@@ -174,5 +180,4 @@ public Action Skill_Steal(Handle timer, DataPack DP)
 		// 4. If the player hasn't aimed at any person, return a failed status
 		PrintToChatAll("\x04%N \x01偷竊失敗", client);
 	}
-	return Plugin_Stop;
 }

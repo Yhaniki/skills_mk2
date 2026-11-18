@@ -108,19 +108,19 @@ spcomp skills_mk2/main.sp -o ../plugins/skills_mk2.smx
 
 ## 延遲步驟排程設計（第 2 步）
 
-`Skill_Schedule(client, delay, step)` 由框架建立並追蹤 timer：
+`DataPack data = Skill_Schedule(skill, client, delay, step)` 由框架建立並追蹤 timer（`core/scheduler.sp`）：
 
 1. 用 `CreateDataTimer`，DataPack 由 SourceMod 自動釋放。
-2. DataPack 記錄 userid、本次施放序號、slot、步驟函式。
+2. DataPack 開頭記錄 client、slot、userid、技能編號、施放序號、步驟函式；技能接著寫入步驟需要的資料（例如瞄準座標），步驟函式收到時已經讀到這些資料的開頭。
 3. timer handle 記在該玩家的待執行清單。
 4. timer 觸發時，第一件事是依 slot 把自己從清單移除。不能靠 userid 找 slot，玩家斷線時會找不到，這正是 `1549b88` 修的淨化 bug。
-5. 確認玩家還在、施放序號沒變，才執行步驟函式。
-6. 需要取消時，框架一次刪除清單內所有 timer，並把施放序號加一。
+5. 確認玩家還在（userid 對得上）、施放序號沒變，才執行步驟函式。
+6. `Skill_CancelSteps(client, skill)` 刪除該玩家該技能所有還沒觸發的 timer，並把施放序號加一。
 
 配套做法：
-- 步驟需要的資料（例如瞄準座標）存在技能檔自己的 `static` 陣列，不用 DataPack。同一個玩家同時只會有一次施放。
-- 單純「N 秒後刪掉 entity」改用 entity I/O（`OnUser1 !self:Kill::N:-1`），交給引擎處理。
-- 0 秒延遲（`CreateTimer(0.0, ...)`）改成直接呼叫或 `RequestFrame`。
+- ~~步驟需要的資料存在技能檔自己的 `static` 陣列~~：實作時改成寫在排程器的 DataPack。切換技能會把冷卻重置成 2 秒，同一個玩家可能有兩次施放的步驟同時在等（例如偷竊延遲 5.2 秒、淨化 2.5 + 1 秒），共用陣列會互相覆蓋。隱藏版爆裂的座標仍存在 `static`，因為每次施放前都會先取消上一次的步驟。
+- ~~單純「N 秒後刪掉 entity」改用 entity I/O~~：沒有做。粒子的刪除 timer 不是技能的延遲步驟，也沒有 DataPack 洩漏；改成 entity I/O 在慢動作下的時間基準跟 SourceMod timer 是否一致沒有把握，收益不大。
+- 0 秒延遲（`CreateTimer(0.0, ...)`）改成 `RequestFrame`，同樣延後執行（技能的 start、被動技能被切換掉時的 end）。
 
 取消時機：
 - **第 2 步（維持現狀）：** 只有隱藏版爆裂的延遲步驟會在換圖、回合重開、過關時取消，這是現在 `CleanupEXSkill` 的行為。其他技能的延遲步驟照樣觸發。斷線玩家的步驟直接略過，現在這種情況會報錯，屬於錯誤修正，不算行為改變。
@@ -178,18 +178,27 @@ spcomp skills_mk2/main.sp -o ../plugins/skills_mk2.smx
 
 ### 第 2 步：技能框架 + 排程器 + 移植 6 個技能
 
-- [ ] 用框架改寫 `core/skill_base.sp`（轉新語法），新增 `core/scheduler.sp`。
-- [ ] 6 個技能一次移植完。狀態機只能有一套，不讓新舊並存。
-- [ ] 移除技能名稱字串比對（`Skill_Notify`、`Skill_Notify_MPbar`、skill2 指令）。
-- [ ] 隱藏版爆裂改成 `SKILL_HIDDEN` + 爆裂的 alt，移除 `Skill_EX_Using`、`hiddenExplosionNum`、`skill_num-1` 這類特例。
-- [ ] 魔心護盾改成 `SKILL_PASSIVE` + `onTakeDamage` + `onTick`。
-- [ ] `Setup_Materials` 拆進各技能的 `onPrecache`，移除 `core/precache.sp`。
-- [ ] 五份重複的清理（換圖、回合重開、卸載、reload、中斷）改由框架依原因分派 `onCleanup`。
-- [ ] 各技能的 DataPack 改成排程器加 `static` 陣列。
-- [ ] 行為維持不變的重點：
+- [x] 用框架改寫 `core/skill_base.sp`（轉新語法），新增 `core/scheduler.sp`。
+- [x] 6 個技能一次移植完。狀態機只能有一套，不讓新舊並存。
+- [x] 移除技能名稱字串比對（`Skill_Notify`、`Skill_Notify_MPbar`、skill2 指令）。
+- [x] 隱藏版爆裂改成 `SKILL_HIDDEN` + 爆裂的 alt，移除 `Skill_EX_Using`、`hiddenExplosionNum`、`skill_num-1` 這類特例。
+- [x] 魔心護盾改成 `SKILL_PASSIVE` + `onTakeDamage` + `onTick`。
+- [x] `Setup_Materials` 拆進各技能的 `onPrecache`，移除 `core/precache.sp`。多個技能共用的資源（慢動作音效、`skill_fx.pcf`）由框架的 `Skills_Precache` 預載。
+- [x] 五份重複的清理（換圖、回合重開、卸載、reload、中斷）改由框架依原因分派 `onCleanup`。
+- [x] 各技能的 DataPack 改成排程器（資料寫在排程器的 DataPack，原因見「延遲步驟排程設計」）。
+- [x] 拆掉 `core/globals.sp`：玩家狀態在 `core/player.sp`、MP 在 `core/mp.sp`、`State_ManaShield` 在 `skills/mana_shield.sp`；技能狀態與持續／冷卻 timer 是 `core/skill_base.sp` 的 `static`，其他檔案用 `Skill_Get*` 查詢。模組之間互相需要的地方改用函式（`Hud_Refresh`、`MP_StopBoost`、`Skills_Cleanup`）。
+- [x] 行為維持不變的重點：
   - skill2 照舊不檢查冷卻，第 3 步才修。
   - 延遲步驟的取消時機照「延遲步驟排程設計」裡的第 2 步規則。
-- [ ] 驗收：編譯成功，並跑完伺服器測試清單。
+- [x] 驗收：編譯成功、不新增 warning。自動測試：正式版冒煙測試全部通過；bot 技能測試跟 0.7 比對 272 個檢查點，剩下的差異都有解釋——不是施法者的 bot MP 差 2（每秒回復的時間點）、偷竊瞄準隊友的結果不穩定（bot 的視角偶爾會被拉回去，基準版和新版各出現過成功與失敗）、淨化後斷線不再報錯（預期中的修正）。
+
+第 2 步實作時的調整（對遊戲的影響都在 0.1 秒以內或只有 HUD 更新時間）：
+- 技能的 start、被動技能被切換掉時的 end 從 `CreateTimer(0.0, ...)` 改成 `RequestFrame`，會提早約 0.07 秒執行（SourceMod timer 的精度是 0.1 秒）。
+- 鷹眼、隱藏版爆裂的持續結束與冷卻結束時，框架統一立刻更新 HUD（原本要等下一次 0.5 秒的更新）。
+- 原本施放、魔心護盾啟用時 `TriggerTimer(HUD timer)` 沒檢查 null，改由 `Hud_Refresh` 檢查，HUD timer 不存在時不會再丟例外。`Skill_Change` 裡持續／冷卻 timer 的 `TriggerTimer` 照舊不檢查（第 3 步）。
+- 延遲步驟在施法者斷線後直接略過（原本淨化會丟 `Client is not connected`，自動測試的 `kick_turn_undead` 情境有抓到）。
+- 技能選單的項目改存技能編號，隱藏技能用 `SKILL_HIDDEN` 濾掉（原本固定少列最後一個）。
+- `ExplosionEx_InitState` 併進 `ExplosionEx_Register`；`ManaShield_RestoreMeleeRange` 改由 `main.sp` 的 `OnPluginEnd` 呼叫。
 
 ### 第 3 步：修 bug（每項一個 commit）
 
@@ -198,13 +207,15 @@ spcomp skills_mk2/main.sp -o ../plugins/skills_mk2.smx
 - [ ] skill2 不檢查冷卻：一般爆裂施放中或冷卻中仍能放隱藏版，兩組 timer 會互相覆蓋。
 - [ ] `change_skill` 的判斷用了 `Skill_Type[skill_num]`（超出註冊範圍），「技能施放中」分支永遠走不到。
 - [ ] `Skill_Change` 呼叫 `TriggerTimer` 前沒檢查 null（第 2 步重寫後確認是否還存在）。
-- [ ] `Timer_UndeadRush` 用 client index，放完淨化後 1 秒內斷線會報錯（第 2 步排程器上線後確認）。
+- [x] `Timer_UndeadRush` 用 client index，放完淨化後 1 秒內斷線會報錯。第 2 步改用排程器後已不會發生（自動測試的 `kick_turn_undead` 情境：0.7 報 `Client is not connected`，第 2 步沒有例外）。
 - [ ] `round_start` 的技能清理寫在 dissolve 的 `Event_RoundStart` 裡，只有 `l4d_dissolve_allow=1` 時才會執行；改成技能模組自己 hook。
+- [ ] 換圖載入時 `round_start` 比 `OnMapStart` 先觸發，`Skills_RoundStartCleanup` → `RestoreTimeScale` 的 `CreateEntityByName` 丟「Cannot create new entity when no map is running」。這時 worldspawn 已經存在，所以 `3e8a6d3` 的檢查擋不到。（自動測試發現，0.7 就有）
 - [ ] `Hooked[MAX_PLAYERS]` 少一格，第 18 號玩家會陣列越界。
 - [ ] `Event_Draw`、`Event_NoDraw`、`CheckPlayerConnections` 的迴圈用 `i < MAX_PLAYERS`，少跑最後一位玩家。
 - [ ] 移除淨化的 `[淨化DBG]` 除錯輸出。
 - [ ] 合併重複函式：`IsInf` 與 `IsAliveInf` 完全相同（後者其實沒檢查是否活著）；`IsAliveSpecialInf` 與 `IsAliveSpecialInf2` 重複。
-- [ ] 確認各技能的 DataPack 洩漏在第 2 步後都已消失，特別是 `NukeExplosion` 對每個 entity 各 `new` 一個 DataPack 的寫法。
+- [x] 確認各技能的 DataPack 洩漏在第 2 步後都已消失，特別是 `NukeExplosion` 對每個 entity 各 `new` 一個 DataPack 的寫法。第 2 步後技能的延遲步驟與衝擊波都用 `CreateDataTimer`（由 SourceMod 釋放），剩下的 `new DataPack`（`Invuln_OnPummelVictim`、腳下魔法陣）都有釋放。
+- [ ] **待決定**：隱藏版爆裂的衝擊波用 `SDKHooks_TakeDamage`，它的 `bypassHooks` 預設是 true，會略過插件自己的受傷 hook，所以**施法者的無敵擋不住自己的爆炸**。施法者和約 5000 單位內的隊友都會被炸倒（自動測試確認），施法者會比持續時間結束（27 秒）早 3 秒倒地。要不要讓無敵擋住、隊友要不要受傷，需要決定。
 - [ ] 淨化殺普通殭屍的結果取決於有沒有搶到 dissolve 槽（`lib/dissolve.sp` 的 `Turn_Undead`）。（讀碼推論，待實測）
   - 有空槽：不呼叫 `DealDamage`，只交給溶解器處理。溶解器最後那一擊的 10000 傷害被 `OnCommonDamage` 擋掉，殭屍改由溶解器 `UTIL_Remove` 或 2.5 秒後的 `Kill` 靜默移除，不會觸發 `player_death`。所以不會給全隊 0.5 MP（`Event_MPleech`），也不算施法者的擊殺。
   - 槽滿（同時超過 25 隻）：走 `DealDamage`，正常死亡，會給 MP。

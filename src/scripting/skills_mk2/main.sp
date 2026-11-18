@@ -24,8 +24,8 @@
 #pragma newdecls required
 
 // ---- 模組：全域變數必須先宣告才能使用，順序不能任意調換 ----
+// 函式可以前向引用；互相需要對方狀態的模組改用函式存取（例如 Hud_Refresh、MP_StopBoost）
 #include "config.sp"
-#include "core/globals.sp"
 #include "util.sp"
 #include "fx/particle.sp"
 #include "fx/glow.sp"
@@ -38,16 +38,16 @@
 #include "lib/dissolve.sp"
 #include "core/player.sp"
 #include "core/mp.sp"
+#include "core/skill_base.sp"
+#include "core/scheduler.sp"
 #include "skills/explosion.sp"
 #include "skills/mana_shield.sp"
 #include "skills/eagle_eye.sp"
 #include "skills/steal.sp"
 #include "skills/turn_undead.sp"
 #include "skills/explosion_ex.sp"
-#include "core/skill_base.sp"
 #include "core/hud.sp"
 #include "core/commands.sp"
-#include "core/precache.sp"
 
 public Plugin myinfo = {
 	name = "[KONOSUBA_SKILLS]",
@@ -91,23 +91,19 @@ public void OnPluginStart()
 	for (int i = 0; i < MAX_PLAYERS + 1; i++)
 	{
 		Invulnerable[i] = false;
-		Skill_EX_Using[i] = false;
+		Skill_InitClient(i);
 		g_iMagicCircleRef[i] = INVALID_ENT_REFERENCE;
 		g_fMagicCircleYaw[i] = 0.0;
-		ExplosionEx_InitState(i);
 	}
 	Weapons_Init();
 //------------------------------
-	//Setup_Materials();
-	// 註冊順序不能變：Skill[client] 存的是索引，而且隱藏版爆裂必須是最後一個
-	Explosion_Register();
+	// 註冊順序就是選單順序；玩家選的技能存的是編號，換圖、reload 後要對得上，所以不能任意調換
+	int explosion = Explosion_Register();
 	ManaShield_Register();
 	EagleEye_Register();
 	Steal_Register();
 	TurnUndead_Register();
-	ExplosionEx_Register();
-	//RegisterSkill("Sixth Sense 第六感" ,Timer_Skill_EagleEye_Start, Timer_Skill_EagleEye_End, Timer_Skill_Null_Ready, 10.0, 60.0, 80.0);
-	hiddenExplosionNum = skill_num-1;
+	ExplosionEx_Register(explosion);    // 爆裂的替代技能（skill2），不在選單裡
 
 	// 同一事件有多個 hook 時依註冊順序呼叫，順序不能變
 	// （player_death：Event_StateTransition → Event_MPleech → Event_DeathUnglow）
@@ -142,22 +138,14 @@ public void OnPluginStart()
 	CheckPlayerConnections();
 
 	// reload 時把上一次執行殘留的遊戲狀態全部清掉
-	RestoreTimeScale();
-	for (int i = 1; i <= MAX_PLAYERS; i++)
-	{
-		if (!IsClientInGame(i)) continue;
-		if (State_ManaShield[i]) UnGlow(i);
-		State_ManaShield[i] = false;
-		Invulnerable[i]     = false;
-		KillMagicCircle(i);
-		CleanupEXSkill(i);
-	}
+	Skills_ReloadCleanup();
 }
 
 public void OnPluginEnd()
 {
 	Dissolve_OnPluginEnd();
 	Skills_PluginEndCleanup();
+	ManaShield_RestoreMeleeRange();
 }
 
 public void OnConfigsExecuted()
@@ -167,7 +155,7 @@ public void OnConfigsExecuted()
 
 public void OnMapStart()
 {
-	Setup_Materials();
+	Skills_Precache();
 	Dissolve_OnMapStart();
 	CheckPlayerConnections();
 	ResetMagicAtmosphere();

@@ -1,130 +1,360 @@
-// 技能系統：註冊、施放、切換、中斷、清理
+// 技能框架：註冊、施放、狀態機（準備 → 施放中 → 冷卻 → 準備）、切換、中斷、清理分派、資源預載
 //
-// 過渡期：這個檔案暫時使用 `#pragma newdecls optional`。
-// 技能 callback 目前存在 `Timer:` tag 陣列，再強轉交給 CreateTimer；
-// 新語法不允許把存起來的 Function 交給 CreateTimer，所以這段舊寫法只能留在這裡。
-// 第 2 步改寫成技能框架時，整個檔案會轉成新語法。
-#pragma newdecls optional
+// 每個技能是 skills/ 底下的一個檔案，用 Skill_Register 註冊，再用 Skill_On* 掛上需要的 hook：
+//   onStart       施放時（被動技能是啟用時）。在下一個 frame 呼叫，跟原本的 CreateTimer(0.0, ...) 一樣是延後執行
+//   onEnd         持續時間結束，或被動技能被切換掉
+//   onTick        HUD 每 0.5 秒更新時，只呼叫目前選用的技能
+//   onCleanup     各種清理時機，原因見 SkillCleanup；每個技能都會呼叫
+//   onTakeDamage  玩家受傷時，每個技能都會呼叫
+//   onPrecache    OnMapStart 預載資源
+// 延遲步驟用 core/scheduler.sp 的 Skill_Schedule。
+//
+// 技能狀態、持續／冷卻 timer 都是這個檔案的 static：技能檔只能讀（Skill_GetState），不能改。
 
-static Timer:Timer_Skill_Start[MAXSKILLS];
-static Timer:Timer_Skill_End[MAXSKILLS];
-static Timer:Timer_Skill_Ready[MAXSKILLS];
+enum skill_state { SKILL_CD = 2, SKILL_ACT = 1, SKILL_RDY = 0 }
 
-static Handle Skill_Notify_Ani_Timer[MAX_PLAYERS + 1];
-static Handle Skill_MPrecover_Timer[MAX_PLAYERS + 1];
+#define SKILL_PASSIVE   (1 << 0)    // 被動技能：選用時就啟用，沒有持續時間、冷卻與 MP 消耗
+#define SKILL_HIDDEN    (1 << 1)    // 不出現在選單，只能當作其他技能的替代技能（skill2）
+
+enum SkillCleanup
+{
+	SKILL_CLEANUP_CONNECT,      // 玩家連線，重設狀態
+	SKILL_CLEANUP_INTERRUPT,    // 死亡、斷線、重新初始化（Interrupt_Skill）
+	SKILL_CLEANUP_TRANSITION,   // 過關（map_transition）
+	SKILL_CLEANUP_ROUND_START,  // 回合重開（投票重開等不走 OnMapEnd 的重置）
+	SKILL_CLEANUP_MAP_END,      // 換圖
+	SKILL_CLEANUP_RELOAD,       // 插件 reload：OnPluginStart 清掉上一次執行殘留的遊戲狀態
+	SKILL_CLEANUP_PLUGIN_END    // 插件卸載
+}
+
+typedef SkillClientHook = function void (int client);
+typedef SkillCleanupHook = function void (int client, SkillCleanup reason);
+typedef SkillDamageHook = function float (int client, float damage);
+typedef SkillPrecacheHook = function void ();
+
+enum struct SkillDef
+{
+	char name[MAXSKILLNAME];
+	float duration;
+	float cooldown;
+	float mpcost;
+	int flags;
+	int alt;                // skill2 施放的替代技能，-1 表示沒有
+	Function onStart;
+	Function onEnd;
+	Function onTick;
+	Function onCleanup;
+	Function onTakeDamage;
+	Function onPrecache;
+}
+
+static SkillDef s_Skills[MAXSKILLS];
+static int s_iSkillCount;
+
+// 每位玩家
+static int s_iSkill[MAX_PLAYERS + 1];           // 目前選用的技能
+static int s_iAltUsing[MAX_PLAYERS + 1];        // 正在施放／冷卻的替代技能，-1 表示沒有
+static skill_state s_iState[MAX_PLAYERS + 1];
+static float s_fLastUseTime[MAX_PLAYERS + 1];
+static Handle s_hDuration[MAX_PLAYERS + 1];
+static Handle s_hCooldown[MAX_PLAYERS + 1];
 
 //===========================================================
 //========================= 註冊 ============================
 //===========================================================
 
-RegisterSkill(String:skill_name[MAXSKILLNAME],
-					Timer:timer_skill_start,
-					Timer:timer_skill_end,
-					Timer:timer_skill_ready,
-					Float:skill_duration, Float:skill_cooldown, Float:skill_mpcost)
+// 回傳技能編號；註冊順序就是選單順序，也是 Skill_GetCurrent 回傳的值
+int Skill_Register(const char[] name, float duration, float cooldown, float mpcost, int flags = 0)
 {
-	if (skill_num == MAXSKILLS) return;
+	if (s_iSkillCount == MAXSKILLS) return -1;
+	int skill = s_iSkillCount++;
 
-	Skill_Name[skill_num] = skill_name;
-
-	Timer_Skill_Start[skill_num] = timer_skill_start;
-	Timer_Skill_End[skill_num] = timer_skill_end;
-	Timer_Skill_Ready[skill_num] = timer_skill_ready;
-
-	if (skill_cooldown <= 0.0) {
-		Skill_Type[skill_num] = TYPE_PASSIVE;
-		Skill_Duration[skill_num] = 0.0;
-		Skill_Cooldown[skill_num] = 0.0;
-		Skill_MPcost[skill_num] = 0.0;
-	} else {
-		Skill_Type[skill_num] = TYPE_NORMAL;
-		Skill_Duration[skill_num] = skill_duration;
-		Skill_Cooldown[skill_num] = skill_cooldown;
-		Skill_MPcost[skill_num] = skill_mpcost;
+	strcopy(s_Skills[skill].name, MAXSKILLNAME, name);
+	if (flags & SKILL_PASSIVE)
+	{
+		duration = 0.0;
+		cooldown = 0.0;
+		mpcost = 0.0;
 	}
-
-	skill_num++;
+	s_Skills[skill].duration = duration;
+	s_Skills[skill].cooldown = cooldown;
+	s_Skills[skill].mpcost = mpcost;
+	s_Skills[skill].flags = flags;
+	s_Skills[skill].alt = -1;
+	s_Skills[skill].onStart = INVALID_FUNCTION;
+	s_Skills[skill].onEnd = INVALID_FUNCTION;
+	s_Skills[skill].onTick = INVALID_FUNCTION;
+	s_Skills[skill].onCleanup = INVALID_FUNCTION;
+	s_Skills[skill].onTakeDamage = INVALID_FUNCTION;
+	s_Skills[skill].onPrecache = INVALID_FUNCTION;
+	return skill;
 }
 
-// 以 0 秒 timer 觸發技能的 start callback（core/commands.sp 施放時使用）
-void Skill_StartTimer(int skill, int client)
+void Skill_OnStart(int skill, SkillClientHook fn)         { s_Skills[skill].onStart = fn; }
+void Skill_OnEnd(int skill, SkillClientHook fn)           { s_Skills[skill].onEnd = fn; }
+void Skill_OnTick(int skill, SkillClientHook fn)          { s_Skills[skill].onTick = fn; }
+void Skill_OnCleanup(int skill, SkillCleanupHook fn)      { s_Skills[skill].onCleanup = fn; }
+void Skill_OnTakeDamage(int skill, SkillDamageHook fn)    { s_Skills[skill].onTakeDamage = fn; }
+void Skill_OnPrecache(int skill, SkillPrecacheHook fn)    { s_Skills[skill].onPrecache = fn; }
+
+// skill2 指令施放的替代技能。HUD 在 MP 足夠施放替代技能時，改顯示替代技能的名稱與 MP 條
+void Skill_SetAlt(int base, int alt)
 {
-	CreateTimer(0.0, Timer:Timer_Skill_Start[skill], client);
+	s_Skills[base].alt = alt;
 }
 
 //===========================================================
-//====================== Skill System =======================
+//======================== 查詢 =============================
 //===========================================================
+
+int Skill_GetCurrent(int client)            { return s_iSkill[client]; }
+skill_state Skill_GetState(int client)      { return s_iState[client]; }
+float Skill_GetLastUseTime(int client)      { return s_fLastUseTime[client]; }
+int Skill_GetAlt(int skill)                 { return s_Skills[skill].alt; }
+float Skill_GetMPCost(int skill)            { return s_Skills[skill].mpcost; }
+
+// 正在作用的技能：施放替代技能（skill2）後到冷卻結束前是替代技能，其他時候是目前選用的技能
+int Skill_GetUsing(int client)
+{
+	return s_iAltUsing[client] >= 0 ? s_iAltUsing[client] : s_iSkill[client];
+}
+
+void Skill_GetDef(int skill, SkillDef def)
+{
+	def = s_Skills[skill];
+}
+
+//===========================================================
+//======================= hook 呼叫 =========================
+//===========================================================
+
+static void Skill_CallClient(Function fn, int client)
+{
+	if (fn == INVALID_FUNCTION) return;
+	Call_StartFunction(null, fn);
+	Call_PushCell(client);
+	Call_Finish();
+}
+
+// 由 core/hud.sp 每 0.5 秒呼叫
+void Skill_CallTick(int client)
+{
+	Skill_CallClient(s_Skills[s_iSkill[client]].onTick, client);
+}
+
+// 由 core/player.sp 的受傷 hook 呼叫
+float Skills_OnTakeDamage(int client, float damage)
+{
+	for (int i = 0; i < s_iSkillCount; i++)
+	{
+		if (s_Skills[i].onTakeDamage == INVALID_FUNCTION) continue;
+		Call_StartFunction(null, s_Skills[i].onTakeDamage);
+		Call_PushCell(client);
+		Call_PushFloat(damage);
+		Call_Finish(damage);
+	}
+	return damage;
+}
+
+void Skills_Cleanup(int client, SkillCleanup reason)
+{
+	for (int i = 0; i < s_iSkillCount; i++)
+	{
+		if (s_Skills[i].onCleanup == INVALID_FUNCTION) continue;
+		Call_StartFunction(null, s_Skills[i].onCleanup);
+		Call_PushCell(client);
+		Call_PushCell(reason);
+		Call_Finish();
+	}
+}
+
+// OnMapStart、過關時預載資源
+void Skills_Precache()
+{
+	PrintToServer("=============Material Setup=============");
+	// 多個技能共用的資源
+	Timescale_Precache();
+	SetupMaterial("particles\\skill_fx.pcf");
+	PrecacheParticle(PARTICLE_MAGIC_CIRCLE);
+	for (int i = 0; i < s_iSkillCount; i++)
+	{
+		if (s_Skills[i].onPrecache == INVALID_FUNCTION) continue;
+		Call_StartFunction(null, s_Skills[i].onPrecache);
+		Call_Finish();
+	}
+	PrintToServer("===========Material Setup End===========");
+}
+
+// start 延後到下一個 frame 執行（原本是 CreateTimer(0.0, ...)）
+static void Skill_StartNextFrame(int skill, int client)
+{
+	RequestFrame(Frame_SkillStart, (skill << 8) | client);
+}
+
+static void Frame_SkillStart(int data)
+{
+	Skill_CallClient(s_Skills[data >> 8].onStart, data & 0xFF);
+}
+
+//===========================================================
+//======================== 狀態機 ===========================
+//===========================================================
+
+// OnPluginStart 時呼叫
+void Skill_InitClient(int client)
+{
+	s_iAltUsing[client] = -1;
+}
 
 void Init_Skill(int client)
 {
-	if(Skill_Notify_Timer[client]!=null)
-		delete Skill_Notify_Timer[client];
-	if(Skill_Notify_Ani_Timer[client]!=null)
-		delete Skill_Notify_Ani_Timer[client];
-	if(Skill_MPrecover_Timer[client]!=null)
-		delete Skill_MPrecover_Timer[client];
-	Skill_Notify_Timer[client] = CreateTimer(0.5, Skill_Notify, client, TIMER_REPEAT);
-	Skill_Notify_Ani_State[client] = 0;
-	Skill_Notify_Ani_Timer[client] = CreateTimer(0.5, Skill_Notify_Ani, client, TIMER_REPEAT);
-	Skill_MPrecover_Timer[client] = CreateTimer(1.0, Skill_MPrecover, client, TIMER_REPEAT);
-	// PrintToChatAll("Timer for %N created!", client);
-	if(Skill[client]<0||Skill[client]>skill_num-1)
-		Skill[client] = 0;
+	Hud_Start(client);
+	MP_StartRecover(client);
+	if (s_iSkill[client] < 0 || s_iSkill[client] > s_iSkillCount - 1)
+		s_iSkill[client] = 0;
 	Skill_MP[client] = INIT_MP;
 
-	if (Skill_Type[Skill[client]] == TYPE_PASSIVE)
+	if (s_Skills[s_iSkill[client]].flags & SKILL_PASSIVE)
 		Skill_Trigger(client);
 }
 
 void Delete_Skill(int client)
 {
-	if(Skill_Notify_Timer[client]!=null)
-		delete Skill_Notify_Timer[client];
-	if(Skill_Notify_Ani_Timer[client]!=null)
-		delete Skill_Notify_Ani_Timer[client];
-	if(Skill_MPrecover_Timer[client]!=null)
-		delete Skill_MPrecover_Timer[client];
-
-	// if(Skill_Cooldown_Timer[client]!=null)
-	// 	delete Skill_Cooldown_Timer[client];
-	// if(Skill_Duration_Timer[client]!=null)
-	// 	delete Skill_Duration_Timer[client];
+	Hud_Stop(client);
+	MP_StopRecover(client);
 	Interrupt_Skill(client);
 }
 
-void Skill_Trigger(int client)
+// skill1：施放目前選用的技能
+void Skill_Cast(int client)
 {
-	int skill_using = Skill[client];
-	if(Skill_EX_Using[client])
+	int skill = s_iSkill[client];
+	switch (s_iState[client])
 	{
-		skill_using = skill_num-1;
-	}
-	switch (Skill_Type[skill_using])
-	{
-		case TYPE_NORMAL:
+		case SKILL_RDY:
 		{
-			Skill_State[client] = SKILL_ACT;
-			Skill_LastUseTime[client] = GetGameTime();
-
-			Skill_Cooldown_Timer[client] = CreateTimer(Skill_Cooldown[skill_using] + Skill_Duration[skill_using], Timer_Skill_Ready[skill_using], client);
-			Skill_Duration_Timer[client] = CreateTimer(Skill_Duration[skill_using], Timer: Timer_Skill_End[skill_using], client);
+			if (MP_Decrease(client, s_Skills[skill].mpcost))
+			{
+				Skill_StartNextFrame(skill, client);
+				Skill_Trigger(client);
+			}
+			else
+			{
+				PrintToChat(client, "魔力不足");
+			}
 		}
-		case TYPE_PASSIVE:
+		case SKILL_ACT:
 		{
-			Skill_State[client] = SKILL_ACT;
-			CreateTimer(0.0, Timer: Timer_Skill_Start[skill_using], client);
+			PrintToChat(client, "技能施放中");
+		}
+		case SKILL_CD:
+		{
+			PrintToChat(client, "技能冷卻中");
 		}
 	}
-
-	TriggerTimer(Skill_Notify_Timer[client], true);
 }
 
-public int Skill_Change_Menu_Handler(Menu menu, MenuAction action, int param1, int param2)
+// skill2：施放目前技能的替代技能（爆裂 → 隱藏版爆裂）
+// 第 3 步才修：這裡沒有檢查施放中／冷卻中，兩組 timer 會互相覆蓋
+void Skill_CastAlt(int client)
+{
+	int alt = s_Skills[s_iSkill[client]].alt;
+	if (alt < 0 || Skill_MP[client] < s_Skills[alt].mpcost) return;
+
+	if (MP_Decrease(client, s_Skills[alt].mpcost))
+	{
+		s_iAltUsing[client] = alt;
+		Skill_StartNextFrame(alt, client);
+		Skill_Trigger(client);
+	}
+	else
+	{
+		PrintToChat(client, "魔力不足");
+	}
+}
+
+// 進入施放中：一般技能開始計算持續與冷卻，被動技能啟用
+void Skill_Trigger(int client)
+{
+	int skill = Skill_GetUsing(client);
+	s_iState[client] = SKILL_ACT;
+	if (s_Skills[skill].flags & SKILL_PASSIVE)
+	{
+		Skill_StartNextFrame(skill, client);
+	}
+	else
+	{
+		s_fLastUseTime[client] = GetGameTime();
+		s_hCooldown[client] = CreateTimer(s_Skills[skill].cooldown + s_Skills[skill].duration, Timer_SkillReady, client);
+		s_hDuration[client] = CreateTimer(s_Skills[skill].duration, Timer_SkillEnd, (skill << 8) | client);
+	}
+	Hud_Refresh(client, true);
+}
+
+static Action Timer_SkillEnd(Handle timer, int data)
+{
+	int client = data & 0xFF;
+	s_hDuration[client] = null;
+	s_iState[client] = SKILL_CD;
+	Skill_CallClient(s_Skills[data >> 8].onEnd, client);
+	if (!Hud_Refresh(client, false))
+		Player_OnClientConnected(client);
+	return Plugin_Stop;
+}
+
+static Action Timer_SkillReady(Handle timer, int client)
+{
+	s_hCooldown[client] = null;
+	s_iAltUsing[client] = -1;
+	s_iState[client] = SKILL_RDY;
+	if (!Hud_Refresh(client, false))
+		Player_OnClientConnected(client);
+	return Plugin_Stop;
+}
+
+// 被動技能被切換掉（原本是 CreateTimer(0.0, ...)，一樣延後執行）
+static void Frame_PassiveEnd(int data)
+{
+	int client = data & 0xFF;
+	s_iState[client] = SKILL_CD;
+	Skill_CallClient(s_Skills[data >> 8].onEnd, client);
+	Hud_Refresh(client, false);
+}
+
+// change_skill：選單
+// 第 3 步才修：原本想在被動技能施放中擋掉選單，但判斷用了超出註冊範圍的索引（s_iSkillCount），永遠會打開選單
+void Skill_OpenMenu(int client)
+{
+	if (s_iState[client] != SKILL_ACT || !(s_Skills[s_iSkillCount].flags & SKILL_PASSIVE))
+		Skill_Change_Menu(client);
+	else
+		PrintToChat(client, "技能施放中");
+}
+
+static void Skill_Change_Menu(int client)
+{
+	Menu menu = new Menu(Skill_Change_Menu_Handler);
+	menu.SetTitle("Choose a Skill...");
+	for (int i = 0; i < s_iSkillCount; ++i)
+	{
+		if (s_Skills[i].flags & SKILL_HIDDEN) continue;
+		char info[8];
+		char skill_msg[MAXCMD] = "";
+		IntToString(i, info, sizeof(info));
+		Format(skill_msg, MAXCMD, "  %s", s_Skills[i].name);
+		menu.AddItem(info, skill_msg);
+	}
+	menu.ExitButton = false;
+	menu.Display(client, 20);
+}
+
+static int Skill_Change_Menu_Handler(Menu menu, MenuAction action, int param1, int param2)
 {
 	if (action == MenuAction_Select)
 	{
-		Skill_Change(param1, param2);
+		char info[8];
+		menu.GetItem(param2, info, sizeof(info));
+		Skill_Change(param1, StringToInt(info));
 	}
 	else if (action == MenuAction_End)
 	{
@@ -133,107 +363,67 @@ public int Skill_Change_Menu_Handler(Menu menu, MenuAction action, int param1, i
 	return 0;
 }
 
-void Skill_Change_Menu(int client)
-{
-	Menu menu = new Menu(Skill_Change_Menu_Handler);
-	menu.SetTitle("Choose a Skill...");
-	for (int i = 0; i < skill_num-1; ++i) {//TODO: hidden explosion full option
-		char skill_msg[MAXCMD] = "";
-		Format(skill_msg, MAXCMD, "  %s", Skill_Name[i]);
-		menu.AddItem("", skill_msg);
-	}
-	menu.ExitButton = false;
-	menu.Display(client, 20);
-}
-
 void Skill_Change(int client, int skill)
 {
 	UnGlow(client);
-	int skill_using = Skill[client];
+	int cur = s_iSkill[client];
 
-	if (skill == skill_using) return;
+	if (skill == cur) return;
 
-	switch (Skill_State[client]) {
-		case SKILL_RDY: {
-		}
-		case SKILL_ACT: {
-			if (Skill_Type[skill_using] == TYPE_NORMAL) {
-				TriggerTimer(Skill_Duration_Timer[client]);
-				TriggerTimer(Skill_Cooldown_Timer[client]);
+	// 立刻結束目前的施放與冷卻（觸發 timer 會執行 end / ready）
+	// 第 3 步才修：TriggerTimer 前沒有檢查 null
+	switch (s_iState[client])
+	{
+		case SKILL_ACT:
+		{
+			if (!(s_Skills[cur].flags & SKILL_PASSIVE))
+			{
+				TriggerTimer(s_hDuration[client]);
+				TriggerTimer(s_hCooldown[client]);
 			}
 		}
-		case SKILL_CD: {
-			TriggerTimer(Skill_Cooldown_Timer[client]);
+		case SKILL_CD:
+		{
+			TriggerTimer(s_hCooldown[client]);
 		}
 	}
 
-	switch (Skill_Type[skill_using]) {
-		case TYPE_NORMAL: {
-		}
-		case TYPE_PASSIVE: {
-			CreateTimer(0.0, Timer:Timer_Skill_End[skill_using], client);
-		}
-	}
+	if (s_Skills[cur].flags & SKILL_PASSIVE)
+		RequestFrame(Frame_PassiveEnd, (cur << 8) | client);
 
-	Skill[client] = skill;
-	skill_using = Skill[client];
+	s_iSkill[client] = skill;
 
-	switch (Skill_Type[skill_using]) {
-		case TYPE_NORMAL: {
-			Skill_State[client] = SKILL_CD;
-			Skill_LastUseTime[client] = GetGameTime() - Skill_Duration[skill_using];
-			Skill_Cooldown_Timer[client] = CreateTimer(Skill_Cooldown[skill_using], Timer:Timer_Skill_Ready[skill_using], client);
-		}
-		case TYPE_PASSIVE: {
-			Skill_State[client] = SKILL_ACT;
-			CreateTimer(0.0, Timer:Timer_Skill_Start[skill_using], client);
-		}
+	// 換上的一般技能從冷卻開始，被動技能直接啟用
+	if (s_Skills[skill].flags & SKILL_PASSIVE)
+	{
+		s_iState[client] = SKILL_ACT;
+		Skill_StartNextFrame(skill, client);
 	}
-	TriggerTimer(Skill_Notify_Timer[client], true);
+	else
+	{
+		s_iState[client] = SKILL_CD;
+		s_fLastUseTime[client] = GetGameTime() - s_Skills[skill].duration;
+		s_hCooldown[client] = CreateTimer(s_Skills[skill].cooldown, Timer_SkillReady, client);
+	}
+	Hud_Refresh(client, true);
 }
 
 void Interrupt_Skill(int client)
 {
-	int skill_using = Skill[client];
-	if (Skill_Type[skill_using]==TYPE_NORMAL)
+	int cur = s_iSkill[client];
+	if (!(s_Skills[cur].flags & SKILL_PASSIVE))
 	{
 		// 直接 delete，不 TriggerTimer — 換圖後 handle 已被 engine 回收，TriggerTimer 會 crash
-		if ((Skill_State[client] == SKILL_CD) || (Skill_State[client] == SKILL_ACT))
-			SafeDeleteTimer(Skill_Cooldown_Timer[client]);
+		if ((s_iState[client] == SKILL_CD) || (s_iState[client] == SKILL_ACT))
+			SafeDeleteTimer(s_hCooldown[client]);
 
-		if (Skill_State[client] == SKILL_ACT)
-			SafeDeleteTimer(Skill_Duration_Timer[client]);
+		if (s_iState[client] == SKILL_ACT)
+			SafeDeleteTimer(s_hDuration[client]);
 	}
-	if (State_Adrenaline_Boost[client])
-	{
-		SafeDeleteTimer(Skill_Adrenaline_Boost_Timer[client]);
-		State_Adrenaline_Boost[client] = false;
-	}
+	MP_StopBoost(client);
 
-	Skill_State[client] = SKILL_RDY;
-}
-
-// 沒有特殊結束／冷卻行為的技能共用
-public Action Timer_Skill_Null_End(Handle timer, any client)
-{
-	Skill_Duration_Timer[client] = null;
-	Skill_State[client] = SKILL_CD;
-	if(Skill_Notify_Timer[client]!=null)
-		TriggerTimer(Skill_Notify_Timer[client]);
-	else
-		Player_OnClientConnected(client);
-	return Plugin_Stop;
-}
-
-public Action Timer_Skill_Null_Ready(Handle timer, any client)
-{
-	Skill_Cooldown_Timer[client] = null;
-	Skill_State[client] = SKILL_RDY;
-	if(Skill_Notify_Timer[client]!=null)
-		TriggerTimer(Skill_Notify_Timer[client]);
-	else
-		Player_OnClientConnected(client);
-	return Plugin_Handled;
+	s_iState[client] = SKILL_RDY;
+	Skills_Cleanup(client, SKILL_CLEANUP_INTERRUPT);
 }
 
 //===========================================================
@@ -250,22 +440,17 @@ void Skills_MapEndCleanup()
 	// 清理所有玩家 timer 與狀態
 	for (int i = 1; i <= MAX_PLAYERS; i++)
 	{
-		SafeDeleteTimer(Skill_Notify_Timer[i]);
-		SafeDeleteTimer(Skill_Notify_Ani_Timer[i]);
-		SafeDeleteTimer(Skill_MPrecover_Timer[i]);
-		SafeDeleteTimer(Skill_Cooldown_Timer[i]);
-		SafeDeleteTimer(Skill_Duration_Timer[i]);
-		SafeDeleteTimer(Skill_Adrenaline_Boost_Timer[i]);
-		TurnUndead_KillRushTimer(i);
+		Hud_Stop(i);
+		MP_StopRecover(i);
+		SafeDeleteTimer(s_hCooldown[i]);
+		SafeDeleteTimer(s_hDuration[i]);
+		MP_StopBoost(i);
 
-		Skill_State[i]            = SKILL_RDY;
-		Invulnerable[i]           = false;
-		Skill_EX_Using[i]         = false;
-		State_Adrenaline_Boost[i] = false;
-		State_ManaShield[i]       = false;
+		s_iState[i]     = SKILL_RDY;
+		s_iAltUsing[i]  = -1;
+		Invulnerable[i] = false;
 
-		CleanupEXSkill(i); // 殺掉 EX timer + particle
-		KillMagicCircle(i);
+		Skills_Cleanup(i, SKILL_CLEANUP_MAP_END);
 	}
 
 	// 清理所有 entity 的 glow timer
@@ -287,37 +472,38 @@ void Skills_RoundStartCleanup()
 	RestoreTimeScale();
 	for (int i = 1; i <= MAX_PLAYERS; i++)
 	{
-		// 殺掉所有技能 timer（含 Cooldown / Duration），避免 Timer_Skill_EX_End 等 callback 在新回合觸發
-		SafeDeleteTimer(Skill_Cooldown_Timer[i]);
-		SafeDeleteTimer(Skill_Duration_Timer[i]);
-		SafeDeleteTimer(Skill_Adrenaline_Boost_Timer[i]);
-		TurnUndead_KillRushTimer(i);
+		// 殺掉所有技能 timer（含 Cooldown / Duration），避免隱藏版爆裂的 end 等 callback 在新回合觸發
+		SafeDeleteTimer(s_hCooldown[i]);
+		SafeDeleteTimer(s_hDuration[i]);
+		MP_StopBoost(i);
 
-		CleanupEXSkill(i);
-		Skill_State[i]            = SKILL_RDY;
-		Invulnerable[i]           = false;
-		Skill_EX_Using[i]         = false;
-		State_Adrenaline_Boost[i] = false;
-		State_ManaShield[i]       = false;
-		KillMagicCircle(i);
+		s_iState[i]     = SKILL_RDY;
+		s_iAltUsing[i]  = -1;
+		Invulnerable[i] = false;
+
+		Skills_Cleanup(i, SKILL_CLEANUP_ROUND_START);
+	}
+}
+
+// OnPluginStart：reload 時把上一次執行殘留的遊戲狀態清掉
+void Skills_ReloadCleanup()
+{
+	RestoreTimeScale();
+	for (int i = 1; i <= MAX_PLAYERS; i++)
+	{
+		if (!IsClientInGame(i)) continue;
+		Invulnerable[i] = false;
+		Skills_Cleanup(i, SKILL_CLEANUP_RELOAD);
 	}
 }
 
 void Skills_PluginEndCleanup()
 {
 	RestoreTimeScale();
-
 	for (int i = 1; i <= MAX_PLAYERS; i++)
 	{
 		if (!IsClientInGame(i)) continue;
-		if (State_ManaShield[i]) UnGlow(i);
-		State_ManaShield[i] = false;
-		Invulnerable[i]     = false;
-		KillMagicCircle(i);
-		CleanupEXSkill(i);
+		Invulnerable[i] = false;
+		Skills_Cleanup(i, SKILL_CLEANUP_PLUGIN_END);
 	}
-
-	ManaShield_RestoreMeleeRange();
 }
-
-#pragma newdecls required

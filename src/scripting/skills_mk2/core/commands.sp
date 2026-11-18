@@ -6,49 +6,17 @@ public Action Event_SkillStateTransition(int client, int args)
 	GetCmdArg(0, cmd, MAXCMD);
 	if (State_Transition[client] || (State_Player[client] == PLAYER_DEAD)) return Plugin_Handled;
 
-	int skill_using = Skill[client];
-	if (StrEqual(cmd, "skill1")) {
-		switch (Skill_State[client]) {
-			case SKILL_RDY: {
-				if (MP_Decrease(client, Skill_MPcost[skill_using])) {
-					Skill_StartTimer(skill_using, client);
-					Skill_Trigger(client);
-				} else {
-					PrintToChat(client, "魔力不足");
-				}
-			}
-			case SKILL_ACT: {
-				PrintToChat(client, "技能施放中");
-			}
-			case SKILL_CD: {
-				PrintToChat(client, "技能冷卻中");
-			}
-		}
-	}
-	else if(StrEqual(cmd, "skill2"))
+	if (StrEqual(cmd, "skill1"))
 	{
-		if ((Skill_MP[client] >= Skill_MPcost[hiddenExplosionNum]) &&
-			StrEqual(Skill_Name[Skill[client]], "Explosion 爆裂"))
-		{
-			if (MP_Decrease(client, Skill_MPcost[hiddenExplosionNum]))
-			{
-				Skill_EX_Using[client] = true;
-				Skill_StartTimer(hiddenExplosionNum, client);
-				Skill_Trigger(client);
-			}
-			else
-			{
-				PrintToChat(client, "魔力不足");
-			}
-		}
+		Skill_Cast(client);
+	}
+	else if (StrEqual(cmd, "skill2"))
+	{
+		Skill_CastAlt(client);
 	}
 	else if (StrEqual(cmd, "change_skill"))
 	{
-		if (Skill_State[client] != SKILL_ACT ||
-			Skill_Type[skill_num] != TYPE_PASSIVE)
-			Skill_Change_Menu(client);
-		else
-			PrintToChat(client, "技能施放中");
+		Skill_OpenMenu(client);
 	}
 	else if (StrEqual(cmd, "drop"))
 	{
@@ -59,11 +27,7 @@ public Action Event_SkillStateTransition(int client, int args)
 		PrintToChat(client, "Correction Mana Bar");
 		Player_OnClientConnected(client);
 	}
-	if (Skill_Notify_Timer[client] != null &&
-		Skill_Notify_Timer[client] != INVALID_HANDLE)
-	{
-		TriggerTimer(Skill_Notify_Timer[client], true);
-	}
+	Hud_Refresh(client, true);
 	return Plugin_Handled;
 }
 

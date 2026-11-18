@@ -59,6 +59,16 @@ public Action Timer_KillTimescaleReset(Handle timer, int ref)
 	return Plugin_Stop;
 }
 
+// 慢動作開始／結束的音效（鷹眼、隱藏版爆裂共用）
+void Timescale_Precache()
+{
+	SetupMaterial("sound\\skills\\slomo.mp3");
+	SetupSound("skills\\slomo.mp3", true);
+
+	SetupMaterial("sound\\skills\\slomo_end.mp3");
+	SetupSound("skills\\slomo_end.mp3", true);
+}
+
 void SlowForSecs(float time, int client)
 {
 	if (State_Slow && Slow_Timer != null) delete Slow_Timer;

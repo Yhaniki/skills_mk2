@@ -1,17 +1,30 @@
 // 淨化 Sacred Turn Undead：淨化範圍內殭屍，之後引來屍潮
 
+static int s_iTurnUndead;
 static Handle Skill_TurnUndead_Timer[MAX_PLAYERS + 1];
 static int g_iChase[MAX_PLAYERS + 1];
 
-void TurnUndead_Register()
+int TurnUndead_Register()
 {
-	RegisterSkill("Sacred Turn Undead 淨化" , Timer_Skill_TurnUndead_Start, Timer_Skill_Null_End, Timer_Skill_Null_Ready, 3.5, 2.0, 50.0);
+	s_iTurnUndead = Skill_Register("Sacred Turn Undead 淨化", 3.5, 2.0, 50.0);
+	Skill_OnStart(s_iTurnUndead, TurnUndead_OnStart);
+	Skill_OnCleanup(s_iTurnUndead, TurnUndead_OnCleanup);
+	Skill_OnPrecache(s_iTurnUndead, TurnUndead_OnPrecache);
+	return s_iTurnUndead;
 }
 
-// 換圖 / 回合重開時由 core/skill_base.sp 呼叫，殺掉屍潮結束 timer
-void TurnUndead_KillRushTimer(int client)
+static void TurnUndead_OnPrecache()
 {
-	SafeDeleteTimer(Skill_TurnUndead_Timer[client]);
+	SetupMaterial("sound\\skills\\turn_undead.mp3");
+	SetupSound("skills\\turn_undead.mp3", true);
+	PrecacheParticle(PARTICLE_TURNUNDEAD);
+}
+
+// 換圖、回合重開時殺掉屍潮結束 timer
+static void TurnUndead_OnCleanup(int client, SkillCleanup reason)
+{
+	if (reason == SKILL_CLEANUP_MAP_END || reason == SKILL_CLEANUP_ROUND_START)
+		SafeDeleteTimer(Skill_TurnUndead_Timer[client]);
 }
 
 public Action Timer_UndeadRushEnd(Handle timer, any userid)
@@ -39,7 +52,9 @@ public Action Timer_UndeadRushEnd(Handle timer, any userid)
 	}
 	return Plugin_Stop;
 }
-public Action Timer_UndeadRush(Handle timer, int client)
+
+// 淨化後 1 秒：引來屍潮
+static void TurnUndead_StepRush(int client, DataPack data)
 {
 	// g_hCvarPanicForever.SetBool(false, false, false);
 	StripAndExecuteClientCommand(client, "z_spawn_old", "mob");
@@ -69,16 +84,15 @@ public Action Timer_UndeadRush(Handle timer, int client)
 	}
 
 	PrintToChatAll("\x04%N \x01施放淨化引來屍潮！", client);
-	return Plugin_Stop;
 }
-public Action Timer_TurnUndeadAimDelay(Handle timer, DataPack DP)
+
+// 施放後 2.5 秒：淨化瞄準點周圍的殭屍
+static void TurnUndead_StepPurify(int client, DataPack data)
 {
-	DP.Reset();
-	int client = DP.ReadCell();
 	float Pos[3];
-	Pos[0] = DP.ReadCell();
-	Pos[1] = DP.ReadCell();
-	Pos[2] = DP.ReadCell();
+	Pos[0] = data.ReadFloat();
+	Pos[1] = data.ReadFloat();
+	Pos[2] = data.ReadFloat();
 	CreateParticle(PARTICLE_TURNUNDEAD, 1.0, Pos);
 	for (int i = 1; i <= MaxClients; i++) {
 		if (IsAliveSpecialInf(i)) {
@@ -119,11 +133,10 @@ public Action Timer_TurnUndeadAimDelay(Handle timer, DataPack DP)
 		}
 	}
 
-	CreateTimer(1.0, Timer_UndeadRush, client);
+	Skill_Schedule(s_iTurnUndead, client, 1.0, TurnUndead_StepRush);
 	// PropaneAtPos(Pos);
-
-	return Plugin_Stop;
 }
+
 void TurnUndeadAim(int client, float delay)
 {
 	PrepareAndEmitSoundtoAll("skills\\turn_undead.mp3", .entity = client, .volume = 1.0);
@@ -132,19 +145,15 @@ void TurnUndeadAim(int client, float delay)
 	Pos[2] += 10;
 	// if (GetAimOrigin(client, Pos, 10.0) == 0) return;
 
-	DataPack DP = new DataPack();
-	DP.WriteCell(client);
-	DP.WriteCell(Pos[0]);
-	DP.WriteCell(Pos[1]);
-	DP.WriteCell(Pos[2]);
-
-	CreateTimer(delay, Timer_TurnUndeadAimDelay, DP);
+	DataPack data = Skill_Schedule(s_iTurnUndead, client, delay, TurnUndead_StepPurify);
+	data.WriteFloat(Pos[0]);
+	data.WriteFloat(Pos[1]);
+	data.WriteFloat(Pos[2]);
 }
-public Action Timer_Skill_TurnUndead_Start(Handle timer, any client)
+
+static void TurnUndead_OnStart(int client)
 {
 	GlowForSecs(client, 0, 0, 100, 3.5*time_weight);
 	TurnUndeadAim(client, 2.5*time_weight);
 	PrintToChatAll("\x04%N \x01淨化!", client);
-
-	return Plugin_Stop;
 }

@@ -1,11 +1,23 @@
 // 爆裂 Explosion：瞄準位置延遲爆炸，對範圍內殭屍造成傷害
 
-void Explosion_Register()
+static int s_iExplosion;
+
+int Explosion_Register()
 {
-	RegisterSkill("Explosion 爆裂" ,Timer_Skill_Explosion_Start, Timer_Skill_Null_End, Timer_Skill_Null_Ready, 3.0, 2.0, 30.0);
+	s_iExplosion = Skill_Register("Explosion 爆裂", 3.0, 2.0, 30.0);
+	Skill_OnStart(s_iExplosion, Explosion_OnStart);
+	Skill_OnPrecache(s_iExplosion, Explosion_OnPrecache);
+	return s_iExplosion;
 }
 
-public Action Timer_Skill_Explosion_Start(Handle timer, any client)
+static void Explosion_OnPrecache()
+{
+	SetupMaterial("sound\\skills\\explosion.mp3");
+	SetupSound("skills\\explosion.mp3", true);
+	PrecacheParticle(PARTICLE_EXPLOSION);
+}
+
+static void Explosion_OnStart(int client)
 {
 	PrepareAndEmitSoundtoAll("skills\\explosion.mp3", .entity = client, .volume = 1.0);
 
@@ -13,8 +25,6 @@ public Action Timer_Skill_Explosion_Start(Handle timer, any client)
 	ExplodeAim(client, 1.5*time_weight);
 
 	PrintToChatAll("\x04%N \x01EXPLOSION!", client);
-
-	return Plugin_Stop;
 }
 
 void ExplodeAim(int client, float delay)
@@ -24,14 +34,11 @@ void ExplodeAim(int client, float delay)
 
 	//ExplodeAtPos(Pos);
 
-	DataPack DP = new DataPack();
-	DP.WriteCell(client);
-	DP.WriteCell(Pos[0]);
-	DP.WriteCell(Pos[1]);
-	DP.WriteCell(Pos[2]);
-
 	CreateParticle(PARTICLE_EXPLOSION, delay + 1.0, Pos);
-	CreateTimer(delay, Timer_ExplodeAimDelay, DP);
+	DataPack data = Skill_Schedule(s_iExplosion, client, delay, Explosion_StepBlast);
+	data.WriteFloat(Pos[0]);
+	data.WriteFloat(Pos[1]);
+	data.WriteFloat(Pos[2]);
 }
 
 int ComputeExploDmg(float dist)
@@ -42,14 +49,12 @@ int ComputeExploDmg(float dist)
 	return dmg;
 }
 
-public Action Timer_ExplodeAimDelay(Handle timer, DataPack DP)
+static void Explosion_StepBlast(int client, DataPack data)
 {
-	DP.Reset();
-	int client = DP.ReadCell();
 	float Pos[3];
-	Pos[0] = DP.ReadCell();
-	Pos[1] = DP.ReadCell();
-	Pos[2] = DP.ReadCell();
+	Pos[0] = data.ReadFloat();
+	Pos[1] = data.ReadFloat();
+	Pos[2] = data.ReadFloat();
 
 	PropaneAtPos(Pos);
 	int dmg = 0;
@@ -68,7 +73,6 @@ public Action Timer_ExplodeAimDelay(Handle timer, DataPack DP)
 			}
 		}
 	}
-	return Plugin_Stop;
 }
 
 void PropaneAtPos(float Pos[3])
