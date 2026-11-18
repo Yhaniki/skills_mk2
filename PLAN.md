@@ -46,9 +46,12 @@ src/scripting/
    │  ├─ weapons.sp        丟槍、彈藥、給物品（drop 指令和偷竊共用）
    │  ├─ dissolve.sp       Silvers 的 Dissolve Infected（forward 移到 main.sp）
    │  └─ resourcemanager.sp
-   └─ skills/
-      ├─ explosion.sp   explosion_ex.sp   mana_shield.sp
-      └─ eagle_eye.sp   steal.sp          turn_undead.sp
+   ├─ skills/
+   │  ├─ explosion.sp   explosion_ex.sp   mana_shield.sp
+   │  └─ eagle_eye.sp   steal.sp          turn_undead.sp
+   └─ test/
+      ├─ main_test.sp      自動測試版入口（正式版不包含）
+      └─ harness.sp        bot 測試腳本
 ```
 
 編譯指令（在 `src/scripting/` 底下執行，輸出檔名不變）：
@@ -241,6 +244,20 @@ spcomp skills_mk2/main.sp -o ../plugins/skills_mk2.smx
 - 前提：第 2 步的「移除技能名稱字串比對」要先完成，不然名稱翻譯後比對就會失效。
 - 語言：先支援繁體中文（`zho`）、英文（`en`）、日文（`jp`），預設是繁體中文。玩家語言不在這三種裡面時（包括簡體中文 `chi`）一律顯示繁體中文。
 - 注意：SourceMod 找不到玩家語言的翻譯時，會改用伺服器語言（`core.cfg` 的 `ServerLang`，預設是 `en`），所以光靠翻譯檔做不到「預設中文」。實作時再決定要由插件自己判斷玩家語言，還是在 README 請服主把 `ServerLang` 設成 `zho`。
+
+## 自動測試（`tools/servertest/`）
+
+不需要人進遊戲，在本機的 L4D2 dedicated server 上自動跑（Python 3，只用標準函式庫）。用法見 `tools/servertest/servertest.py` 開頭的說明。
+
+- `servertest.py smoke`：插件生命週期冒煙測試。不帶地圖開機 → 用 RCON 載入第一張地圖（`OnPluginStart` 當下還沒有地圖，就是 `3e8a6d3` 修的情況）→ 換圖 → reload → unload/load。判斷標準是 SourceMod 錯誤 log 沒有 skills_mk2 的例外、插件狀態不是 Error/Failed。
+- `servertest.py skills`：用 bot 跑技能。要搭配測試版入口 `skills_mk2/test/main_test.sp`：
+  - 把 `IsFakeClient` 換成永遠回傳 false，技能系統會把 bot 當真人處理；`PrintHintText`、`PrintToChat(All)` 換成會記 log 的版本。
+  - `test/harness.sp` 照劇本讓 bot 施放技能，記錄檢查點（技能狀態、MP、無敵、HUD 文字、慢動作、EX 的強光與魔法陣、霧）。
+  - 劇本涵蓋：6 個技能各施放一次、魔力不足、skill2 的條件、魔心護盾吸收傷害、施放中切換／倒地／死亡、隱藏版爆裂完整流程與施放中死亡、淨化後斷線、施放隱藏版爆裂中 reload／換圖／投票重開。
+- `compare.py`：比對兩次 skills 的結果（通常是 0.7 對新版）。MP 容許 ±1；血量只比測試腳本造成傷害時的變化量（爆裂的瓦斯罐有沒有炸到 bot 每次不同）。
+- 測試時的伺服器設定：只綁 `127.0.0.1:27115`、`sb_all_bot_game 1`（沒有真人時才不會休眠）、`sb_stop 1`、關掉殭屍與特感、`director_no_death_check 1`（隱藏版爆裂會把所有倖存者炸倒）。測試期間暫時換掉 `plugins/skills_mk2.smx`，結束後一律還原。
+- 還是要人進遊戲驗證的部分：粒子、魔法陣、天氣、HUD 外觀、音效、近戰揮空、真人連線與重連流程。
+- 測試環境跟真人的差異：bot 觸發 `OnClientPostAdminCheck` 時還不在遊戲中，所以插件不會幫 bot 掛受傷 hook，測試腳本會自己補掛。
 
 ## 伺服器測試清單（每步完成後）
 

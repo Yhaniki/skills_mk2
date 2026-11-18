@@ -2,3 +2,6 @@
 .vscode
 # 由 assets/ 打包出來的 VPK（25 MB 產物，可重新打包）
 *.vpk
+
+# Python 快取（tools/servertest）
+__pycache__/
