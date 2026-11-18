@@ -83,6 +83,7 @@ public void OnPluginStart()
 	LoadTranslations("skills_mk2.phrases");
 	ManaShield_InitMeleeDetour();
 
+	Timescale_OnPluginStart();
 	State_Slow = false;
 	for (int i = 0; i < MAXENTITIES; i++)
 	{
@@ -156,6 +157,7 @@ public void OnConfigsExecuted()
 
 public void OnMapStart()
 {
+	Timescale_OnMapStart();
 	Skills_Precache();
 	Dissolve_OnMapStart();
 	CheckPlayerConnections();
@@ -166,6 +168,7 @@ public void OnMapEnd()
 {
 	Dissolve_OnMapEnd();
 	Skills_MapEndCleanup();
+	Timescale_OnMapEnd();
 }
 
 //===========================================================

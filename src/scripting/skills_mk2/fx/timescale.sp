@@ -4,6 +4,19 @@ bool State_Slow;
 Handle Slow_Timer;
 float time_weight = 1.0;
 
+// 地圖是否正在執行。換圖載入時 round_start 會比 OnMapStart 先觸發，
+// 那時 worldspawn 已經存在，但 CreateEntityByName 會丟「Cannot create new entity when no map is running」
+static bool s_bMapRunning;
+
+void Timescale_OnPluginStart()
+{
+	// 伺服器剛開機、還沒有地圖時 worldspawn 不存在；reload 時地圖已經在跑
+	s_bMapRunning = FindEntityByClassname(-1, "worldspawn") != INVALID_ENT_REFERENCE;
+}
+
+void Timescale_OnMapStart() { s_bMapRunning = true; }
+void Timescale_OnMapEnd()   { s_bMapRunning = false; }
+
 // 刪所有舊 func_timescale，然後建一個 desiredTimescale=1.0 + 超高 acceleration 的新 entity
 // 引擎刪掉舊 entity 不會自動還原速度，必須主動 Start 一個指向 1.0 的 entity 來覆蓋
 void RestoreTimeScale()
@@ -20,9 +33,8 @@ void RestoreTimeScale()
 	}
 	PrintToServer("[skills_mk2] Removed %d func_timescale(s)", found);
 
-	// CreateEntityByName 需要地圖正在運行；伺服器開機時 OnPluginStart 尚無地圖 → 會丟例外導致插件載入失敗
-	// worldspawn (entity 0) 只有在地圖載入後才存在，用它判斷是否有地圖
-	if (FindEntityByClassname(-1, "worldspawn") == INVALID_ENT_REFERENCE)
+	// CreateEntityByName 需要地圖正在運行：伺服器開機時的 OnPluginStart、換圖載入時的 round_start 都還沒有
+	if (!s_bMapRunning)
 	{
 		PrintToServer("[skills_mk2] No map running, skip func_timescale creation");
 		Slow_Ent    = 0;
