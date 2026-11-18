@@ -50,7 +50,7 @@ void Player_OnClientDisconnect(int client)
 
 void CheckPlayerConnections()
 {
-	for (int i = 1; i < MAX_PLAYERS; i++) {
+	for (int i = 1; i <= MAX_PLAYERS; i++) {
 		if (IsClientInGame(i)){
 			Player_OnClientConnected(i);
 			SDKHook(i, SDKHook_OnTakeDamage, Event_Hurt);
@@ -60,14 +60,14 @@ void CheckPlayerConnections()
 
 public void Event_Draw(Event event, const char[] name, bool dontBroadcast)
 {
-	for (int i = 1; i < MAX_PLAYERS; i++) {
+	for (int i = 1; i <= MAX_PLAYERS; i++) {
 		State_Transition[i] = false;
 	}
 }
 
 public void Event_NoDraw(Event event, const char[] name, bool dontBroadcast)
 {
-	for (int i = 1; i < MAX_PLAYERS; i++) {
+	for (int i = 1; i <= MAX_PLAYERS; i++) {
 		State_Transition[i] = true;
 	}
 }
