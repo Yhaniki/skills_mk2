@@ -393,20 +393,22 @@ void Skill_Change(int client, int skill)
 	if (skill == cur) return;
 
 	// 立刻結束目前的施放與冷卻（觸發 timer 會執行 end / ready）
-	// 第 3 步才修：TriggerTimer 前沒有檢查 null
 	switch (s_iState[client])
 	{
 		case SKILL_ACT:
 		{
 			if (!(s_Skills[cur].flags & SKILL_PASSIVE))
 			{
-				TriggerTimer(s_hDuration[client]);
-				TriggerTimer(s_hCooldown[client]);
+				if (s_hDuration[client] != null)
+					TriggerTimer(s_hDuration[client]);
+				if (s_hCooldown[client] != null)
+					TriggerTimer(s_hCooldown[client]);
 			}
 		}
 		case SKILL_CD:
 		{
-			TriggerTimer(s_hCooldown[client]);
+			if (s_hCooldown[client] != null)
+				TriggerTimer(s_hCooldown[client]);
 		}
 	}
 

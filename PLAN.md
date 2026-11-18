@@ -209,7 +209,7 @@ spcomp skills_mk2/main.sp -o ../plugins/skills_mk2.smx
 - [x] 施放隱藏版爆裂中死亡或斷線時，`Interrupt_Skill` 刪掉了持續／冷卻 timer，`Timer_Skill_EX_End/Ready` 不會執行，`Invulnerable` 和 `Skill_EX_Using` 都不會重置。復活後 MP 會一直被歸零（`Skill_Notify_MPbar` 在無敵時把 MP 設為 0），一般爆裂也會改走隱藏版的計時。（讀碼推論，待實測） 自動測試的 `ex_death` 情境確認了這個推論（第 2 步測試版：復活後 `Invulnerable` 仍是 1，MP 設成 100 後下一次 HUD 更新又變 0）。修正：中斷時框架先呼叫 onCleanup 再重設狀態並清掉替代技能；隱藏版爆裂在施放中被中斷時解除無敵、天氣恢復、慢動作提早結束。
 - [x] skill2 不檢查冷卻：一般爆裂施放中或冷卻中仍能放隱藏版，兩組 timer 會互相覆蓋。 修正：跟 skill1 一樣，施放中、冷卻中會提示並拒絕。
 - [x] `change_skill` 的判斷用了 `Skill_Type[skill_num]`（超出註冊範圍），「技能施放中」分支永遠走不到。 修正：一般技能施放中（含隱藏版爆裂）不能開技能選單，也不能在施放前打開的選單裡選技能；被動技能（魔心護盾）一直是施放中，可以切換。
-- [ ] `Skill_Change` 呼叫 `TriggerTimer` 前沒檢查 null（第 2 步重寫後確認是否還存在）。
+- [x] `Skill_Change` 呼叫 `TriggerTimer` 前沒檢查 null（第 2 步重寫後確認是否還存在）。 第 2 步後仍存在，已加上檢查。
 - [x] `Timer_UndeadRush` 用 client index，放完淨化後 1 秒內斷線會報錯。第 2 步改用排程器後已不會發生（自動測試的 `kick_turn_undead` 情境：0.7 報 `Client is not connected`，第 2 步沒有例外）。
 - [ ] `round_start` 的技能清理寫在 dissolve 的 `Event_RoundStart` 裡，只有 `l4d_dissolve_allow=1` 時才會執行；改成技能模組自己 hook。
 - [ ] 換圖載入時 `round_start` 比 `OnMapStart` 先觸發，`Skills_RoundStartCleanup` → `RestoreTimeScale` 的 `CreateEntityByName` 丟「Cannot create new entity when no map is running」。這時 worldspawn 已經存在，所以 `3e8a6d3` 的檢查擋不到。（自動測試發現，0.7 就有）
