@@ -272,6 +272,24 @@ static char s_sMain[][] =
 	"prep",
 	"wait 1.0",
 	"cp newbot",
+
+	// 施放中、冷卻中用 skill2，施放中開技能選單（第 3 步起會被擋下並提示）
+	"scen cast_guards",
+	"mp 0 100",
+	"cmd 0 skill1",
+	"wait 0.3",
+	"mp 0 100",
+	"cmd 0 skill2",
+	"cmd 0 change_skill",
+	"wait 0.3",
+	"cp act",
+	"wait 3.0",
+	"mp 0 100",
+	"cmd 0 skill2",
+	"wait 0.3",
+	"cp cd",
+	"wait 2.0",
+	"cp rdy",
 };
 
 // 換圖、reload、重開回合之前：b0 施放隱藏版爆裂，3 秒後交給 servertest.py
