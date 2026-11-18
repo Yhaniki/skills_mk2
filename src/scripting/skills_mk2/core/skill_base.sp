@@ -492,8 +492,12 @@ void Skills_MapEndCleanup()
 	ResetMagicAtmosphere();
 }
 
-// 由 lib/dissolve.sp 的 Event_RoundStart 呼叫
-// 捕捉 vote restart / RestartScenario 等不走 OnMapEnd 的軟重置
+// round_start：捕捉 vote restart / RestartScenario 等不走 OnMapEnd 的軟重置
+public void Event_SkillsRoundStart(Event event, const char[] name, bool dontBroadcast)
+{
+	Skills_RoundStartCleanup();
+}
+
 void Skills_RoundStartCleanup()
 {
 	PrintToServer("[skills_mk2] round_start cleanup: EX + skill timers + timescale");

@@ -211,7 +211,7 @@ spcomp skills_mk2/main.sp -o ../plugins/skills_mk2.smx
 - [x] `change_skill` 的判斷用了 `Skill_Type[skill_num]`（超出註冊範圍），「技能施放中」分支永遠走不到。 修正：一般技能施放中（含隱藏版爆裂）不能開技能選單，也不能在施放前打開的選單裡選技能；被動技能（魔心護盾）一直是施放中，可以切換。
 - [x] `Skill_Change` 呼叫 `TriggerTimer` 前沒檢查 null（第 2 步重寫後確認是否還存在）。 第 2 步後仍存在，已加上檢查。
 - [x] `Timer_UndeadRush` 用 client index，放完淨化後 1 秒內斷線會報錯。第 2 步改用排程器後已不會發生（自動測試的 `kick_turn_undead` 情境：0.7 報 `Client is not connected`，第 2 步沒有例外）。
-- [ ] `round_start` 的技能清理寫在 dissolve 的 `Event_RoundStart` 裡，只有 `l4d_dissolve_allow=1` 時才會執行；改成技能模組自己 hook。
+- [x] `round_start` 的技能清理寫在 dissolve 的 `Event_RoundStart` 裡，只有 `l4d_dissolve_allow=1` 時才會執行；改成技能模組自己 hook。
 - [ ] 換圖載入時 `round_start` 比 `OnMapStart` 先觸發，`Skills_RoundStartCleanup` → `RestoreTimeScale` 的 `CreateEntityByName` 丟「Cannot create new entity when no map is running」。這時 worldspawn 已經存在，所以 `3e8a6d3` 的檢查擋不到。（自動測試發現，0.7 就有）
 - [ ] `Hooked[MAX_PLAYERS]` 少一格，第 18 號玩家會陣列越界。
 - [ ] `Event_Draw`、`Event_NoDraw`、`CheckPlayerConnections` 的迴圈用 `i < MAX_PLAYERS`，少跑最後一位玩家。

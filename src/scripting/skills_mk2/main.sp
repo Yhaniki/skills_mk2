@@ -122,6 +122,7 @@ public void OnPluginStart()
 	// HookEvent("player_hurt", 				Event_DmgReducedByManaShield);
 	HookEvent("player_death", 				Event_DeathUnglow);
 	HookEvent("infected_death", 			Event_DeathUnglow);
+	HookEvent("round_start",				Event_SkillsRoundStart, EventHookMode_PostNoCopy);
 
 	RegConsoleCmd("skill1",					Event_SkillStateTransition);
 	RegConsoleCmd("skill2",					Event_SkillStateTransition);
