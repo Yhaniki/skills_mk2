@@ -421,6 +421,7 @@ void Interrupt_Skill(int client)
 			SafeDeleteTimer(s_hDuration[client]);
 	}
 	MP_StopBoost(client);
+	Skill_CancelAllSteps(client);
 
 	s_iState[client] = SKILL_RDY;
 	Skills_Cleanup(client, SKILL_CLEANUP_INTERRUPT);
@@ -445,6 +446,7 @@ void Skills_MapEndCleanup()
 		SafeDeleteTimer(s_hCooldown[i]);
 		SafeDeleteTimer(s_hDuration[i]);
 		MP_StopBoost(i);
+		Skill_CancelAllSteps(i);
 
 		s_iState[i]     = SKILL_RDY;
 		s_iAltUsing[i]  = -1;
@@ -476,6 +478,7 @@ void Skills_RoundStartCleanup()
 		SafeDeleteTimer(s_hCooldown[i]);
 		SafeDeleteTimer(s_hDuration[i]);
 		MP_StopBoost(i);
+		Skill_CancelAllSteps(i);
 
 		s_iState[i]     = SKILL_RDY;
 		s_iAltUsing[i]  = -1;

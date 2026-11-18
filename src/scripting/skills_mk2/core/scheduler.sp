@@ -4,8 +4,8 @@
 //   delay 秒後呼叫 step(client, data)。回傳的 DataPack 給技能寫入步驟需要的資料（例如瞄準座標），
 //   step 收到時已經讀到這些資料的開頭。DataPack 由 SourceMod 自動釋放（CreateDataTimer）。
 // - 玩家斷線（userid 對不上）或步驟已被取消時，step 不會被呼叫。
-// - Skill_CancelSteps(client, skill) 取消某位玩家某個技能所有還沒觸發的步驟。
-//   目前只有隱藏版爆裂會取消（換圖、回合重開、過關、卸載，PLAN 決定 #5）；其他技能的步驟在死亡、換圖後照樣觸發。
+// - 施法者死亡、斷線、過關、換圖、回合重開時，框架用 Skill_CancelAllSteps 取消該玩家所有還沒觸發的步驟（PLAN 決定 #5）。
+// - Skill_CancelSteps(client, skill) 只取消某個技能的步驟（隱藏版爆裂再次施放前取消上一次的爆炸）。
 //
 // 步驟資料不能放在技能檔的 static 陣列：切換技能會把冷卻重置成 2 秒，
 // 同一位玩家可能有兩次施放的步驟同時在等（例如偷竊延遲 5.2 秒），共用陣列會互相覆蓋。
@@ -54,6 +54,17 @@ void Skill_CancelSteps(int client, int skill)
 	for (int i = 0; i < SKILL_MAX_STEPS; i++)
 	{
 		if (s_hStep[client][i] != null && s_iStepSkill[client][i] == skill)
+			delete s_hStep[client][i];
+	}
+}
+
+void Skill_CancelAllSteps(int client)
+{
+	for (int skill = 0; skill < MAXSKILLS; skill++)
+		s_iSerial[client][skill]++;
+	for (int i = 0; i < SKILL_MAX_STEPS; i++)
+	{
+		if (s_hStep[client][i] != null)
 			delete s_hStep[client][i];
 	}
 }

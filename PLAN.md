@@ -205,7 +205,7 @@ spcomp skills_mk2/main.sp -o ../plugins/skills_mk2.smx
 
 ### 第 3 步：修 bug（每項一個 commit）
 
-- [ ] 延遲步驟在施法者死亡、換圖時取消（決定 #5）。回合重開是否也要取消，實作時再確認。
+- [x] 延遲步驟在施法者死亡、換圖時取消（決定 #5）。實作：死亡、斷線、過關、換圖、回合重開都會取消該玩家所有還沒觸發的步驟（`Skill_CancelAllSteps`）。回合重開時大家回到起點，舊位置的爆炸、偷竊不該再觸發，所以一併取消。
 - [ ] 施放隱藏版爆裂中死亡或斷線時，`Interrupt_Skill` 刪掉了持續／冷卻 timer，`Timer_Skill_EX_End/Ready` 不會執行，`Invulnerable` 和 `Skill_EX_Using` 都不會重置。復活後 MP 會一直被歸零（`Skill_Notify_MPbar` 在無敵時把 MP 設為 0），一般爆裂也會改走隱藏版的計時。（讀碼推論，待實測）
 - [ ] skill2 不檢查冷卻：一般爆裂施放中或冷卻中仍能放隱藏版，兩組 timer 會互相覆蓋。
 - [ ] `change_skill` 的判斷用了 `Skill_Type[skill_num]`（超出註冊範圍），「技能施放中」分支永遠走不到。
