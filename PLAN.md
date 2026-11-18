@@ -219,16 +219,27 @@ spcomp skills_mk2/main.sp -o ../plugins/skills_mk2.smx
 - [x] 合併重複函式：`IsInf` 與 `IsAliveInf` 完全相同（後者其實沒檢查是否活著）；`IsAliveSpecialInf` 與 `IsAliveSpecialInf2` 重複。 合併時上限統一用 `MaxClients`：特感 bot 的 client index 可能超過 18，原本 `IsAliveSpecialInf` 會漏掉這些特感（爆裂的傷害、鷹眼的標示、淨化的掃描都受影響）。
 - [x] 確認各技能的 DataPack 洩漏在第 2 步後都已消失，特別是 `NukeExplosion` 對每個 entity 各 `new` 一個 DataPack 的寫法。第 2 步後技能的延遲步驟與衝擊波都用 `CreateDataTimer`（由 SourceMod 釋放），剩下的 `new DataPack`（`Invuln_OnPummelVictim`、腳下魔法陣）都有釋放。
 - [ ] **待決定**：隱藏版爆裂的衝擊波用 `SDKHooks_TakeDamage`，它的 `bypassHooks` 預設是 true，會略過插件自己的受傷 hook，所以**施法者的無敵擋不住自己的爆炸**。施法者和約 5000 單位內的隊友都會被炸倒（自動測試確認），施法者會比持續時間結束（27 秒）早 3 秒倒地。要不要讓無敵擋住、隊友要不要受傷，需要決定。
-- [ ] 淨化殺普通殭屍的結果取決於有沒有搶到 dissolve 槽（`lib/dissolve.sp` 的 `Turn_Undead`）。（讀碼推論，待實測）
+- [x] 淨化殺普通殭屍的結果取決於有沒有搶到 dissolve 槽（`lib/dissolve.sp` 的 `Turn_Undead`）。（讀碼推論，待實測）
   - 有空槽：不呼叫 `DealDamage`，只交給溶解器處理。溶解器最後那一擊的 10000 傷害被 `OnCommonDamage` 擋掉，殭屍改由溶解器 `UTIL_Remove` 或 2.5 秒後的 `Kill` 靜默移除，不會觸發 `player_death`。所以不會給全隊 0.5 MP（`Event_MPleech`），也不算施法者的擊殺。
   - 槽滿（同時超過 25 隻）：走 `DealDamage`，正常死亡，會給 MP。
   - 結果是：同一次淨化，前 25 隻普通殭屍不給 MP，第 26 隻起才給。實測確認後再決定要不要統一改成「先 `DealDamage`，再掛溶解特效」，Witch 現在就是這種寫法。
-- [ ] `MAX_DISSOLVE`（25）只限制同時播放的溶解特效數量，不影響淨化殺不殺得死。要不要調高，等實測後決定。
+  - 自動測試的 `dissolve` 階段確認了這個推論（`MAX_DISSOLVE` 25）：
+    - 一次淨化 10 隻：10 隻都溶解，0 次 `player_death`，隊友 MP 沒有增加。
+    - 一次淨化 40 隻：25 隻溶解、15 隻正常死亡（擊殺都算施法者），隊友 +7.5 MP。
+    - 一次淨化 100 隻：25 隻溶解、75 隻正常死亡。
+    - 實際施放淨化打 40 隻，結果跟直接呼叫 `Turn_Undead` 相同。
+    - 溶解的殭屍 0.5 秒內移除，沒有殺不死的殭屍。
+- [ ] **待決定**：淨化的普通殭屍要不要給 MP、算擊殺（改成先 `DealDamage` 再掛溶解特效）。
+- [x] `MAX_DISSOLVE`（25）只限制同時播放的溶解特效數量，不影響淨化殺不殺得死。要不要調高，等實測後決定。
   - 原版 changelog 寫 1.11 已經「Reverted MAX_DISSOLVE to 32」，但官方 repo `SilvDev/Dissolve_Infected` 的 1.17 程式碼還是 25。這是原作者那邊的不一致，不是我們改的。
   - changelog 說的「godmode zombies when too many die at once」，比對 1.5 和 1.17 的原始碼後判斷，成因是 1.5 的寫法：`OnCommonDamage` 擋掉**所有**傷害，而且在確認有沒有空槽**之前**就掛上去，又沒有補救的 `Kill`。槽滿或溶解器沒建成功時，殭屍就永遠打不死。
   - 1.17 用三道保護修掉了這個問題，重構時都不能拿掉：① `OnCommonDamage` 只擋溶解器那一擊（`damage == 10000.0` 且 `damagetype == 5982249`，就是 SDK `CEntityDissolve::DissolveThink` 送出的 `DMG_REMOVENORAGDOLL` 加上 `Damage_GetNoPhysicsForce()`）；② 溶解器建成功才掛 hook；③ 目標身上加 `OnUser1 !self:Kill::2.5`，溶解器提早消失也保證移除。
   - 溶解器最後一擊的攻擊者是 `UTIL_PlayerByIndex(1)`，Valve 自己的註解寫著傳 NULL 給 `TakeDamage` 會出事，這很可能就是「不擋會崩潰」的原因（推論，L4D2 的 binary 沒有驗證）。
   - 「29 隻同時溶解開始出問題」這個門檻查不到根據：AlliedModders 討論串拒絕自動讀取，GitHub 上也沒有 1.6～1.12 的版本可以比對。
+  - 實測（`dissolve` 階段）：溶解器 0.5 秒內就消失（`l4d_dissolve_time` 0.2 秒），槽也跟著空出來，所以「同時」實際上就是同一次淨化。
+  - 另外編了 `MAX_DISSOLVE` 128 的實驗版：100 隻同時溶解，0.5 秒內全部移除，沒有例外，伺服器正常。changelog 說的「29 隻同時開始出問題」在伺服器端沒有重現。
+  - 用戶端的粒子效果在 100 隻同時溶解時看起來怎樣，要進遊戲才知道。
+- [ ] **待決定**：`MAX_DISSOLVE` 要不要調高（伺服器端沒問題，要先看用戶端的效果）。
 
 ### 第 4 步：收尾
 
@@ -255,6 +266,9 @@ spcomp skills_mk2/main.sp -o ../plugins/skills_mk2.smx
   - 把 `IsFakeClient` 換成永遠回傳 false，技能系統會把 bot 當真人處理；`PrintHintText`、`PrintToChat(All)` 換成會記 log 的版本。
   - `test/harness.sp` 照劇本讓 bot 施放技能，記錄檢查點（技能狀態、MP、無敵、HUD 文字、慢動作、EX 的強光與魔法陣、霧）。
   - 劇本涵蓋：6 個技能各施放一次、魔力不足、skill2 的條件、魔心護盾吸收傷害、施放中切換／倒地／死亡、隱藏版爆裂完整流程與施放中死亡、淨化後斷線、施放隱藏版爆裂中 reload／換圖／投票重開。
+- `servertest.py phase --phase 階段`：只跑指定的測試腳本階段（不做 reload、換圖、重開回合）。
+  - `ex_down`（也在 skills 的完整流程裡）：倒地、倒地血量很低、黑白時施放隱藏版爆裂。
+  - `dissolve`（不在完整流程裡）：在 bot 周圍生普通殭屍，直接呼叫 `Turn_Undead` 或實際施放淨化，記錄溶解了幾隻、正常死亡幾隻、隊友的 MP。用 `nb_stop` 讓殭屍和 bot 都不動。
 - `compare.py`：比對兩次 skills 的結果（通常是 0.7 對新版）。MP 容許 ±1；血量只比測試腳本造成傷害時的變化量（爆裂的瓦斯罐有沒有炸到 bot 每次不同）。
 - 測試時的伺服器設定：只綁 `127.0.0.1:27115`、`sb_all_bot_game 1`（沒有真人時才不會休眠）、`sb_stop 1`、關掉殭屍與特感、`director_no_death_check 1`（隱藏版爆裂會把所有倖存者炸倒）。測試期間暫時換掉 `plugins/skills_mk2.smx`，結束後一律還原。
 - 還是要人進遊戲驗證的部分：粒子、魔法陣、天氣、HUD 外觀、音效、近戰揮空、真人連線與重連流程。

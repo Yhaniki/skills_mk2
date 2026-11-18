@@ -15,6 +15,7 @@
 #pragma newdecls required
 
 #define TEST_BOTS 4
+#define TEST_MAX_COMMONS 128
 
 static char  s_sLog[PLATFORM_MAX_PATH];
 static int   s_iBot[TEST_BOTS];
@@ -23,6 +24,13 @@ static char  s_sPhase[32];
 static char  s_sScen[48];
 static int   s_iLine;
 static char  s_sHint[MAXPLAYERS + 1][256];
+
+// dissolve 階段：測試生出來的普通殭屍、施法者、普通殭屍的 player_death 次數（Event_MPleech 就是靠這個事件給 MP）
+static int   s_iCommon[TEST_MAX_COMMONS];
+static int   s_iCommonN;
+static int   s_iPurifier;
+static int   s_iInfDeaths;
+static int   s_iInfDeathsBy;
 
 //===========================================================
 //========================= 劇本 ============================
@@ -40,7 +48,13 @@ static char  s_sHint[MAXPLAYERS + 1][256];
 //   rescue <k>           除了 k 以外的 bot：死了就復活、倒地就救起、回到原位（隱藏版爆裂會炸倒所有隊友，
 //                        不救起來的話施法者結束時倒地 → 全員倒地 → 任務失敗、回合重開）
 //   kill <k> / respawn <k> / revive <k> / kick <k> / addbot
+//   bw <k>               讓 bot 進入黑白狀態（倒地次數到上限，再倒地就會死）；prep 會清掉
+//   hp <k> <值>          設定血量（倒地時是倒地血量）
 //   restart              投票重開回合（L4D_RestartScenarioFromVote）
+//   cvar <名稱> <值>     設定 cvar（可以設 cheat cvar）
+//   commons <k> <n>      在 bot k 周圍 80～600 單位的地板上生 n 隻普通殭屍，並把 k 記成施法者、死亡計數歸零
+//   purify <k>           對每一隻生出來的普通殭屍呼叫 Turn_Undead（跟淨化第 2.5 秒的步驟一樣），攻擊者是 bot k
+//   dcount <名稱>        記錄生出來的普通殭屍還剩幾隻、溶解器數量、普通殭屍的 player_death 次數、b1 的 MP
 //   cp <名稱>            記錄檢查點（每個 bot 的技能狀態與 HUD 文字）
 //   wait <秒>            等待
 //
@@ -349,6 +363,167 @@ static char s_sExRestart[][] =
 	"cp rdy",
 };
 
+// 隱藏版爆裂的施法者在施放中被打倒或打死的情況（指令只擋死亡與過關，倒地、黑白都能施放）
+// 測試 bot 看著腳下，爆炸點就在施法者腳邊。爆炸在第 24 秒，持續時間在第 27 秒結束
+// prep 後先等 1 秒：剛被救起來馬上受到的傷害會被遊戲忽略，倒地不了
+static char s_sExDown[][] =
+{
+	"findbots",
+	"home",
+	// 倒地時施放（倒地血量 300）
+	"scen ex_incap_cast",
+	"prep",
+	"wait 1.0",
+	"mp 0 100",
+	"dmg 0 300",
+	"wait 0.5",
+	"cp incapped",
+	"cmd 0 skill2",
+	"wait 0.3",
+	"cp act",
+	"wait 23.4",
+	"cp pre_nuke",
+	"wait 0.6",
+	"cp nuke",
+	"rescue 0",
+	"wait 2.9",
+	"cp end",
+	"wait 2.0",
+	"cp rdy",
+	"prep",
+	"wait 1.0",
+	"cp after",
+
+	// 倒地時施放，倒地血量只剩 60
+	"scen ex_incap_low",
+	"prep",
+	"wait 1.0",
+	"mp 0 100",
+	"dmg 0 300",
+	"wait 0.5",
+	"hp 0 60",
+	"cp incapped",
+	"cmd 0 skill2",
+	"wait 0.3",
+	"cp act",
+	"wait 23.4",
+	"cp pre_nuke",
+	"wait 0.6",
+	"cp nuke",
+	"rescue 0",
+	"wait 2.9",
+	"cp end",
+	"wait 2.0",
+	"cp rdy",
+	"prep",
+	"wait 1.0",
+	"cp after",
+
+	// 黑白（倒地次數到上限，再倒地就會死）時施放
+	"scen ex_bw_cast",
+	"prep",
+	"wait 1.0",
+	"bw 0",
+	"mp 0 100",
+	"cmd 0 skill2",
+	"wait 0.3",
+	"cp act",
+	"wait 23.4",
+	"cp pre_nuke",
+	"wait 0.6",
+	"cp nuke",
+	"rescue 0",
+	"wait 2.9",
+	"cp end",
+	"wait 2.0",
+	"cp rdy",
+	"prep",
+	"wait 1.0",
+	"cp after",
+};
+
+// 淨化殺普通殭屍時 dissolve 槽（MAX_DISSOLVE）的影響。nb_stop 讓殭屍和 bot 都不動，避免 bot 先把殭屍打死
+// 前三個情境直接呼叫 Turn_Undead，最後一個實際施放淨化（b3 看著腳下，淨化中心在腳邊）
+static char s_sDissolve[][] =
+{
+	"findbots",
+	"home",
+	"prep",
+	"cvar nb_stop 1",
+	"cvar nb_blind 1",
+
+	"scen dissolve_10",
+	"commons 3 10",
+	"wait 1.0",
+	"mp 1 0",
+	"dcount spawned",
+	"purify 3",
+	"dcount t0",
+	"wait 0.5",
+	"dcount t0.5",
+	"wait 0.5",
+	"dcount t1",
+	"wait 1.0",
+	"dcount t2",
+	"wait 1.0",
+	"dcount t3",
+	"wait 1.0",
+
+	"scen dissolve_40",
+	"commons 3 40",
+	"wait 1.0",
+	"mp 1 0",
+	"dcount spawned",
+	"purify 3",
+	"dcount t0",
+	"wait 0.5",
+	"dcount t0.5",
+	"wait 0.5",
+	"dcount t1",
+	"wait 1.0",
+	"dcount t2",
+	"wait 1.0",
+	"dcount t3",
+	"wait 1.0",
+
+	"scen dissolve_100",
+	"commons 3 100",
+	"wait 1.0",
+	"mp 1 0",
+	"dcount spawned",
+	"purify 3",
+	"dcount t0",
+	"wait 0.5",
+	"dcount t0.5",
+	"wait 0.5",
+	"dcount t1",
+	"wait 1.0",
+	"dcount t2",
+	"wait 1.0",
+	"dcount t3",
+	"wait 1.0",
+
+	"scen purify_cast_40",
+	"change 3 4",
+	"wait 2.5",
+	"prep",
+	"commons 3 40",
+	"wait 1.0",
+	"mp 1 0",
+	"mp 3 100",
+	"dcount spawned",
+	"cmd 3 skill1",
+	"wait 2.8",
+	"dcount t0.3",
+	"wait 0.7",
+	"dcount t1",
+	"wait 2.0",
+	"dcount t3",
+
+	"cvar nb_stop 0",
+	"cvar nb_blind 0",
+};
+
 static char s_sFinish[][] =
 {
 	"scen finish",
@@ -377,6 +552,16 @@ static bool T_GetLine(int idx, char[] line, int maxlen)
 		if (idx >= sizeof(s_sExRestart)) return false;
 		strcopy(line, maxlen, s_sExRestart[idx]);
 	}
+	else if (StrEqual(s_sPhase, "ex_down"))
+	{
+		if (idx >= sizeof(s_sExDown)) return false;
+		strcopy(line, maxlen, s_sExDown[idx]);
+	}
+	else if (StrEqual(s_sPhase, "dissolve"))
+	{
+		if (idx >= sizeof(s_sDissolve)) return false;
+		strcopy(line, maxlen, s_sDissolve[idx]);
+	}
 	else if (StrEqual(s_sPhase, "finish"))
 	{
 		if (idx >= sizeof(s_sFinish)) return false;
@@ -396,7 +581,16 @@ static bool T_GetLine(int idx, char[] line, int maxlen)
 public void OnAllPluginsLoaded()
 {
 	BuildPath(Path_SM, s_sLog, sizeof(s_sLog), "logs/skills_test.log");
-	RegServerCmd("sm_skilltest", Cmd_SkillTest, "skills_mk2 自動測試：sm_skilltest <main|ex_prep|after_reload|after_map|ex_restart|finish>");
+	RegServerCmd("sm_skilltest", Cmd_SkillTest, "skills_mk2 自動測試：sm_skilltest <main|ex_down|ex_prep|after_reload|after_map|ex_restart|dissolve|finish>");
+	HookEvent("player_death", T_Event_Death);
+}
+
+static void T_Event_Death(Event event, const char[] name, bool dontBroadcast)
+{
+	if (!s_sPhase[0] || !IsInf(event.GetInt("entityid"))) return;
+	s_iInfDeaths++;
+	if (s_iPurifier > 0 && GetClientOfUserId(event.GetInt("attacker")) == s_iPurifier)
+		s_iInfDeathsBy++;
 }
 
 static Action Cmd_SkillTest(int args)
@@ -546,6 +740,47 @@ static float T_Exec(const char[] line)
 		GetCurrentMap(map, sizeof(map));
 		L4D_RestartScenarioFromVote(map);
 	}
+	else if (StrEqual(a[0], "bw"))
+	{
+		if (b)
+		{
+			SetEntProp(b, Prop_Send, "m_currentReviveCount", FindConVar("survivor_max_incapacitated_count").IntValue);
+			SetEntProp(b, Prop_Send, "m_bIsOnThirdStrike", 1);
+		}
+	}
+	else if (StrEqual(a[0], "cvar"))
+	{
+		ConVar cv = FindConVar(a[1]);
+		if (cv != null) cv.SetString(a[2]);
+		else T_Log("FAIL 找不到 cvar：%s", a[1]);
+	}
+	else if (StrEqual(a[0], "commons"))
+	{
+		if (b) T_SpawnCommons(b, StringToInt(a[2]));
+	}
+	else if (StrEqual(a[0], "purify"))
+	{
+		if (b)
+		{
+			int called = 0;
+			for (int i = 0; i < s_iCommonN; i++)
+			{
+				int e = EntRefToEntIndex(s_iCommon[i]);
+				if (e == INVALID_ENT_REFERENCE) continue;
+				Turn_Undead(e, b);
+				called++;
+			}
+			T_Log("PURIFY %s/%s called=%d", s_sPhase, s_sScen, called);
+		}
+	}
+	else if (StrEqual(a[0], "dcount"))
+	{
+		T_DissolveCount(a[1]);
+	}
+	else if (StrEqual(a[0], "hp"))
+	{
+		if (b) SetEntityHealth(b, StringToInt(a[2]));
+	}
 	else if (StrEqual(a[0], "cp"))
 	{
 		T_Checkpoint(a[1]);
@@ -649,6 +884,78 @@ static void T_Place(int k)
 	SetEntityHealth(b, 100);
 	SetEntPropFloat(b, Prop_Send, "m_healthBuffer", 0.0);
 	ExtinguishEntity(b);
+	// 倒地次數歸零：救起來會累加，累積到上限（黑白）後再倒地就會直接死，情境之間會互相影響
+	SetEntProp(b, Prop_Send, "m_currentReviveCount", 0);
+	SetEntProp(b, Prop_Send, "m_bIsOnThirdStrike", 0);
+}
+
+// 從 b 外圍 80 單位起，每 40 單位一圈往外找：不在牆裡、往下 100 單位內有地板的位置，各生一隻普通殭屍
+static void T_SpawnCommons(int b, int n)
+{
+	s_iCommonN = 0;
+	s_iPurifier = b;
+	s_iInfDeaths = 0;
+	s_iInfDeathsBy = 0;
+	if (n > TEST_MAX_COMMONS) n = TEST_MAX_COMMONS;
+
+	float org[3], top[3], bottom[3], pos[3];
+	int outside = 0, solid = 0, nofloor = 0, fail = 0;
+	GetClientAbsOrigin(b, org);
+	for (int ring = 2; ring <= 15 && s_iCommonN < n; ring++)
+	{
+		float r = ring * 40.0;
+		int steps = RoundToFloor(2.0 * FLOAT_PI * r / 40.0);
+		for (int s = 0; s < steps && s_iCommonN < n; s++)
+		{
+			float ang = 2.0 * FLOAT_PI * s / steps;
+			top[0] = org[0] + r * Cosine(ang);
+			top[1] = org[1] + r * Sine(ang);
+			top[2] = org[2] + 40.0;
+			if (TR_PointOutsideWorld(top)) { outside++; continue; }
+			if (TR_GetPointContents(top) & MASK_SOLID) { solid++; continue; }
+			bottom = top;
+			bottom[2] = org[2] - 60.0;
+			TR_TraceRayFilter(top, bottom, MASK_PLAYERSOLID, RayType_EndPoint, T_TraceNoPlayers);
+			if (!TR_DidHit()) { nofloor++; continue; }
+			TR_GetEndPosition(pos);
+			pos[2] += 2.0;
+
+			int e = CreateEntityByName("infected");
+			if (e == -1) { fail++; continue; }
+			TeleportEntity(e, pos, NULL_VECTOR, NULL_VECTOR);
+			DispatchSpawn(e);
+			ActivateEntity(e);
+			s_iCommon[s_iCommonN++] = EntIndexToEntRef(e);
+		}
+	}
+	T_Log("SPAWN %s/%s commons=%d/%d skipped: outside=%d solid=%d nofloor=%d createfail=%d",
+		s_sPhase, s_sScen, s_iCommonN, n, outside, solid, nofloor, fail);
+}
+
+static void T_DissolveCount(const char[] label)
+{
+	int exist = 0, alive = 0, inrange = 0;
+	float org[3];
+	if (s_iPurifier > 0 && IsClientInGame(s_iPurifier)) GetClientAbsOrigin(s_iPurifier, org);
+	for (int i = 0; i < s_iCommonN; i++)
+	{
+		int e = EntRefToEntIndex(s_iCommon[i]);
+		if (e == INVALID_ENT_REFERENCE) continue;
+		exist++;
+		if (GetEntProp(e, Prop_Data, "m_iHealth") > 0)
+		{
+			alive++;
+			if (GetEntityPosDistance(e, org) <= TURN_UNDEAD_DIST) inrange++;
+		}
+	}
+	int slots = 0, dissolvers = 0, ent = -1;
+	for (int i = 0; i < MAX_DISSOLVE; i++)
+		if (g_iDissolvers[i] && EntRefToEntIndex(g_iDissolvers[i]) != INVALID_ENT_REFERENCE) slots++;
+	while ((ent = FindEntityByClassname(ent, "env_entity_dissolver")) != -1) dissolvers++;
+	int b1 = s_iBot[1];
+	T_Log("DCOUNT %s/%s/%s spawned=%d exist=%d alive=%d alive_inrange=%d slots=%d/%d dissolvers=%d inf_deaths=%d by_caster=%d mp_b1=%.1f",
+		s_sPhase, s_sScen, label, s_iCommonN, exist, alive, inrange, slots, MAX_DISSOLVE, dissolvers,
+		s_iInfDeaths, s_iInfDeathsBy, (b1 > 0 && IsClientInGame(b1)) ? Skill_MP[b1] : -1.0);
 }
 
 static void T_Prep(int k)

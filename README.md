@@ -137,6 +137,9 @@ python tools/servertest/servertest.py smoke --smx 要測的.smx --out 輸出資�
 .\spcomp.exe skills_mk2/test/main_test.sp -o skills_mk2_test.smx
 python tools/servertest/servertest.py skills --smx skills_mk2_test.smx --out 輸出資料夾
 
+# 只跑指定的測試腳本階段，例如淨化與 dissolve 槽的實驗（不在 skills 的完整流程裡）
+python tools/servertest/servertest.py phase --smx skills_mk2_test.smx --out 輸出資料夾 --phase dissolve
+
 # 比對兩次 skills 的結果（例如修改前後）
 python tools/servertest/compare.py 修改前的輸出資料夾 修改後的輸出資料夾
 ```

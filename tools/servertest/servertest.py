@@ -3,6 +3,7 @@
 用法：
     python servertest.py smoke  --smx 要測的.smx --out 輸出資料夾 [--server 伺服器資料夾]
     python servertest.py skills --smx 測試版.smx --out 輸出資料夾 [--server 伺服器資料夾]
+    python servertest.py phase  --smx 測試版.smx --out 輸出資料夾 --phase 階段 [--phase 階段 ...]
 
 --server 也可以用環境變數 L4D2_SERVER_DIR 指定（資料夾內要有 srcds.exe）。
 
@@ -13,6 +14,9 @@ smoke：插件生命週期冒煙測試
 
 skills：用 bot 跑技能測試（要搭配 src/scripting/skills_mk2/test/main_test.sp 編出來的測試版）
     插件內的測試腳本會把每個檢查點寫到 logs/skills_test.log，跑完寫 "== DONE ==" 後由這裡關服。
+
+phase：只跑指定的測試腳本階段（在 c1m1_hotel，不做 reload、換圖、重開回合）
+    例如 dissolve（淨化與 dissolve 槽的實驗，不在 skills 的完整流程裡）。
 
 測試期間會暫時把 plugins/skills_mk2.smx 換成 --smx 指定的檔案，結束後一律還原。
 """
@@ -281,7 +285,8 @@ def setup_bots(srv):
     srv.log("bot：\n" + srv.rcon("status", quiet=True))
 
 
-def run_skills(srv, results, timeout):
+def run_skills(srv, results, timeout, only=None):
+    """only：只跑這些階段（phase 模式），不做 reload、換圖、重開回合。"""
     test_log = os.path.join(srv.sm, "logs", "skills_test.log")
     if os.path.exists(test_log):
         os.remove(test_log)
@@ -310,7 +315,14 @@ def run_skills(srv, results, timeout):
         srv.wait_map("c1m1_hotel")
         time.sleep(5)
         setup_bots(srv)
+        if only:
+            for name in only:
+                phase(name, timeout)
+            phase("finish", 30)
+            results.append(("測試腳本跑完", True, ""))
+            return results
         phase("main", timeout)
+        phase("ex_down", 300)
         # reload：施放隱藏版爆裂中 reload 插件
         phase("ex_prep", 60)
         srv.rcon("sm plugins reload skills_mk2")
@@ -343,12 +355,16 @@ def run_skills(srv, results, timeout):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("mode", choices=["smoke", "skills"])
+    ap.add_argument("mode", choices=["smoke", "skills", "phase"])
+    ap.add_argument("--phase", action="append", default=[],
+                    help="phase 模式要跑的測試腳本階段，可以給多次（例如 --phase ex_down --phase dissolve）")
     ap.add_argument("--smx", required=True)
     ap.add_argument("--out", required=True)
     ap.add_argument("--server", default=os.environ.get("L4D2_SERVER_DIR"))
     ap.add_argument("--timeout", type=float, default=900)
     a = ap.parse_args()
+    if a.mode == "phase" and not a.phase:
+        sys.exit("phase 模式要用 --phase 指定階段")
     if not a.server or not os.path.exists(os.path.join(a.server, "srcds.exe")):
         sys.exit("找不到 srcds.exe，請用 --server 或 L4D2_SERVER_DIR 指定伺服器資料夾")
     if b"srcds.exe" in subprocess.run(["tasklist", "/FI", "IMAGENAME eq srcds.exe"], capture_output=True).stdout:
@@ -366,7 +382,7 @@ def main():
         if a.mode == "smoke":
             run_smoke(srv, results)
         else:
-            run_skills(srv, results, a.timeout)
+            run_skills(srv, results, a.timeout, a.phase if a.mode == "phase" else None)
     except Exception as e:
         results.append(("測試流程沒有中斷", False, str(e)))
         if a.mode == "smoke":
