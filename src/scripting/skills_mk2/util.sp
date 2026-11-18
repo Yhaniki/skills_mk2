@@ -59,9 +59,10 @@ bool IsInf(int client)
 	return StrEqual(str, "infected");
 }
 
+// 特感（含 Tank，不檢查是否活著）。上限跟 IsAliveSpecialInf 一樣用 MaxClients
 bool IsSpecialInf(int client)
 {
-	if (client > MAX_PLAYERS || client <= 0) return false;
+	if (client > MaxClients || client <= 0) return false;
 	return (IsClientInGame(client) == true)
 	&& (GetClientTeam(client) == 3);
 }

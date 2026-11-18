@@ -216,7 +216,7 @@ spcomp skills_mk2/main.sp -o ../plugins/skills_mk2.smx
 - [x] `Hooked[MAX_PLAYERS]` 少一格，第 18 號玩家會陣列越界。
 - [x] `Event_Draw`、`Event_NoDraw`、`CheckPlayerConnections` 的迴圈用 `i < MAX_PLAYERS`，少跑最後一位玩家。
 - [x] 移除淨化的 `[淨化DBG]` 除錯輸出。第一次只刪了 `turn_undead.sp`，`lib/dissolve.sp` 的 `Turn_Undead` 還留著兩行，後來補刪。
-- [x] 合併重複函式：`IsInf` 與 `IsAliveInf` 完全相同（後者其實沒檢查是否活著）；`IsAliveSpecialInf` 與 `IsAliveSpecialInf2` 重複。 合併時上限統一用 `MaxClients`：特感 bot 的 client index 可能超過 18，原本 `IsAliveSpecialInf` 會漏掉這些特感（爆裂的傷害、鷹眼的標示、淨化的掃描都受影響）。
+- [x] 合併重複函式：`IsInf` 與 `IsAliveInf` 完全相同（後者其實沒檢查是否活著）；`IsAliveSpecialInf` 與 `IsAliveSpecialInf2` 重複。 合併時上限統一用 `MaxClients`：特感 bot 的 client index 可能超過 18，原本 `IsAliveSpecialInf` 會漏掉這些特感（爆裂的傷害、鷹眼的標示、淨化的掃描都受影響）。`IsSpecialInf` 後來也改用 `MaxClients`（擊殺特感給全隊 5 MP 原本也會漏掉這些特感）。
 - [x] 確認各技能的 DataPack 洩漏在第 2 步後都已消失，特別是 `NukeExplosion` 對每個 entity 各 `new` 一個 DataPack 的寫法。第 2 步後技能的延遲步驟與衝擊波都用 `CreateDataTimer`（由 SourceMod 釋放），剩下的 `new DataPack`（`Invuln_OnPummelVictim`、腳下魔法陣）都有釋放。
 - [x] 隱藏版爆裂的衝擊波用 `SDKHooks_TakeDamage`，它的 `bypassHooks` 預設是 true，會略過插件自己的受傷 hook，所以**施法者的無敵擋不住自己的爆炸**。施法者和約 5000 單位內的隊友都會被炸倒（自動測試確認），施法者會比持續時間結束（27 秒）早 3 秒倒地。
   - 這也是施放中施法者會死的實際情況。指令只擋死亡與過關，倒地、黑白都能施放。自動測試的 `ex_down` 階段：倒地時施放（倒地血量 300 或 60）、黑白時施放，施法者都在第 24 秒被自己炸死。第 0～24 秒倒地血量不會減少，表示無敵有擋住流血；擋不住的只有衝擊波。
