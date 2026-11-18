@@ -423,8 +423,10 @@ void Interrupt_Skill(int client)
 	MP_StopBoost(client);
 	Skill_CancelAllSteps(client);
 
-	s_iState[client] = SKILL_RDY;
+	// 在重設狀態之前呼叫，技能可以用 Skill_GetUsing / Skill_GetState 判斷是不是施放到一半
 	Skills_Cleanup(client, SKILL_CLEANUP_INTERRUPT);
+	s_iState[client] = SKILL_RDY;
+	s_iAltUsing[client] = -1;
 }
 
 //===========================================================

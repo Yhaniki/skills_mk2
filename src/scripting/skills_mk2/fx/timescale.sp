@@ -69,6 +69,13 @@ void Timescale_Precache()
 	SetupSound("skills\\slomo_end.mp3", true);
 }
 
+// 慢動作提早結束（照常播放結束音效）
+void Timescale_EndNow()
+{
+	if (Slow_Timer != null)
+		TriggerTimer(Slow_Timer);
+}
+
 void SlowForSecs(float time, int client)
 {
 	if (State_Slow && Slow_Timer != null) delete Slow_Timer;

@@ -56,6 +56,18 @@ static void ExplosionEx_OnCleanup(int client, SkillCleanup reason)
 {
 	switch (reason)
 	{
+		case SKILL_CLEANUP_INTERRUPT:
+		{
+			// 施放中死亡、斷線：持續時間結束的 OnEnd 不會再執行，這裡把無敵、天氣、慢動作收掉
+			if (Skill_GetUsing(client) == s_iExplosionEx && Skill_GetState(client) == SKILL_ACT)
+			{
+				Invulnerable[client] = false;
+				RestoreMagicAtmosphere();
+				Timescale_EndNow();
+			}
+			CleanupEXSkill(client);
+			KillMagicCircle(client);
+		}
 		case SKILL_CLEANUP_TRANSITION:
 		{
 			CleanupEXSkill(client);
