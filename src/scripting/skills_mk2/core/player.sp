@@ -7,7 +7,7 @@ bool State_Transition[MAX_PLAYERS + 1];
 player_state State_Player[MAX_PLAYERS + 1];
 bool Invulnerable[MAX_PLAYERS + 1];
 
-static bool Hooked[MAX_PLAYERS];
+static bool Hooked[MAX_PLAYERS + 1];
 
 //===========================================================
 //==================== State Transition =====================

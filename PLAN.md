@@ -213,7 +213,7 @@ spcomp skills_mk2/main.sp -o ../plugins/skills_mk2.smx
 - [x] `Timer_UndeadRush` 用 client index，放完淨化後 1 秒內斷線會報錯。第 2 步改用排程器後已不會發生（自動測試的 `kick_turn_undead` 情境：0.7 報 `Client is not connected`，第 2 步沒有例外）。
 - [x] `round_start` 的技能清理寫在 dissolve 的 `Event_RoundStart` 裡，只有 `l4d_dissolve_allow=1` 時才會執行；改成技能模組自己 hook。
 - [x] 換圖載入時 `round_start` 比 `OnMapStart` 先觸發，`Skills_RoundStartCleanup` → `RestoreTimeScale` 的 `CreateEntityByName` 丟「Cannot create new entity when no map is running」。這時 worldspawn 已經存在，所以 `3e8a6d3` 的檢查擋不到。（自動測試發現，0.7 就有） 修正：`fx/timescale.sp` 自己記錄地圖是否正在執行（`OnPluginStart` 依 worldspawn 判斷，之後由 `OnMapStart` / `OnMapEnd` 更新），取代 worldspawn 判斷。
-- [ ] `Hooked[MAX_PLAYERS]` 少一格，第 18 號玩家會陣列越界。
+- [x] `Hooked[MAX_PLAYERS]` 少一格，第 18 號玩家會陣列越界。
 - [ ] `Event_Draw`、`Event_NoDraw`、`CheckPlayerConnections` 的迴圈用 `i < MAX_PLAYERS`，少跑最後一位玩家。
 - [ ] 移除淨化的 `[淨化DBG]` 除錯輸出。
 - [ ] 合併重複函式：`IsInf` 與 `IsAliveInf` 完全相同（後者其實沒檢查是否活著）；`IsAliveSpecialInf` 與 `IsAliveSpecialInf2` 重複。
