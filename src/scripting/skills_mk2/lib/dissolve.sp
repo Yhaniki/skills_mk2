@@ -105,18 +105,9 @@
 
 ======================================================================================*/
 
-#pragma semicolon 1
-// #pragma newdecls required
-
-#include <sourcemod>
-#include <sdktools>
-#include <sdkhooks>
-#include "damage.sp"
+// skills_mk2：pragma 與 include（含 LMCCore 的 tryinclude）移到 main.sp；
+// SourceMod forward 改名為 Dissolve_*，由 main.sp 呼叫。
 //LMC
-#undef REQUIRE_PLUGIN
-#tryinclude <LMCCore>
-#define REQUIRE_PLUGIN
-
 #if !defined _LMCCore_included
 native int LMC_GetEntityOverlayModel(int iEntity);
 #endif
@@ -154,7 +145,7 @@ int g_iClassTank, g_iDamageType;
 // 	url = "https://forums.alliedmods.net/showthread.php?t=306789"
 // }
 
-public APLRes AskPluginLoad2(Handle myself, bool late, char[] error, int err_max)
+APLRes Dissolve_AskPluginLoad2(char[] error, int err_max)
 {
 	EngineVersion test = GetEngineVersion();
 	if( test == Engine_Left4Dead ) g_bLeft4Dead2 = false;
@@ -173,20 +164,19 @@ public APLRes AskPluginLoad2(Handle myself, bool late, char[] error, int err_max
 
 bool bLMC_Available;
 
-public void OnLibraryAdded(const char[] sName)
+void Dissolve_OnLibraryAdded(const char[] sName)
 {
 	if( strcmp(sName, "LMCEDeathHandler") == 0 )
 		bLMC_Available = true;
 }
 
-public void OnLibraryRemoved(const char[] sName)
+void Dissolve_OnLibraryRemoved(const char[] sName)
 {
 	if( strcmp(sName, "LMCEDeathHandler") == 0 )
 		bLMC_Available = false;
 }
 
-// public void OnPluginStart()
-public void TurnUndeadInit()
+void Dissolve_Init()
 {
 	// SDKCalls
 	char sPath[PLATFORM_MAX_PATH];
@@ -242,24 +232,21 @@ public void TurnUndeadInit()
 	g_iDamageType = g_bLeft4Dead2 ? 5982249 : 33540137;
 }
 
-public void OnPluginEnd()
+void Dissolve_OnPluginEnd()
 {
 	ResetPlugin();
-	Skills_PluginEndCleanup();
 }
 
-// public void OnMapStart()
-public void TrunUndeadMapStart()
+void Dissolve_OnMapStart()
 {
 	g_bMapStarted = true;
 	PrecacheModel(SPRITE_GLOW, true);
 }
 
-public void OnMapEnd()
+void Dissolve_OnMapEnd()
 {
 	g_bMapStarted = false;
 	ResetPlugin();
-	Skills_MapEndCleanup();
 }
 
 
@@ -344,7 +331,7 @@ void DeleteFader()
 // ====================================================================================================
 //					CVARS
 // ====================================================================================================
-public void OnConfigsExecuted()
+void Dissolve_OnConfigsExecuted()
 {
 	IsAllowed();
 }
@@ -551,7 +538,8 @@ int GetDissolveIndex()
 // ====================================================================================================
 //					EVENT
 // ====================================================================================================
-public bool:IsAliveSpecialInf2(client) {
+bool IsAliveSpecialInf2(int client)
+{
 	if (client > MaxClients || client <= 0) return false;
 	return (IsClientInGame(client) == true)
 	&& (IsPlayerAlive(client) == true)

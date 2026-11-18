@@ -7,10 +7,11 @@
 - [L4D2-Competitive-Framework](https://github.com/Attano/L4D2-Competitive-Framework)
 
 ## 編譯
-+ 進入 `sourcemod/script` 目錄後執行以下指令：
++ 原始碼都在 `scripting/skills_mk2/` 資料夾內，入口是 `main.sp`
++ 進入 `sourcemod/scripting` 目錄後執行以下指令：
 
 ```
-.\spcomp.exe skills_mk2.sp -o ../plugins/skills_mk2.smx
+.\spcomp.exe skills_mk2/main.sp -o ../plugins/skills_mk2.smx
 ```
 
 ## 常用指令

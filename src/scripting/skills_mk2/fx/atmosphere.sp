@@ -83,10 +83,10 @@ stock bool ToneBindOne(int tonemap,
 	PropType &ptype,
 	char nameDst[MAG_ATM_NAME])
 {
-	for (new pass = 0; pass <= 1; ++pass)
+	for (int pass = 0; pass <= 1; ++pass)
 	{
 		PropType tt = (pass == 0) ? Prop_Send : Prop_Data;
-		for (new c = 0; c <= 1; ++c)
+		for (int c = 0; c <= 1; ++c)
 		{
 			char tmp[MAG_ATM_NAME];
 			if (c == 0)
@@ -338,20 +338,12 @@ stock void ResetMagicAtmosphere()
 	s_bAtmosphereOn = false;
 	s_bFogBacked = false;
 	ToneClearBackup();
-	if (s_hRestoreTimer != null)
-	{
-		KillTimer(s_hRestoreTimer);
-		s_hRestoreTimer = null;
-	}
+	delete s_hRestoreTimer;
 }
 
 stock void ScheduleRestoreAtmosphere(float delay)
 {
-	if (s_hRestoreTimer != null)
-	{
-		KillTimer(s_hRestoreTimer);
-		s_hRestoreTimer = null;
-	}
+	delete s_hRestoreTimer;
 	s_hRestoreTimer = CreateTimer(delay, Timer_RestoreAtmosphere);
 }
 

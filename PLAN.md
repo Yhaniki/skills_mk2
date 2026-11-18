@@ -31,6 +31,7 @@ src/scripting/
    ├─ config.sp            常數
    ├─ util.sp              通用純函式（沒有自己的狀態）
    ├─ core/
+   │  ├─ globals.sp        跨模組共用的全域狀態（第 1 步過渡用，第 2 步拆掉）
    │  ├─ skill_base.sp     技能框架：註冊、狀態機、持續／冷卻、中斷、切換、清理分派
    │  ├─ scheduler.sp      延遲步驟排程（第 2 步新增）
    │  ├─ player.sp         玩家狀態事件、無敵、受傷 hook
@@ -134,6 +135,7 @@ spcomp skills_mk2/main.sp -o ../plugins/skills_mk2.smx
 | `main.sp` | `myinfo`、`OnPluginStart`、`OnMapStart`，以及原本在 `l4d_dissolve_infected.sp` 的 `AskPluginLoad2`、`OnLibraryAdded/Removed`、`OnConfigsExecuted`、`OnPluginEnd`、`OnMapEnd`；`OnClient*`、`OnEntityDestroyed`、left4dhooks forward |
 | `config.sp` | `skills_mk2.sp` 開頭的 `#define` |
 | `util.sp` | `IsPlayer`、`IsInf`、`IsWitch`、`IsAliveSpecialInf` 等判斷；`GetAimOrigin`、`GetEntityWorldOrigin`、距離計算；`SafeDeleteTimer`；`DealDamage`（原 `damage.sp`）；`StripAndExecuteClientCommand` |
+| `core/globals.sp` | core/ 與 skills/ 之間互相使用的全域狀態（玩家狀態、MP、技能狀態與註冊表、`State_ManaShield`）。只在單一檔案用到的狀態留在該檔並加 `static` |
 | `core/skill_base.sp` | `RegisterSkill`、`Init_Skill`、`Delete_Skill`、`Skill_Trigger`、`Skill_Change` 與選單、`Interrupt_Skill`、`Timer_Skill_Null_End/Ready`、各種 cleanup（暫時 `newdecls optional`） |
 | `core/player.sp` | 連線狀態、`Event_StateTransition`、gameinstructor 事件、`Invulnerable` 與 `OnTakeDamage` hook、left4dhooks 無敵處理 |
 | `core/mp.sp` | `MP_Increase/Decrease`、回復 timer、`Event_MPleech`、`Event_MPGain`、腎上腺素 |
@@ -157,14 +159,22 @@ spcomp skills_mk2/main.sp -o ../plugins/skills_mk2.smx
 | `skills/turn_undead.sp` | 淨化 start、瞄準延遲、屍潮 timer |
 
 其他工作：
-- [ ] 刪除死碼（都沒有呼叫處）：`FreezeForSecs`、`Timer_Unfreeze`、`State_Freeze`、`Freeze_Timer`、`Event_DmgInflicted`、`Event_PlayerAFK`、`GetEntityEntityDistance`。
-- [ ] 刪除 `damage.sp` 裡跟 `sdkhooks.inc` 重複的 `DMG_*` 定義（抽查過數值一致），消除 30 個 redefinition warning。
-- [ ] 搬完後刪除舊檔：`skills_mk2.sp`、`l4d_dissolve_infected.sp`、`magic_atmosphere.sp`、`resourcemanager.sp`、`damage.sp`。
-- [ ] `HookEvent` 註冊順序維持原樣。同一事件有多個 hook 時依註冊順序呼叫，例如 `player_death` 是 `Event_StateTransition` → `Event_MPleech` → `Event_DeathUnglow`。
-- [ ] 技能註冊順序維持原樣。`Skill[client]` 存的是索引，而且隱藏版爆裂必須是最後一個。
-- [ ] `round_start` 的技能清理暫時維持由 dissolve 的 `Event_RoundStart` 呼叫（依賴反向的問題留到第 3 步）。
-- [ ] README 的編譯指令改成新路徑。
-- [ ] 驗收：編譯成功、不新增 warning，並跑完伺服器測試清單。
+- [x] 刪除死碼（都沒有呼叫處）：`FreezeForSecs`、`Timer_Unfreeze`、`State_Freeze`、`Freeze_Timer`、`Event_DmgInflicted`、`Event_PlayerAFK`、`GetEntityEntityDistance`。
+- [x] 刪除 `damage.sp` 裡跟 `sdkhooks.inc` 重複的 `DMG_*` 定義（抽查過數值一致），消除 30 個 redefinition warning。
+- [x] 搬完後刪除舊檔：`skills_mk2.sp`、`l4d_dissolve_infected.sp`、`magic_atmosphere.sp`、`resourcemanager.sp`、`damage.sp`。
+- [x] `HookEvent` 註冊順序維持原樣。同一事件有多個 hook 時依註冊順序呼叫，例如 `player_death` 是 `Event_StateTransition` → `Event_MPleech` → `Event_DeathUnglow`。
+- [x] 技能註冊順序維持原樣。`Skill[client]` 存的是索引，而且隱藏版爆裂必須是最後一個。
+- [x] `round_start` 的技能清理暫時維持由 dissolve 的 `Event_RoundStart` 呼叫（依賴反向的問題留到第 3 步）。
+- [x] README 的編譯指令改成新路徑。
+- [x] 驗收：編譯成功、不新增 warning（33 個降到 1 個，剩下的是第三方 `ammo.inc` 原本就有的）。
+- [x] 驗收：用比對腳本確認 165 個同名函式正規化後內容相同，其餘差異都是本步刻意的等價轉換（forward 改成分派、`KillTimer` 改 `delete`、補上回傳值）。
+- [x] 驗收：用 `tools/servertest` 在本機 dedicated server 自動測試（不需要人進遊戲，見「自動測試」）。冒煙測試（開機後第一次載入、換圖、reload、unload/load）全部通過；bot 技能測試跟 0.7 比對 272 個檢查點，只有 3 項時間／物理雜訊（MP 回復的時間點、慢動作還原用的 entity 存活的 0.5 秒、受傷前的血量）。視覺、音效、真人連線流程還沒驗證，留到重構完成後一次人工測試。
+
+第 1 步實作時的等價轉換（不改變遊戲行為）：
+- `KillTimer(x)`、`CloseHandle(x)` 改成 `delete x`（`delete` 會順便把變數歸零）。
+- 原本沒寫回傳值的 timer callback 補上回傳值：一次性 timer 回 `Plugin_Stop`；重複 timer（`Skill_Notify`、`Skill_Notify_Ani`、`Skill_MPrecover`）回 `Plugin_Continue`，跟原本隱含的回傳值 0 相同。
+- 技能檔內部使用的狀態改成 `static`，其他檔案需要操作時改用函式：`TurnUndead_KillRushTimer`、`ManaShield_RestoreMeleeRange`、`ExplosionEx_InitState`。
+- `#tryinclude "ResourceManager"` 與 `#tryinclude <LMCCore>` 移到 `main.sp` 的第三方 include 區，避免伺服器上若有舊語法的同名檔案時，在 newdecls 下編譯失敗。
 
 ### 第 2 步：技能框架 + 排程器 + 移植 6 個技能
 
@@ -195,12 +205,31 @@ spcomp skills_mk2/main.sp -o ../plugins/skills_mk2.smx
 - [ ] 移除淨化的 `[淨化DBG]` 除錯輸出。
 - [ ] 合併重複函式：`IsInf` 與 `IsAliveInf` 完全相同（後者其實沒檢查是否活著）；`IsAliveSpecialInf` 與 `IsAliveSpecialInf2` 重複。
 - [ ] 確認各技能的 DataPack 洩漏在第 2 步後都已消失，特別是 `NukeExplosion` 對每個 entity 各 `new` 一個 DataPack 的寫法。
+- [ ] 淨化殺普通殭屍的結果取決於有沒有搶到 dissolve 槽（`lib/dissolve.sp` 的 `Turn_Undead`）。（讀碼推論，待實測）
+  - 有空槽：不呼叫 `DealDamage`，只交給溶解器處理。溶解器最後那一擊的 10000 傷害被 `OnCommonDamage` 擋掉，殭屍改由溶解器 `UTIL_Remove` 或 2.5 秒後的 `Kill` 靜默移除，不會觸發 `player_death`。所以不會給全隊 0.5 MP（`Event_MPleech`），也不算施法者的擊殺。
+  - 槽滿（同時超過 25 隻）：走 `DealDamage`，正常死亡，會給 MP。
+  - 結果是：同一次淨化，前 25 隻普通殭屍不給 MP，第 26 隻起才給。實測確認後再決定要不要統一改成「先 `DealDamage`，再掛溶解特效」，Witch 現在就是這種寫法。
+- [ ] `MAX_DISSOLVE`（25）只限制同時播放的溶解特效數量，不影響淨化殺不殺得死。要不要調高，等實測後決定。
+  - 原版 changelog 寫 1.11 已經「Reverted MAX_DISSOLVE to 32」，但官方 repo `SilvDev/Dissolve_Infected` 的 1.17 程式碼還是 25。這是原作者那邊的不一致，不是我們改的。
+  - changelog 說的「godmode zombies when too many die at once」，比對 1.5 和 1.17 的原始碼後判斷，成因是 1.5 的寫法：`OnCommonDamage` 擋掉**所有**傷害，而且在確認有沒有空槽**之前**就掛上去，又沒有補救的 `Kill`。槽滿或溶解器沒建成功時，殭屍就永遠打不死。
+  - 1.17 用三道保護修掉了這個問題，重構時都不能拿掉：① `OnCommonDamage` 只擋溶解器那一擊（`damage == 10000.0` 且 `damagetype == 5982249`，就是 SDK `CEntityDissolve::DissolveThink` 送出的 `DMG_REMOVENORAGDOLL` 加上 `Damage_GetNoPhysicsForce()`）；② 溶解器建成功才掛 hook；③ 目標身上加 `OnUser1 !self:Kill::2.5`，溶解器提早消失也保證移除。
+  - 溶解器最後一擊的攻擊者是 `UTIL_PlayerByIndex(1)`，Valve 自己的註解寫著傳 NULL 給 `TakeDamage` 會出事，這很可能就是「不擋會崩潰」的原因（推論，L4D2 的 binary 沒有驗證）。
+  - 「29 隻同時溶解開始出問題」這個門檻查不到根據：AlliedModders 討論串拒絕自動讀取，GitHub 上也沒有 1.6～1.12 的版本可以比對。
 
 ### 第 4 步：收尾
 
 - [ ] README：相依版本改成 SourceMod 1.12，補上目錄結構與新增技能的方式。
 - [ ] `PLUGIN_VERSION`（目前還是 `"0.6"`）。
 - [ ] 打 tag、建 release（版本號另議）。
+
+## 重構後的待辦功能
+
+### 多語系
+
+- [ ] 玩家看得到的文字改用 SourceMod 翻譯檔（`translations/skills_mk2.phrases.txt`，`LoadTranslations` 加 `%t` / `%T`）。範圍包含技能名稱、技能選單、HUD 提示與 MP 條、聊天訊息、偷竊掉落與 `lib/weapons.sp` 的武器名稱。
+- 前提：第 2 步的「移除技能名稱字串比對」要先完成，不然名稱翻譯後比對就會失效。
+- 語言：先支援繁體中文（`zho`）、英文（`en`）、日文（`jp`），預設是繁體中文。玩家語言不在這三種裡面時（包括簡體中文 `chi`）一律顯示繁體中文。
+- 注意：SourceMod 找不到玩家語言的翻譯時，會改用伺服器語言（`core.cfg` 的 `ServerLang`，預設是 `en`），所以光靠翻譯檔做不到「預設中文」。實作時再決定要由插件自己判斷玩家語言，還是在 README 請服主把 `ServerLang` 設成 `zho`。
 
 ## 伺服器測試清單（每步完成後）
 
