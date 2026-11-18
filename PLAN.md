@@ -218,7 +218,11 @@ spcomp skills_mk2/main.sp -o ../plugins/skills_mk2.smx
 - [x] 移除淨化的 `[淨化DBG]` 除錯輸出。
 - [x] 合併重複函式：`IsInf` 與 `IsAliveInf` 完全相同（後者其實沒檢查是否活著）；`IsAliveSpecialInf` 與 `IsAliveSpecialInf2` 重複。 合併時上限統一用 `MaxClients`：特感 bot 的 client index 可能超過 18，原本 `IsAliveSpecialInf` 會漏掉這些特感（爆裂的傷害、鷹眼的標示、淨化的掃描都受影響）。
 - [x] 確認各技能的 DataPack 洩漏在第 2 步後都已消失，特別是 `NukeExplosion` 對每個 entity 各 `new` 一個 DataPack 的寫法。第 2 步後技能的延遲步驟與衝擊波都用 `CreateDataTimer`（由 SourceMod 釋放），剩下的 `new DataPack`（`Invuln_OnPummelVictim`、腳下魔法陣）都有釋放。
-- [ ] **待決定**：隱藏版爆裂的衝擊波用 `SDKHooks_TakeDamage`，它的 `bypassHooks` 預設是 true，會略過插件自己的受傷 hook，所以**施法者的無敵擋不住自己的爆炸**。施法者和約 5000 單位內的隊友都會被炸倒（自動測試確認），施法者會比持續時間結束（27 秒）早 3 秒倒地。要不要讓無敵擋住、隊友要不要受傷，需要決定。
+- [x] 隱藏版爆裂的衝擊波用 `SDKHooks_TakeDamage`，它的 `bypassHooks` 預設是 true，會略過插件自己的受傷 hook，所以**施法者的無敵擋不住自己的爆炸**。施法者和約 5000 單位內的隊友都會被炸倒（自動測試確認），施法者會比持續時間結束（27 秒）早 3 秒倒地。
+  - 這也是施放中施法者會死的實際情況。指令只擋死亡與過關，倒地、黑白都能施放。自動測試的 `ex_down` 階段：倒地時施放（倒地血量 300 或 60）、黑白時施放，施法者都在第 24 秒被自己炸死。第 0～24 秒倒地血量不會減少，表示無敵有擋住流血；擋不住的只有衝擊波。
+  - 決定：無敵要擋住。修正：對倖存者的衝擊波改成經過受傷 hook（`bypassHooks = false`）。隊友照樣受傷，有魔心護盾的隊友會減傷。
+  - 修正後：倒地施放的施法者撐過爆炸，27 秒後照常流血；站著施放的施法者撐過爆炸，在第 27 秒才魔力枯竭倒地（跟設計一致）。
+- [ ] **待決定**：黑白時施放，施法者撐過爆炸，但第 27 秒的魔力枯竭倒地（`L4D_SetPlayerIncappedDamage`）會讓他直接死亡（自動測試確認）。這是原本的設計造成的，要不要對黑白的施法者例外處理。
 - [x] 淨化殺普通殭屍的結果取決於有沒有搶到 dissolve 槽（`lib/dissolve.sp` 的 `Turn_Undead`）。（讀碼推論，待實測）
   - 有空槽：不呼叫 `DealDamage`，只交給溶解器處理。溶解器最後那一擊的 10000 傷害被 `OnCommonDamage` 擋掉，殭屍改由溶解器 `UTIL_Remove` 或 2.5 秒後的 `Kill` 靜默移除，不會觸發 `player_death`。所以不會給全隊 0.5 MP（`Event_MPleech`），也不算施法者的擊殺。
   - 槽滿（同時超過 25 隻）：走 `DealDamage`，正常死亡，會給 MP。

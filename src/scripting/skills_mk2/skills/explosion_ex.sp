@@ -255,12 +255,14 @@ static Action ShockWave(Handle timer, DataPack DP)
 		if (!IsFakeClient(entity))
 			Shake(entity, 32.0);
 		damage *= 0.07;
+		// bypassHooks 要設成 false：預設的 true 會略過插件的受傷 hook，施法者的無敵擋不住自己的爆炸
+		// （倒地或黑白時施放會被自己炸死）。經過 hook 之後，隊友的魔心護盾也會照常減傷
 		switch (GetRandomInt(0, 1))
 		{
 		case 0:
-			SDKHooks_TakeDamage(entity, attacker, attacker, damage, DMG_BURN);
+			SDKHooks_TakeDamage(entity, attacker, attacker, damage, DMG_BURN, -1, NULL_VECTOR, NULL_VECTOR, false);
 		case 1:
-			SDKHooks_TakeDamage(entity, attacker, attacker, damage, DMG_BLAST);
+			SDKHooks_TakeDamage(entity, attacker, attacker, damage, DMG_BLAST, -1, NULL_VECTOR, NULL_VECTOR, false);
 		}
 	}
 	else
