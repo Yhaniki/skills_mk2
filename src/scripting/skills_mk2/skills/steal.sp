@@ -52,7 +52,7 @@ int CheckStealType(int entityId)
 		{
 			result = 0;
 		}
-		else if (IsAliveInf(entityId) || IsAliveSpecialInf(entityId)||IsWitch(entityId))
+		else if (IsInf(entityId) || IsAliveSpecialInf(entityId)||IsWitch(entityId))
 		{
 			result = 1;
 		}

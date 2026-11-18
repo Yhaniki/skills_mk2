@@ -32,14 +32,6 @@ bool IsAlive(int entity)
 	else return true;
 }
 
-bool IsAliveInf(int client)
-{
-	if(!IsValidEntity(client))return false;
-	char str[MAXCMD];
-	GetEdictClassname(client, str, MAXCMD);
-	return StrEqual(str, "infected");
-}
-
 bool IsWitch(int entity)
 {
 	if(!IsValidEntity(entity))return false;
@@ -48,17 +40,20 @@ bool IsWitch(int entity)
 	return StrEqual(str, "witch");
 }
 
+// 活著的特感（含 Tank）。用 MaxClients：特感 bot 的 client index 可能超過 MAX_PLAYERS
 bool IsAliveSpecialInf(int client)
 {
-	if (client > MAX_PLAYERS || client <= 0)
+	if (client > MaxClients || client <= 0)
 	return false;
 	return (IsClientInGame(client) == true)
 	&& (IsPlayerAlive(client) == true)
 	&& (GetClientTeam(client) == 3);
 }
 
+// 普通殭屍（不檢查是否活著）
 bool IsInf(int client)
 {
+	if(!IsValidEntity(client))return false;
 	char str[MAXCMD];
 	GetEdictClassname(client, str, MAXCMD);
 	return StrEqual(str, "infected");

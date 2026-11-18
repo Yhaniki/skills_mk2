@@ -216,7 +216,7 @@ spcomp skills_mk2/main.sp -o ../plugins/skills_mk2.smx
 - [x] `Hooked[MAX_PLAYERS]` 少一格，第 18 號玩家會陣列越界。
 - [x] `Event_Draw`、`Event_NoDraw`、`CheckPlayerConnections` 的迴圈用 `i < MAX_PLAYERS`，少跑最後一位玩家。
 - [x] 移除淨化的 `[淨化DBG]` 除錯輸出。
-- [ ] 合併重複函式：`IsInf` 與 `IsAliveInf` 完全相同（後者其實沒檢查是否活著）；`IsAliveSpecialInf` 與 `IsAliveSpecialInf2` 重複。
+- [x] 合併重複函式：`IsInf` 與 `IsAliveInf` 完全相同（後者其實沒檢查是否活著）；`IsAliveSpecialInf` 與 `IsAliveSpecialInf2` 重複。 合併時上限統一用 `MaxClients`：特感 bot 的 client index 可能超過 18，原本 `IsAliveSpecialInf` 會漏掉這些特感（爆裂的傷害、鷹眼的標示、淨化的掃描都受影響）。
 - [x] 確認各技能的 DataPack 洩漏在第 2 步後都已消失，特別是 `NukeExplosion` 對每個 entity 各 `new` 一個 DataPack 的寫法。第 2 步後技能的延遲步驟與衝擊波都用 `CreateDataTimer`（由 SourceMod 釋放），剩下的 `new DataPack`（`Invuln_OnPummelVictim`、腳下魔法陣）都有釋放。
 - [ ] **待決定**：隱藏版爆裂的衝擊波用 `SDKHooks_TakeDamage`，它的 `bypassHooks` 預設是 true，會略過插件自己的受傷 hook，所以**施法者的無敵擋不住自己的爆炸**。施法者和約 5000 單位內的隊友都會被炸倒（自動測試確認），施法者會比持續時間結束（27 秒）早 3 秒倒地。要不要讓無敵擋住、隊友要不要受傷，需要決定。
 - [ ] 淨化殺普通殭屍的結果取決於有沒有搶到 dissolve 槽（`lib/dissolve.sp` 的 `Turn_Undead`）。（讀碼推論，待實測）

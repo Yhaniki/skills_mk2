@@ -537,16 +537,9 @@ int GetDissolveIndex()
 // ====================================================================================================
 //					EVENT
 // ====================================================================================================
-bool IsAliveSpecialInf2(int client)
-{
-	if (client > MaxClients || client <= 0) return false;
-	return (IsClientInGame(client) == true)
-	&& (IsPlayerAlive(client) == true)
-	&& (GetClientTeam(client) == 3);
-}
 void Turn_Undead(int target, int client)
 {
-	if(IsAliveSpecialInf2(target) )
+	if(IsAliveSpecialInf(target) )
 	{
 		int class = GetEntProp(target, Prop_Send, "m_zombieClass") + 1;
 		if( class == g_iClassTank ) class = 8;
