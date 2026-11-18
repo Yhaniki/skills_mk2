@@ -254,12 +254,25 @@ void Skill_Cast(int client)
 	}
 }
 
-// skill2：施放目前技能的替代技能（爆裂 → 隱藏版爆裂）
-// 第 3 步才修：這裡沒有檢查施放中／冷卻中，兩組 timer 會互相覆蓋
+// skill2：施放目前技能的替代技能（爆裂 → 隱藏版爆裂）。跟 skill1 一樣要在準備好的狀態才能施放
 void Skill_CastAlt(int client)
 {
 	int alt = s_Skills[s_iSkill[client]].alt;
 	if (alt < 0 || Skill_MP[client] < s_Skills[alt].mpcost) return;
+
+	switch (s_iState[client])
+	{
+		case SKILL_ACT:
+		{
+			PrintToChat(client, "技能施放中");
+			return;
+		}
+		case SKILL_CD:
+		{
+			PrintToChat(client, "技能冷卻中");
+			return;
+		}
+	}
 
 	if (MP_Decrease(client, s_Skills[alt].mpcost))
 	{
