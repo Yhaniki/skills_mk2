@@ -1929,6 +1929,16 @@ public Action:Timer_Skill_EX_Start(Handle:timer, any:client)
 public Action:Timer_UndeadRushEnd(Handle:timer, any userid) {
 	// g_hCvarPanicForever.SetBool(false, false, false);
 	// PrintToChatAll("\x01屍潮結束");
+
+	// 用 timer 本身比對要歸零的格子，不能用 GetClientOfUserId：
+	// 玩家在 PANIC_SEC 內斷線時 client 會是 0，真正那格會留下殭屍 handle，
+	// 之後 cleanup 的 SafeDeleteTimer 或下次淨化的 delete 就會丟 Invalid Handle
+	for (int i = 1; i <= MAX_PLAYERS; i++)
+	{
+		if (Skill_TurnUndead_Timer[i] == timer)
+			Skill_TurnUndead_Timer[i] = null;
+	}
+
 	int client = GetClientOfUserId(userid);
 	if( client && IsClientInGame(client) )
 	{
@@ -1938,7 +1948,7 @@ public Action:Timer_UndeadRushEnd(Handle:timer, any userid) {
 		if( entity && EntRefToEntIndex(entity) != INVALID_ENT_REFERENCE )
 			RemoveEntity(entity);
 	}
-	Skill_TurnUndead_Timer[client] = null;
+	return Plugin_Stop;
 }
 StripAndExecuteClientCommand(client, const String:command[], const String:arguments[]) {
 	new flags = GetCommandFlags(command);
@@ -1951,11 +1961,7 @@ public Action:Timer_UndeadRush(Handle:timer, int client) {
 	StripAndExecuteClientCommand(client, "z_spawn_old", "mob");
 	L4D_ForcePanicEvent();
 
-	if (Skill_TurnUndead_Timer[client] != null &&
-		Skill_TurnUndead_Timer[client] != INVALID_HANDLE)
-	{
-		KillTimer(Skill_TurnUndead_Timer[client]);
-	}
+	SafeDeleteTimer(Skill_TurnUndead_Timer[client]);
 	Skill_TurnUndead_Timer[client] = CreateTimer(PANIC_SEC, Timer:Timer_UndeadRushEnd, GetClientUserId(client));
 	int entity = CreateEntityByName("info_goal_infected_chase");
 	if( entity != -1 )
