@@ -334,14 +334,19 @@ static void Frame_PassiveEnd(int data)
 	Hud_Refresh(client, false);
 }
 
-// change_skill：選單
-// 第 3 步才修：原本想在被動技能施放中擋掉選單，但判斷用了超出註冊範圍的索引（s_iSkillCount），永遠會打開選單
+// 一般技能施放中（被動技能一直是施放中，不算）
+static bool Skill_IsCasting(int client)
+{
+	return s_iState[client] == SKILL_ACT && !(s_Skills[Skill_GetUsing(client)].flags & SKILL_PASSIVE);
+}
+
+// change_skill：選單。施放中不能切換技能
 void Skill_OpenMenu(int client)
 {
-	if (s_iState[client] != SKILL_ACT || !(s_Skills[s_iSkillCount].flags & SKILL_PASSIVE))
-		Skill_Change_Menu(client);
-	else
+	if (Skill_IsCasting(client))
 		PrintToChat(client, "技能施放中");
+	else
+		Skill_Change_Menu(client);
 }
 
 static void Skill_Change_Menu(int client)
@@ -367,7 +372,11 @@ static int Skill_Change_Menu_Handler(Menu menu, MenuAction action, int param1, i
 	{
 		char info[8];
 		menu.GetItem(param2, info, sizeof(info));
-		Skill_Change(param1, StringToInt(info));
+		// 選單是在施放前打開、施放中才選的
+		if (Skill_IsCasting(param1))
+			PrintToChat(param1, "技能施放中");
+		else
+			Skill_Change(param1, StringToInt(info));
 	}
 	else if (action == MenuAction_End)
 	{
