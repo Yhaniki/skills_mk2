@@ -96,12 +96,7 @@ static void TurnUndead_StepPurify(int client, DataPack data)
 	CreateParticle(PARTICLE_TURNUNDEAD, 1.0, Pos);
 	for (int i = 1; i <= MaxClients; i++) {
 		if (IsAliveSpecialInf(i)) {
-			float opos[3];
-			GetEntityWorldOrigin(i, opos);
 			float distance = GetEntityPosDistance(i, Pos);
-			// [淨化DBG] 診斷用：確認每個特感的世界座標與距離，抓騎乘 jockey 是否因距離被漏掉
-			PrintToServer("[skills_mk2][淨化DBG] loop i=%d absO=(%.0f,%.0f,%.0f) aim=(%.0f,%.0f,%.0f) dist=%.0f inRange=%d",
-				i, opos[0], opos[1], opos[2], Pos[0], Pos[1], Pos[2], distance, distance <= TURN_UNDEAD_DIST);
 			if (distance <= TURN_UNDEAD_DIST) {
 				// workaround：先把範圍內的特感震一下（stagger）
 				// 騎乘中的 jockey / 撲人的 hunter / 壓人的 charger 都會因此脫離受害者，
