@@ -49,6 +49,24 @@ public Action Skill_MPrecover(Handle timer, any client)
 	return Plugin_Continue;
 }
 
+// 淨化殺的普通殭屍算擊殺但不給 MP：Turn_Undead 打出致命傷害之前先記下這隻殭屍的 entity ref，
+// player_death 時比對。存 ref 不存 index：沒死成的話，之後重複使用同一個 index 的 entity 不會被誤判
+static int s_iNoLeechRef[MAXENTITIES];
+
+void MP_NoLeechOnDeath(int entity)
+{
+	if (entity > MaxClients && entity < MAXENTITIES)
+		s_iNoLeechRef[entity] = EntIndexToEntRef(entity);
+}
+
+static bool MP_TakeNoLeech(int entity)
+{
+	if (entity <= MaxClients || entity >= MAXENTITIES || s_iNoLeechRef[entity] == 0) return false;
+	bool match = s_iNoLeechRef[entity] == EntIndexToEntRef(entity);
+	s_iNoLeechRef[entity] = 0;
+	return match;
+}
+
 public void Event_MPleech(Event event, const char[] name, bool dontBroadcast)
 {
 	//PrintToChatAll("Leeching?");
@@ -59,6 +77,7 @@ public void Event_MPleech(Event event, const char[] name, bool dontBroadcast)
 			if (State_Connection[i]) MP_Increase(i, 5.0);
 		}
 	} else if (IsInf(entity)) {
+		if (MP_TakeNoLeech(entity)) return;
 		for (int i = 1; i <= MAX_PLAYERS; i++) {
 			if (State_Connection[i]) MP_Increase(i, 0.5);
 		}

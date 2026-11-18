@@ -54,6 +54,7 @@ static int   s_iInfDeathsBy;
 //   cvar <名稱> <值>     設定 cvar（可以設 cheat cvar）
 //   commons <k> <n>      在 bot k 周圍 80～600 單位的地板上生 n 隻普通殭屍，並把 k 記成施法者、死亡計數歸零
 //   purify <k>           對每一隻生出來的普通殭屍呼叫 Turn_Undead（跟淨化第 2.5 秒的步驟一樣），攻擊者是 bot k
+//   killcommons <k>      用一般傷害打死每一隻生出來的普通殭屍（不經過淨化），攻擊者是 bot k
 //   dcount <名稱>        記錄生出來的普通殭屍還剩幾隻、溶解器數量、普通殭屍的 player_death 次數、b1 的 MP
 //   cp <名稱>            記錄檢查點（每個 bot 的技能狀態與 HUD 文字）
 //   wait <秒>            等待
@@ -520,6 +521,17 @@ static char s_sDissolve[][] =
 	"wait 2.0",
 	"dcount t3",
 
+	// 對照：不是淨化殺的普通殭屍照常給全隊 MP
+	"scen normal_kill_10",
+	"commons 3 10",
+	"wait 1.0",
+	"mp 1 0",
+	"dcount spawned",
+	"killcommons 3",
+	"dcount t0",
+	"wait 1.0",
+	"dcount t1",
+
 	"cvar nb_stop 0",
 	"cvar nb_blind 0",
 };
@@ -771,6 +783,18 @@ static float T_Exec(const char[] line)
 				called++;
 			}
 			T_Log("PURIFY %s/%s called=%d", s_sPhase, s_sScen, called);
+		}
+	}
+	else if (StrEqual(a[0], "killcommons"))
+	{
+		if (b)
+		{
+			for (int i = 0; i < s_iCommonN; i++)
+			{
+				int e = EntRefToEntIndex(s_iCommon[i]);
+				if (e != INVALID_ENT_REFERENCE)
+					DealDamage(e, GetEntProp(e, Prop_Data, "m_iHealth") + 5, b, DMG_BULLET);
+			}
 		}
 	}
 	else if (StrEqual(a[0], "dcount"))

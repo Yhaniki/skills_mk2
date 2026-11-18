@@ -222,7 +222,7 @@ spcomp skills_mk2/main.sp -o ../plugins/skills_mk2.smx
   - 這也是施放中施法者會死的實際情況。指令只擋死亡與過關，倒地、黑白都能施放。自動測試的 `ex_down` 階段：倒地時施放（倒地血量 300 或 60）、黑白時施放，施法者都在第 24 秒被自己炸死。第 0～24 秒倒地血量不會減少，表示無敵有擋住流血；擋不住的只有衝擊波。
   - 決定：無敵要擋住。修正：對倖存者的衝擊波改成經過受傷 hook（`bypassHooks = false`）。隊友照樣受傷，有魔心護盾的隊友會減傷。
   - 修正後：倒地施放的施法者撐過爆炸，27 秒後照常流血；站著施放的施法者撐過爆炸，在第 27 秒才魔力枯竭倒地（跟設計一致）。
-- [ ] **待決定**：黑白時施放，施法者撐過爆炸，但第 27 秒的魔力枯竭倒地（`L4D_SetPlayerIncappedDamage`）會讓他直接死亡（自動測試確認）。這是原本的設計造成的，要不要對黑白的施法者例外處理。
+- [x] 黑白時施放，施法者撐過爆炸，但第 27 秒的魔力枯竭倒地（`L4D_SetPlayerIncappedDamage`）會讓他直接死亡（自動測試確認）。這是原本的設計造成的，要不要對黑白的施法者例外處理。決定：不例外，維持原本的設計。
 - [x] 淨化殺普通殭屍的結果取決於有沒有搶到 dissolve 槽（`lib/dissolve.sp` 的 `Turn_Undead`）。（讀碼推論，待實測）
   - 有空槽：不呼叫 `DealDamage`，只交給溶解器處理。溶解器最後那一擊的 10000 傷害被 `OnCommonDamage` 擋掉，殭屍改由溶解器 `UTIL_Remove` 或 2.5 秒後的 `Kill` 靜默移除，不會觸發 `player_death`。所以不會給全隊 0.5 MP（`Event_MPleech`），也不算施法者的擊殺。
   - 槽滿（同時超過 25 隻）：走 `DealDamage`，正常死亡，會給 MP。
@@ -233,7 +233,11 @@ spcomp skills_mk2/main.sp -o ../plugins/skills_mk2.smx
     - 一次淨化 100 隻：25 隻溶解、75 隻正常死亡。
     - 實際施放淨化打 40 隻，結果跟直接呼叫 `Turn_Undead` 相同。
     - 溶解的殭屍 0.5 秒內移除，沒有殺不死的殭屍。
-- [ ] **待決定**：淨化的普通殭屍要不要給 MP、算擊殺（改成先 `DealDamage` 再掛溶解特效）。
+- [x] 淨化的普通殭屍要不要給 MP、算擊殺（改成先 `DealDamage` 再掛溶解特效）。
+  - 決定：一律算施法者的擊殺，但不給全隊 MP（原本槽滿、正常死亡的那些也改成不給）。特感照舊給 5 MP，Witch 本來就不給。
+  - 修正：`Turn_Undead` 對普通殭屍一律先 `DealDamage`，有空槽再掛溶解特效，跟 Witch 的寫法一樣。打出致命傷害前用 `MP_NoLeechOnDeath` 記下這隻殭屍的 entity ref，`Event_MPleech` 比對到就不給 MP。
+  - 自動測試（`dissolve` 階段）：淨化 10、40、100 隻和實際施放打 40 隻，每一隻都觸發 `player_death`、擊殺都算施法者，隊友 MP 沒有增加。溶解器建在已經死亡的殭屍上也正常運作，0.5 秒內移除。對照的 `normal_kill_10`（不經過淨化打死 10 隻）照常給 +5 MP。
+  - 先擊殺再溶解的畫面（布娃娃有沒有被溶解特效取代）要進遊戲看，列在伺服器測試清單。
 - [x] `MAX_DISSOLVE`（25）只限制同時播放的溶解特效數量，不影響淨化殺不殺得死。要不要調高，等實測後決定。
   - 原版 changelog 寫 1.11 已經「Reverted MAX_DISSOLVE to 32」，但官方 repo `SilvDev/Dissolve_Infected` 的 1.17 程式碼還是 25。這是原作者那邊的不一致，不是我們改的。
   - changelog 說的「godmode zombies when too many die at once」，比對 1.5 和 1.17 的原始碼後判斷，成因是 1.5 的寫法：`OnCommonDamage` 擋掉**所有**傷害，而且在確認有沒有空槽**之前**就掛上去，又沒有補救的 `Kill`。槽滿或溶解器沒建成功時，殭屍就永遠打不死。
@@ -291,3 +295,4 @@ spcomp skills_mk2/main.sp -o ../plugins/skills_mk2.smx
 - [ ] `sm plugins reload skills_mk2` 後狀態正常。（自動）
 - [ ] 伺服器 console 沒有新的 error 或 exception。（自動）
 - [ ] 魔心護盾開啟時近戰揮空。（人工：bot 不會揮近戰）
+- [ ] 淨化普通殭屍時溶解特效正常，殭屍不會先倒成一般的屍體。（自動：擊殺、MP、溶解器數量；人工：實際畫面）

@@ -587,34 +587,34 @@ void Turn_Undead(int target, int client)
 
 			if( bChance )
 			{
+				// 一律先打出致命傷害（算施法者的擊殺），有空槽才再加上溶解特效（Witch 原本就是這樣）。
+				// 原本普通殭屍搶到槽時只交給溶解器靜默移除，不會觸發 player_death，不算擊殺；
+				// 槽滿的才正常死亡，結果同一次淨化前 25 隻和第 26 隻起的結果不同。
+				// 淨化殺的普通殭屍不給全隊 MP（Event_MPleech），Witch 本來就不給
+				if( !bWitch )
+					MP_NoLeechOnDeath(target);
+				int hp = GetEntProp(target, Prop_Data, "m_iHealth")+5;
+				DealDamage(target, hp, client, DMG_BULLET);
+				if( !IsValidEntity(target) )
+					return;
+				SetEntityRenderFx(target, RENDERFX_FADE_FAST);
+
 				int index = GetDissolveIndex();
 				if( index != -1 )
 				{
 					if( bWitch )
 					{
-						int hp = GetEntProp(target, Prop_Data, "m_iHealth")+5;
-						DealDamage(target, hp, client, DMG_BULLET);
-						// DealDamage(target, 10000, client, DMG_BULLET);
-						SetEntityRenderFx(target, RENDERFX_FADE_FAST);
 						DissolveTarget(index, target, 0);
 					} else {
 						int iOverlayModel = -1;
 						if( bLMC_Available )
 							iOverlayModel = LMC_GetEntityOverlayModel(target);
 
-						SetEntityRenderFx(target, RENDERFX_FADE_FAST);
 						if( iOverlayModel < 1 )
 							DissolveTarget(index, target);
 						else
 							DissolveTarget(index, iOverlayModel, target);
 					}
-					
-				}else
-				{
-					// DealDamage(target, 10000, client, DMG_BULLET);
-					int hp = GetEntProp(target, Prop_Data, "m_iHealth")+5;
-					DealDamage(target, hp, client, DMG_BULLET);
-					SetEntityRenderFx(target, RENDERFX_FADE_FAST);
 				}
 			}
 		}
