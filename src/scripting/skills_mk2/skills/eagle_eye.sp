@@ -4,7 +4,7 @@ static int s_iEagleEye;
 
 int EagleEye_Register()
 {
-	s_iEagleEye = Skill_Register("Eagle Eye 鷹眼", 7.0, 2.0, 40.0);
+	s_iEagleEye = Skill_Register("Skill_EagleEye", 7.0, 2.0, 40.0);
 	Skill_OnStart(s_iEagleEye, EagleEye_OnStart);
 	Skill_OnEnd(s_iEagleEye, EagleEye_OnEnd);
 	Skill_OnTick(s_iEagleEye, EagleEye_OnTick);

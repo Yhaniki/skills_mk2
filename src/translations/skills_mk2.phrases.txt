@@ -1,331 +1,528 @@
+// skills_mk2 翻譯檔
+//
+// 語言：en 英文、zho 繁體中文、jp 日文。
+// 玩家的語言不在這三種裡面時（包括簡體中文 chi），SourceMod 會改用伺服器語言，
+// 所以伺服器的 addons/sourcemod/configs/core.cfg 要把 ServerLang 設成 "zho"（見 README）。
+// 新增片語時三種語言都要寫，#format 的參數順序要跟程式裡的呼叫一致。
+
 "Phrases"
 {
+	// ===== 技能名稱：Skill_Register 的第一個參數。HUD 與技能選單用 =====
+
+	"Skill_Explosion"
+	{
+		"en"		"Explosion"
+		"zho"		"Explosion 爆裂"
+		"jp"		"Explosion 爆裂魔法"
+	}
+
+	"Skill_ManaShield"
+	{
+		"en"		"Mana Shield"
+		"zho"		"Mana Shield 魔心護盾"
+		"jp"		"Mana Shield マナシールド"
+	}
+
+	"Skill_EagleEye"
+	{
+		"en"		"Eagle Eye"
+		"zho"		"Eagle Eye 鷹眼"
+		"jp"		"Eagle Eye 鷹の目"
+	}
+
+	"Skill_Steal"
+	{
+		"en"		"Steal"
+		"zho"		"Steal 偷竊"
+		"jp"		"Steal スティール"
+	}
+
+	"Skill_TurnUndead"
+	{
+		"en"		"Sacred Turn Undead"
+		"zho"		"Sacred Turn Undead 淨化"
+		"jp"		"Sacred Turn Undead ターンアンデッド"
+	}
+
+	"Skill_ExplosionEx"
+	{
+		"en"		"☆EXPLOSION★"
+		"zho"		"EXPLOSION ☆爆裂★"
+		"jp"		"EXPLOSION ☆爆裂魔法★"
+	}
+
+	// ===== 技能選單（change_skill） =====
+
+	"Menu_ChooseSkill"
+	{
+		"en"		"Choose a Skill..."
+		"zho"		"選擇技能"
+		"jp"		"スキルを選択"
+	}
+
+	// ===== HUD：MP 條最下面一行的狀態 =====
+
+	"Hud_NoMana"
+	{
+		"#format"	"{1:.0f}"
+		"en"		"Not enough MP ({1}MP)"
+		"zho"		"魔力不足({1}MP)"
+		"jp"		"MP不足({1}MP)"
+	}
+
+	"Hud_Active"
+	{
+		"en"		"Active"
+		"zho"		"施放中"
+		"jp"		"発動中"
+	}
+
+	"Hud_Cooldown"
+	{
+		"#format"	"{1:.2f}"
+		"en"		"Cooldown ({1}s)"
+		"zho"		"冷卻中 ({1}s)"
+		"jp"		"クールダウン中 ({1}s)"
+	}
+
+	// ===== 聊天訊息：只送給施法者 =====
+
+	"Chat_NoMana"
+	{
+		"en"		"Not enough MP"
+		"zho"		"魔力不足"
+		"jp"		"MPが足りない"
+	}
+
+	"Chat_Active"
+	{
+		"en"		"Skill is active"
+		"zho"		"技能施放中"
+		"jp"		"スキル発動中"
+	}
+
+	"Chat_Cooldown"
+	{
+		"en"		"Skill is on cooldown"
+		"zho"		"技能冷卻中"
+		"jp"		"スキルはクールダウン中"
+	}
+
+	"Chat_FixMP"
+	{
+		"en"		"Mana bar corrected"
+		"zho"		"已校正魔力條"
+		"jp"		"MPバーを修正しました"
+	}
+
+	"Cmd_FillMP"
+	{
+		"#format"	"{1:d}"
+		"en"		"Filled MP for {1} player(s)."
+		"zho"		"已將 {1} 名玩家的魔力補滿。"
+		"jp"		"{1} 人のプレイヤーのMPを全回復しました。"
+	}
+
+	// ===== 聊天訊息：送給所有人（{green}、{default} 是顏色） =====
+
+	"Chat_StealFailed"
+	{
+		"#format"	"{1:N}"
+		"en"		"{green}{1} {default}failed to steal"
+		"zho"		"{green}{1} {default}偷竊失敗"
+		"jp"		"{green}{1} {default}のスティールは失敗した"
+	}
+
+	"Chat_StolePlayer"
+	{
+		"#format"	"{1:N},{2:N},{3:t}"
+		"en"		"{green}{1} {default}stole {green}{3} {default}from {green}{2}"
+		"zho"		"{green}{1} {default}從 {green}{2} {default}身上偷了 {green}{3}"
+		"jp"		"{green}{1} {default}が {green}{2} {default}から {green}{3} {default}を盗んだ"
+	}
+
+	"Chat_StolePlayerRaw"
+	{
+		"#format"	"{1:N},{2:N},{3:s}"
+		"en"		"{green}{1} {default}stole {green}{3} {default}from {green}{2}"
+		"zho"		"{green}{1} {default}從 {green}{2} {default}身上偷了 {green}{3}"
+		"jp"		"{green}{1} {default}が {green}{2} {default}から {green}{3} {default}を盗んだ"
+	}
+
+	"Chat_StoleInfected"
+	{
+		"#format"	"{1:N},{2:t},{3:t}"
+		"en"		"{green}{1} {default}stole {green}{3} {default}from {green}{2}"
+		"zho"		"{green}{1} {default}從 {green}{2} {default}身上偷了 {green}{3}"
+		"jp"		"{green}{1} {default}が {green}{2} {default}から {green}{3} {default}を盗んだ"
+	}
+
+	"Victim_Infected"
+	{
+		"en"		"a zombie"
+		"zho"		"殭屍"
+		"jp"		"ゾンビ"
+	}
+
+	"Victim_Witch"
+	{
+		"en"		"the Witch"
+		"zho"		"女巫"
+		"jp"		"ウィッチ"
+	}
+
+	"Chat_ExplosionFailed"
+	{
+		"#format"	"{1:N}"
+		"en"		"{green}{1} {default}failed to cast Explosion"
+		"zho"		"{green}{1} {default}施放爆裂失敗"
+		"jp"		"{green}{1} {default}の爆裂魔法は失敗した"
+	}
+
+	"Chat_TurnUndeadCast"
+	{
+		"#format"	"{1:N}"
+		"en"		"{green}{1} {default}Turn Undead!"
+		"zho"		"{green}{1} {default}淨化!"
+		"jp"		"{green}{1} {default}ターンアンデッド!"
+	}
+
+	"Chat_TurnUndeadHorde"
+	{
+		"#format"	"{1:N}"
+		"en"		"{green}{1}{default}'s Turn Undead drew a horde!"
+		"zho"		"{green}{1} {default}施放淨化引來屍潮！"
+		"jp"		"{green}{1} {default}のターンアンデッドがゾンビの大群を呼び寄せた！"
+	}
+
+	// ===== 武器名稱：key 是 lib/weapons.sp 的 g_sWeaponNames（偷竊訊息用）=====
+
 	"weapon_autoshotgun"
 	{
 		"en"		"Auto Shotgun"
-		"chi"		"自動霰彈槍"
-		"zho"		"自动霰弹枪"
+		"zho"		"自動霰彈槍"
+		"jp"		"オートショットガン"
 	}
 
 	"weapon_grenade_launcher"
 	{
 		"en"		"Grenade Launcher"
-		"chi"		"榴彈發射器"
-		"zho"		"榴弹发射器"
+		"zho"		"榴彈發射器"
+		"jp"		"グレネードランチャー"
 	}
 
 	"weapon_hunting_rifle"
 	{
 		"en"		"Hunting Rifle"
-		"chi"		"獵槍"
-		"zho"		"猎枪"
+		"zho"		"獵槍"
+		"jp"		"ハンティングライフル"
 	}
 
 	"weapon_pistol"
 	{
 		"en"		"Pistol"
-		"chi"		"手槍"
-		"zho"		"手枪"
+		"zho"		"手槍"
+		"jp"		"ピストル"
 	}
 
 	"weapon_pistol_magnum"
 	{
 		"en"		"Magnum Pistol"
-		"chi"		"麥格農手槍"
-		"zho"		"麦格农手枪"
+		"zho"		"麥格農手槍"
+		"jp"		"マグナム"
 	}
 
 	"weapon_pumpshotgun"
 	{
 		"en"		"Pump Shotgun"
-		"chi"		"泵式霰彈槍"
-		"zho"		"泵式霰弹枪"
+		"zho"		"泵式霰彈槍"
+		"jp"		"ポンプショットガン"
 	}
 
 	"weapon_rifle"
 	{
 		"en"		"M-16 Assault Rifle"
-		"chi"		"M-16突擊步槍"
-		"zho"		"M-16突击步枪"
+		"zho"		"M-16突擊步槍"
+		"jp"		"M-16アサルトライフル"
 	}
 
 	"weapon_rifle_ak47"
 	{
 		"en"		"AK-47"
-		"chi"		"AK47"
 		"zho"		"AK47"
+		"jp"		"AK-47"
 	}
 
 	"weapon_rifle_desert"
 	{
 		"en"		"SCAR Combat Rifle"
-		"chi"		"SCAR戰術步槍"
-		"zho"		"SCAR战术步枪"
+		"zho"		"SCAR戰術步槍"
+		"jp"		"SCARコンバットライフル"
 	}
 
 	"weapon_rifle_m60"
 	{
 		"en"		"M60"
-		"chi"		"M60機槍"
-		"zho"		"M60机枪"
+		"zho"		"M60機槍"
+		"jp"		"M60"
 	}
 
 	"weapon_rifle_sg552"
 	{
 		"en"		"SG552"
-		"chi"		"SG552步槍"
-		"zho"		"SG552步枪"
+		"zho"		"SG552步槍"
+		"jp"		"SG552"
 	}
 
 	"weapon_shotgun_chrome"
 	{
 		"en"		"Chrome Shotgun"
-		"chi"		"鉻管霰彈槍"
-		"zho"		"铬管霰弹枪"
+		"zho"		"鉻管霰彈槍"
+		"jp"		"クロームショットガン"
 	}
 
 	"weapon_shotgun_spas"
 	{
 		"en"		"Tactical Shotgun"
-		"chi"		"戰術霰彈槍"
-		"zho"		"战术霰弹枪"
+		"zho"		"戰術霰彈槍"
+		"jp"		"タクティカルショットガン"
 	}
 
 	"weapon_smg"
 	{
 		"en"		"Submachine Gun"
-		"chi"		"烏茲衝鋒槍"
-		"zho"		"乌兹冲锋枪"
+		"zho"		"烏茲衝鋒槍"
+		"jp"		"サブマシンガン"
 	}
 
 	"weapon_smg_mp5"
 	{
 		"en"		"MP5"
-		"chi"		"MP5衝鋒槍"
-		"zho"		"MP5冲锋枪"
+		"zho"		"MP5衝鋒槍"
+		"jp"		"MP5"
 	}
 
 	"weapon_smg_silenced"
 	{
 		"en"		"Silenced SMG"
-		"chi"		"滅音衝鋒槍"
-		"zho"		"灭音冲锋枪"
+		"zho"		"滅音衝鋒槍"
+		"jp"		"サイレンサー付きSMG"
 	}
 
 	"weapon_sniper_awp"
 	{
 		"en"		"AWP Sniper"
-		"chi"		"麥格農狙擊槍"
-		"zho"		"麦格农狙击枪"
+		"zho"		"麥格農狙擊槍"
+		"jp"		"AWP"
 	}
 
 	"weapon_sniper_military"
 	{
 		"en"		"Military Sniper"
-		"chi"		"狙擊步槍"
-		"zho"		"狙击步枪"
+		"zho"		"狙擊步槍"
+		"jp"		"ミリタリースナイパー"
 	}
 
 	"weapon_sniper_scout"
 	{
 		"en"		"Scout"
-		"chi"		"斯泰爾斥侯步槍"
-		"zho"		"斯泰尔斥候步枪"
+		"zho"		"斯泰爾斥侯步槍"
+		"jp"		"スカウト"
 	}
 
 	"weapon_baseball_bat"
 	{
 		"en"		"Baseball Bat"
-		"chi"		"球棒"
 		"zho"		"球棒"
+		"jp"		"野球バット"
 	}
 
 	"weapon_cricket_bat"
 	{
 		"en"		"Cricket Bat"
-		"chi"		"板球棒"
 		"zho"		"板球棒"
+		"jp"		"クリケットバット"
 	}
 
 	"weapon_crowbar"
 	{
 		"en"		"Crowbar"
-		"chi"		"鐵撬"
-		"zho"		"铁撬"
+		"zho"		"鐵撬"
+		"jp"		"バール"
 	}
 
 	"weapon_electric_guitar"
 	{
 		"en"		"Electric Guitar"
-		"chi"		"電吉他"
-		"zho"		"电吉他"
+		"zho"		"電吉他"
+		"jp"		"エレキギター"
 	}
 
 	"weapon_fireaxe"
 	{
 		"en"		"Fire Axe"
-		"chi"		"消防斧"
 		"zho"		"消防斧"
+		"jp"		"消防斧"
 	}
 
 	"weapon_frying_pan"
 	{
 		"en"		"Frying Pan"
-		"chi"		"平底鍋"
-		"zho"		"平底锅"
+		"zho"		"平底鍋"
+		"jp"		"フライパン"
 	}
 
 	"weapon_golfclub"
 	{
 		"en"		"Golf Club"
-		"chi"		"高爾夫球棒"
-		"zho"		"高尔夫球棒"
+		"zho"		"高爾夫球棒"
+		"jp"		"ゴルフクラブ"
 	}
 
 	"weapon_katana"
 	{
 		"en"		"Katana"
-		"chi"		"武士刀"
 		"zho"		"武士刀"
+		"jp"		"日本刀"
 	}
 
 	"weapon_machete"
 	{
 		"en"		"Machete"
-		"chi"		"砍刀"
 		"zho"		"砍刀"
+		"jp"		"マチェーテ"
 	}
 
 	"weapon_tonfa"
 	{
 		"en"		"Tonfa"
-		"chi"		"警棍"
 		"zho"		"警棍"
+		"jp"		"トンファー"
 	}
 
 	"weapon_knife"
 	{
 		"en"		"Knife"
-		"chi"		"小刀"
 		"zho"		"小刀"
+		"jp"		"ナイフ"
 	}
 
 	"weapon_chainsaw"
 	{
 		"en"		"Chainsaw"
-		"chi"		"電鋸"
-		"zho"		"电锯"
+		"zho"		"電鋸"
+		"jp"		"チェーンソー"
 	}
 
 	"weapon_adrenaline"
 	{
 		"en"		"Adrenaline"
-		"chi"		"腎上腺素"
-		"zho"		"肾上腺素"
+		"zho"		"腎上腺素"
+		"jp"		"アドレナリン"
 	}
 
 	"weapon_defibrillator"
 	{
 		"en"		"Defibrillator"
-		"chi"		"電擊器"
-		"zho"		"电击器"
+		"zho"		"電擊器"
+		"jp"		"除細動器"
 	}
 
 	"weapon_first_aid_kit"
 	{
 		"en"		"First Aid Kit"
-		"chi"		"急救包"
 		"zho"		"急救包"
+		"jp"		"救急キット"
 	}
 
 	"weapon_pain_pills"
 	{
 		"en"		"Pain Pills"
-		"chi"		"止痛藥"
-		"zho"		"止痛药"
+		"zho"		"止痛藥"
+		"jp"		"鎮痛剤"
 	}
 
 	"weapon_fireworkcrate"
 	{
 		"en"		"Firework Crate"
-		"chi"		"煙火"
-		"zho"		"烟火"
+		"zho"		"煙火"
+		"jp"		"花火"
 	}
 
 	"weapon_gascan"
 	{
 		"en"		"Gas Can"
-		"chi"		"瓦斯桶"
 		"zho"		"瓦斯桶"
+		"jp"		"ガソリン缶"
 	}
 
 	"weapon_oxygentank"
 	{
 		"en"		"Oxygen Tank"
-		"chi"		"氧氣瓶"
-		"zho"		"氧气瓶"
+		"zho"		"氧氣瓶"
+		"jp"		"酸素ボンベ"
 	}
 
 	"weapon_propanetank"
 	{
 		"en"		"Propane Tank"
-		"chi"		"煤氣罐"
-		"zho"		"煤气罐"
+		"zho"		"煤氣罐"
+		"jp"		"プロパンタンク"
 	}
 
 	"weapon_molotov"
 	{
 		"en"		"Molotov"
-		"chi"		"汽油彈"
-		"zho"		"汽油弹"
+		"zho"		"汽油彈"
+		"jp"		"火炎瓶"
 	}
 
 	"weapon_pipe_bomb"
 	{
 		"en"		"Pipe Bomb"
-		"chi"		"土製炸彈"
-		"zho"		"土制炸弹"
+		"zho"		"土製炸彈"
+		"jp"		"パイプ爆弾"
 	}
 
 	"weapon_vomitjar"
 	{
 		"en"		"Bile Jar"
-		"chi"		"膽汁罐"
-		"zho"		"胆汁罐"
+		"zho"		"膽汁罐"
+		"jp"		"胆汁瓶"
 	}
 
 	"weapon_ammo_spawn"
 	{
 		"en"		"Ammo"
-		"chi"		"彈藥"
-		"zho"		"弹药"
+		"zho"		"彈藥"
+		"jp"		"弾薬"
 	}
 
 	"weapon_upgradepack_explosive"
 	{
 		"en"		"Explosive Ammo"
-		"chi"		"高爆彈藥"
-		"zho"		"高爆弹药"
+		"zho"		"高爆彈藥"
+		"jp"		"炸裂弾"
 	}
 
 	"weapon_upgradepack_incendiary"
 	{
 		"en"		"Incendiary Ammo"
-		"chi"		"燃燒彈藥"
-		"zho"		"燃烧弹药"
+		"zho"		"燃燒彈藥"
+		"jp"		"焼夷弾"
 	}
 
 	"weapon_gnome"
 	{
 		"en"		"Gnome"
-		"chi"		"小矮人"
 		"zho"		"小矮人"
+		"jp"		"ノーム人形"
 	}
 
 	"weapon_cola_bottles"
 	{
 		"en"		"Cola Bottles"
-		"chi"		"可樂"
-		"zho"		"可乐"
+		"zho"		"可樂"
+		"jp"		"コーラ"
 	}
 }

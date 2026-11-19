@@ -34,7 +34,7 @@ typedef SkillPrecacheHook = function void ();
 
 enum struct SkillDef
 {
-	char name[MAXSKILLNAME];
+	char name[MAXSKILLNAME];    // 翻譯檔（translations/skills_mk2.phrases.txt）的 key，顯示用 Skill_GetName
 	float duration;
 	float cooldown;
 	float mpcost;
@@ -64,6 +64,7 @@ static Handle s_hCooldown[MAX_PLAYERS + 1];
 //===========================================================
 
 // 回傳技能編號；註冊順序就是選單順序，也是 Skill_GetCurrent 回傳的值
+// name 是翻譯檔的 key（例如 "Skill_Explosion"），翻譯檔要有同名的片語
 int Skill_Register(const char[] name, float duration, float cooldown, float mpcost, int flags = 0)
 {
 	if (s_iSkillCount == MAXSKILLS) return -1;
@@ -122,6 +123,12 @@ int Skill_GetUsing(int client)
 void Skill_GetDef(int skill, SkillDef def)
 {
 	def = s_Skills[skill];
+}
+
+// 技能名稱，用 client 的語言翻譯
+void Skill_GetName(int skill, int client, char[] buf, int maxlen)
+{
+	Format(buf, maxlen, "%T", s_Skills[skill].name, client);
 }
 
 //===========================================================
@@ -240,16 +247,16 @@ void Skill_Cast(int client)
 			}
 			else
 			{
-				PrintToChat(client, "魔力不足");
+				PrintToChat(client, "%t", "Chat_NoMana");
 			}
 		}
 		case SKILL_ACT:
 		{
-			PrintToChat(client, "技能施放中");
+			PrintToChat(client, "%t", "Chat_Active");
 		}
 		case SKILL_CD:
 		{
-			PrintToChat(client, "技能冷卻中");
+			PrintToChat(client, "%t", "Chat_Cooldown");
 		}
 	}
 }
@@ -264,12 +271,12 @@ void Skill_CastAlt(int client)
 	{
 		case SKILL_ACT:
 		{
-			PrintToChat(client, "技能施放中");
+			PrintToChat(client, "%t", "Chat_Active");
 			return;
 		}
 		case SKILL_CD:
 		{
-			PrintToChat(client, "技能冷卻中");
+			PrintToChat(client, "%t", "Chat_Cooldown");
 			return;
 		}
 	}
@@ -282,7 +289,7 @@ void Skill_CastAlt(int client)
 	}
 	else
 	{
-		PrintToChat(client, "魔力不足");
+		PrintToChat(client, "%t", "Chat_NoMana");
 	}
 }
 
@@ -344,7 +351,7 @@ static bool Skill_IsCasting(int client)
 void Skill_OpenMenu(int client)
 {
 	if (Skill_IsCasting(client))
-		PrintToChat(client, "技能施放中");
+		PrintToChat(client, "%t", "Chat_Active");
 	else
 		Skill_Change_Menu(client);
 }
@@ -352,14 +359,14 @@ void Skill_OpenMenu(int client)
 static void Skill_Change_Menu(int client)
 {
 	Menu menu = new Menu(Skill_Change_Menu_Handler);
-	menu.SetTitle("Choose a Skill...");
+	menu.SetTitle("%T", "Menu_ChooseSkill", client);
 	for (int i = 0; i < s_iSkillCount; ++i)
 	{
 		if (s_Skills[i].flags & SKILL_HIDDEN) continue;
 		char info[8];
 		char skill_msg[MAXCMD] = "";
 		IntToString(i, info, sizeof(info));
-		Format(skill_msg, MAXCMD, "  %s", s_Skills[i].name);
+		Format(skill_msg, MAXCMD, "  %T", s_Skills[i].name, client);
 		menu.AddItem(info, skill_msg);
 	}
 	menu.ExitButton = false;
@@ -374,7 +381,7 @@ static int Skill_Change_Menu_Handler(Menu menu, MenuAction action, int param1, i
 		menu.GetItem(param2, info, sizeof(info));
 		// 選單是在施放前打開、施放中才選的
 		if (Skill_IsCasting(param1))
-			PrintToChat(param1, "技能施放中");
+			PrintToChat(param1, "%t", "Chat_Active");
 		else
 			Skill_Change(param1, StringToInt(info));
 	}

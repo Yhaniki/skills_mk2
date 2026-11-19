@@ -37,10 +37,17 @@ public Action Skill_Notify(Handle timer, any client)
 
 	char str[MAXCMD] = "";
 	char state[MAXCMD] = "";
-	char name[MAXCMD] = "";
+	char name[MAXCMD] = "";         // 準備好時顯示的名稱（MP 夠施放替代技能時是替代技能）
+	char curName[MAXCMD] = "";
+	char activeName[MAXCMD] = "";
+	int curSkill = Skill_GetCurrent(client);
+	int activeSkill = Skill_GetUsing(client);
 	SkillDef cur, active;
-	Skill_GetDef(Skill_GetCurrent(client), cur);
-	Skill_GetDef(Skill_GetUsing(client), active);
+	Skill_GetDef(curSkill, cur);
+	Skill_GetDef(activeSkill, active);
+	// 名稱與狀態文字用這位玩家的語言
+	Skill_GetName(curSkill, client, curName, sizeof(curName));
+	Skill_GetName(activeSkill, client, activeName, sizeof(activeName));
 
 	// 目前技能每 0.5 秒要做的事（魔心護盾補啟用與發光、鷹眼持續偵測）
 	Skill_CallTick(client);
@@ -48,18 +55,16 @@ public Action Skill_Notify(Handle timer, any client)
 	// MP 足夠施放替代技能（skill2）時顯示替代技能的名稱
 	if (cur.alt >= 0 && Skill_MP[client] >= Skill_GetMPCost(cur.alt))
 	{
-		SkillDef alt;
-		Skill_GetDef(cur.alt, alt);
-		strcopy(name, MAXCMD, alt.name);
+		Skill_GetName(cur.alt, client, name, sizeof(name));
 	}
 	else
 	{
-		strcopy(name, MAXCMD, cur.name);
+		strcopy(name, MAXCMD, curName);
 	}
 	switch (Skill_GetState(client)) {
 		case SKILL_RDY: {
 			if (Skill_MP[client] < active.mpcost) {
-				Format(str, MAXCMD, "%s", cur.name);
+				Format(str, MAXCMD, "%s", curName);
 			} else {
 				switch (s_iAni[client]) {
 					case 0: {
@@ -75,21 +80,20 @@ public Action Skill_Notify(Handle timer, any client)
 			}
 			if(Skill_MP[client] >= active.mpcost)
 			{
-				// Format(state, MAXCMD, "已準備");
 				Format(state, MAXCMD, " ");
 			}else
 			{
-				Format(state, MAXCMD, "魔力不足(%-.0fMP)", active.mpcost);
+				Format(state, MAXCMD, "%T", "Hud_NoMana", client, active.mpcost);
 			}
 		}
 		case SKILL_ACT: {
-			Format(str, MAXCMD, " -  %s  - ", active.name);
-			Format(state, MAXCMD, "施放中");
+			Format(str, MAXCMD, " -  %s  - ", activeName);
+			Format(state, MAXCMD, "%T", "Hud_Active", client);
 		}
 		case SKILL_CD: {
 			float time = (active.cooldown + active.duration - (GetGameTime() - Skill_GetLastUseTime(client)));
-			Format(str, MAXCMD, "%s", active.name);
-			Format(state, MAXCMD, "冷卻中 (%-.2fs)", time);
+			Format(str, MAXCMD, "%s", activeName);
+			Format(state, MAXCMD, "%T", "Hud_Cooldown", client, time);
 		}
 	}
 	Skill_Notify_MPbar(str, state, client);

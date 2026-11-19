@@ -15,7 +15,7 @@ static const float s_vMissMaxs[3] = { 8.0,  8.0,  8.0};
 
 int ManaShield_Register()
 {
-	s_iManaShield = Skill_Register("Mana Shield 魔心護盾", 0.0, 0.0, 0.0, SKILL_PASSIVE);
+	s_iManaShield = Skill_Register("Skill_ManaShield", 0.0, 0.0, 0.0, SKILL_PASSIVE);
 	Skill_OnStart(s_iManaShield, ManaShield_OnStart);
 	Skill_OnEnd(s_iManaShield, ManaShield_OnEnd);
 	Skill_OnTick(s_iManaShield, ManaShield_OnTick);

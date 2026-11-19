@@ -260,10 +260,23 @@ spcomp skills_mk2/main.sp -o ../plugins/skills_mk2.smx
 
 ### 多語系
 
-- [ ] 玩家看得到的文字改用 SourceMod 翻譯檔（`translations/skills_mk2.phrases.txt`，`LoadTranslations` 加 `%t` / `%T`）。範圍包含技能名稱、技能選單、HUD 提示與 MP 條、聊天訊息、偷竊掉落與 `lib/weapons.sp` 的武器名稱。
+- [x] 玩家看得到的文字改用 SourceMod 翻譯檔（`translations/skills_mk2.phrases.txt`，`LoadTranslations` 加 `%t` / `%T`）。範圍包含技能名稱、技能選單、HUD 提示與 MP 條、聊天訊息、偷竊掉落與 `lib/weapons.sp` 的武器名稱。
 - 前提：第 2 步的「移除技能名稱字串比對」要先完成，不然名稱翻譯後比對就會失效。
 - 語言：先支援繁體中文（`zho`）、英文（`en`）、日文（`jp`），預設是繁體中文。玩家語言不在這三種裡面時（包括簡體中文 `chi`）一律顯示繁體中文。
-- 注意：SourceMod 找不到玩家語言的翻譯時，會改用伺服器語言（`core.cfg` 的 `ServerLang`，預設是 `en`），所以光靠翻譯檔做不到「預設中文」。實作時再決定要由插件自己判斷玩家語言，還是在 README 請服主把 `ServerLang` 設成 `zho`。
+- 注意：SourceMod 找不到玩家語言的翻譯時，會改用伺服器語言（`core.cfg` 的 `ServerLang`，預設是 `en`），所以光靠翻譯檔做不到「預設中文」。
+- 決定（2026-11-19）：伺服器的 `core.cfg` 把 `ServerLang` 設成 `zho`，插件不自己判斷玩家語言。README「語言」寫給服主；部署腳本（repo 外的 `l4d2_server`）裝 skills_mk2 時會改這一行；本機測試伺服器已改。
+- 做法：
+  - 技能名稱改成翻譯檔的 key（`Skill_Register("Skill_Explosion", ...)`），顯示用 `Skill_GetName(技能, client, ...)`。
+  - HUD、技能選單、只送給一位玩家的訊息直接用 `%t` / `%T`。
+  - 送給所有人的訊息用 `Chat_PrintAll`（`util.sp`）：逐一用每位玩家的語言翻譯，翻譯檔裡的 `{green}`、`{default}` 換成顏色碼。測試版改用 `test/harness.sp` 的版本（用伺服器語言送一次、log 記一筆 `all`，跟以前的 log 比得起來）。
+  - 舊翻譯檔的 `chi` / `zho` 寫反了（SourceMod 的 `chi` 是簡體、`zho` 是繁體），繁體玩家看到的武器名稱是簡體。新檔只留 `en` / `zho` / `jp`。
+  - 偷竊訊息的武器名稱原本用伺服器語言（`LANG_SERVER`），改成每位玩家自己的語言（`{3:t}`）。偷到近戰武器原本顯示腳本名稱（`katana`），改成翻譯後的名稱；翻譯檔沒有的（自訂近戰武器）照樣顯示腳本名稱。拿掉一則會對所有人印出 `idx ... all ...` 的除錯訊息。
+  - `fix` 的回覆（原本是英文 `Correction Mana Bar`）與技能選單標題（原本是英文 `Choose a Skill...`）也改成翻譯。
+  - 不翻譯：施放時的喊聲（`EXPLOSION!`、`Eagle Eye!`、`STEAL!`、`エクスプロージョン!`，本來就是招式名；淨化的 `淨化!` 有翻）、`MISS`、伺服器 log、Dissolve 的除錯指令。
+  - `tools/servertest/servertest.py` 測試期間也會換上 repo 的翻譯檔（`--phrases`），結束後還原。
+- [x] 自動測試（2026-11-19，本機 `ServerLang` 是 `zho`）：新版 `smoke` 全過。`skills` 跟改之前（`01f3469`）比對，檢查點、傷害、HUD 文字、聊天訊息、例外都沒有差別（繁中的文字跟以前寫死的一樣）。只差 `ex_down/ex_incap_cast/nuke` 的魔法陣數量，那是時間點剛好在邊界：`ex_down` 階段兩版各重跑兩次都一樣。
+- [x] 其他語言：把 `ServerLang` 暫時改成 `en`、`jp` 跑 `main` + `steal_witch`（bot 的語言就是伺服器語言），HUD、聊天訊息、偷女巫（`{2:t}`、`{3:t}` 巢狀翻譯）都是那個語言，沒有例外。順便修了 `servertest.py`、`compare.py` 在 cp950 主控台印日文會中斷的問題。
+- [ ] 人工：英文、日文客戶端進遊戲看 HUD、技能選單、聊天訊息的外觀與長度，選單沒有自動測試。
 
 ## 自動測試（`tools/servertest/`）
 

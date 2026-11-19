@@ -63,16 +63,7 @@ char g_sWeaponNames[ALL_WEAPONS][] =
 	"weapon_gnome",
 	"weapon_cola_bottles"
 };
-
-// 透過 translations/skills_mk2.phrases.txt 取得武器翻譯名稱
-// idx 對應 g_sWeaponNames 的索引；target 為要翻譯給哪個 client（LANG_SERVER 為伺服器語言）
-stock void GetWeaponTranslate(int idx, int target, char[] buffer, int maxlen)
-{
-	if (idx >= 0 && idx < ALL_WEAPONS)
-		Format(buffer, maxlen, "%T", g_sWeaponNames[idx], target);
-	else
-		strcopy(buffer, maxlen, "");
-}
+// 上面每一項都是 translations/skills_mk2.phrases.txt 的 key，顯示名稱用 %t / %T 取（偷竊訊息）
 
 void SetPlayerReserveAmmo(int client, int weapon, int ammo)
 {

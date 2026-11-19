@@ -2021,6 +2021,19 @@ stock void Test_PrintToChatAll(const char[] format, any ...)
 	T_LogChat(0, buf);
 }
 
+// 取代 util.sp 的 Chat_PrintAll（正式版逐一送給每位玩家，各自的語言）。
+// 這裡跟 Test_PrintToChatAll 一樣用伺服器語言送一次、記一筆 all：bot 的語言就是伺服器語言，
+// 逐一記的話 log 會依 bot 的 client 編號排序，換圖後進場順序不同就比對不起來
+stock void Chat_PrintAll(const char[] format, any ...)
+{
+	char buf[512];
+	SetGlobalTransTarget(LANG_SERVER);
+	VFormat(buf, sizeof(buf), format, 2);
+	Chat_Colorize(buf, sizeof(buf));
+	PrintToChatAll("%s", buf);
+	T_LogChat(0, buf);
+}
+
 static void T_LogChat(int client, const char[] text)
 {
 	if (!s_sPhase[0]) return;

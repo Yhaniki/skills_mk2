@@ -18,7 +18,9 @@ skills：用 bot 跑技能測試（要搭配 src/scripting/skills_mk2/test/main_
 phase：只跑指定的測試腳本階段（在 c1m1_hotel，不做 reload、換圖、重開回合）
     例如 dissolve（淨化與 dissolve 槽的實驗，不在 skills 的完整流程裡）。
 
-測試期間會暫時把 plugins/skills_mk2.smx 換成 --smx 指定的檔案，結束後一律還原。
+測試期間會暫時把 plugins/skills_mk2.smx 換成 --smx 指定的檔案、translations/skills_mk2.phrases.txt
+換成 --phrases 指定的檔案（預設是這個 repo 的 src/translations/skills_mk2.phrases.txt），結束後一律還原。
+bot 的語言是伺服器語言（core.cfg 的 ServerLang），HUD 與聊天訊息的 log 會是那個語言的文字。
 """
 import argparse
 import os
@@ -355,10 +357,15 @@ def run_skills(srv, results, timeout, only=None):
 
 def main():
     ap = argparse.ArgumentParser()
+    # 主控台是 cp950 時印不出日文等字元（ServerLang 是 jp 時的 RCON 回應），換成 ? 照常跑；transcript.txt 是 UTF-8 全文
+    sys.stdout.reconfigure(errors="replace")
     ap.add_argument("mode", choices=["smoke", "skills", "phase"])
     ap.add_argument("--phase", action="append", default=[],
                     help="phase 模式要跑的測試腳本階段，可以給多次（例如 --phase ex_down --phase dissolve）")
     ap.add_argument("--smx", required=True)
+    ap.add_argument("--phrases", default=os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..",
+                                                      "src", "translations", "skills_mk2.phrases.txt"),
+                    help="測試期間換上的翻譯檔（預設是這個 repo 的）")
     ap.add_argument("--out", required=True)
     ap.add_argument("--server", default=os.environ.get("L4D2_SERVER_DIR"))
     ap.add_argument("--timeout", type=float, default=900)
@@ -377,6 +384,14 @@ def main():
     shutil.copy2(target, backup)
     shutil.copy2(a.smx, target)
     srv.log("已暫時換上 %s（原檔備份在 %s）" % (a.smx, backup))
+    # 翻譯檔要跟插件一起換：插件用到的片語在伺服器上的舊翻譯檔裡可能沒有
+    ph_target = os.path.join(srv.sm, "translations", "skills_mk2.phrases.txt")
+    ph_backup = os.path.join(a.out, "skills_mk2.phrases.txt.server_backup")
+    ph_existed = os.path.exists(ph_target)
+    if ph_existed:
+        shutil.copy2(ph_target, ph_backup)
+    shutil.copy2(a.phrases, ph_target)
+    srv.log("已暫時換上 %s" % os.path.normpath(a.phrases))
     results = []
     try:
         if a.mode == "smoke":
@@ -395,6 +410,11 @@ def main():
         srv.stop()
         shutil.copy2(backup, target)
         srv.log("已還原伺服器原本的 skills_mk2.smx")
+        if ph_existed:
+            shutil.copy2(ph_backup, ph_target)
+        else:
+            os.remove(ph_target)
+        srv.log("已還原伺服器原本的 skills_mk2.phrases.txt")
         srv.save("transcript.txt", "\n".join(srv.transcript) + "\n")
 
     print()

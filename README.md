@@ -14,6 +14,17 @@
 .\spcomp.exe skills_mk2/main.sp -o ../plugins/skills_mk2.smx
 ```
 
+## 語言
++ 技能名稱、HUD、技能選單、聊天訊息的文字都在 `src/translations/skills_mk2.phrases.txt`，要跟插件一起放到伺服器的 `addons/sourcemod/translations/`。
++ 支援英文（`en`）、繁體中文（`zho`）、日文（`jp`），每位玩家看到的是自己遊戲語言的文字。
++ 玩家的遊戲語言不是這三種時（包括簡體中文），SourceMod 會改用伺服器語言。要預設顯示繁體中文，伺服器的 `addons/sourcemod/configs/core.cfg` 要改成：
+
+    ```
+    "ServerLang"	"zho"
+    ```
+
++ 新增文字時在翻譯檔加一個片語，三種語言都要寫，程式裡用 `%t` / `%T` 取。聊天訊息的顏色用 `{green}`、`{default}`，送給所有人的訊息用 `Chat_PrintAll`（`util.sp`），它會換成顏色碼。
+
 ## 丟槍
 
 這個插件不提供丟槍。要丟槍請另外安裝社群插件 l4d_drop（[L4D1/2] Weapon Drop，作者 Machine, dcx2, Electr000999 /z, Senip, Shao, NoroHime, HarryPotter）：
@@ -54,7 +65,7 @@ meta_vertion
 scripting/skills_mk2/
 ├─ main.sp              入口：插件資訊、include 順序、所有 SourceMod / left4dhooks forward 的分派
 ├─ config.sp            常數
-├─ util.sp              通用函式（實體判斷、距離、瞄準、傷害、預載）
+├─ util.sp              通用函式（實體判斷、距離、瞄準、傷害、預載、聊天訊息）
 ├─ core/
 │  ├─ skill_base.sp     技能框架：註冊、施放、狀態機、切換、中斷、清理、預載
 │  ├─ scheduler.sp      技能的延遲步驟排程
@@ -78,8 +89,8 @@ scripting/skills_mk2/
 
     int Fireball_Register()
     {
-        // 名稱、持續秒數、冷卻秒數、MP 消耗
-        s_iFireball = Skill_Register("Fireball 火球", 3.0, 5.0, 25.0);
+        // 名稱（翻譯檔的 key）、持續秒數、冷卻秒數、MP 消耗
+        s_iFireball = Skill_Register("Skill_Fireball", 3.0, 5.0, 25.0);
         Skill_OnStart(s_iFireball, Fireball_OnStart);
         Skill_OnPrecache(s_iFireball, Fireball_OnPrecache);
         return s_iFireball;
@@ -115,6 +126,17 @@ scripting/skills_mk2/
     ```
 
 2. 在 `main.sp` 的 `skills/` include 區加上 `#include "skills/fireball.sp"`，並在 `OnPluginStart` 的技能註冊區最後加一行 `Fireball_Register();`。註冊順序就是選單順序。
+
+3. 在 `src/translations/skills_mk2.phrases.txt` 的技能名稱區加上技能名稱（HUD 與技能選單顯示的文字）：
+
+    ```
+    "Skill_Fireball"
+    {
+        "en"        "Fireball"
+        "zho"       "Fireball 火球"
+        "jp"        "Fireball ファイアボール"
+    }
+    ```
 
 技能檔只要實作用得到的 hook：
 
@@ -153,7 +175,7 @@ python tools/servertest/servertest.py phase --smx skills_mk2_test.smx --out 輸�
 python tools/servertest/compare.py 修改前的輸出資料夾 修改後的輸出資料夾
 ```
 
-測試期間會暫時換掉伺服器的 `plugins/skills_mk2.smx`，結束後還原；伺服器只綁 `127.0.0.1:27115`。粒子、魔法陣、天氣、HUD 外觀、音效、近戰揮空還是要進遊戲看。
+測試期間會暫時換掉伺服器的 `plugins/skills_mk2.smx` 和 `translations/skills_mk2.phrases.txt`（換成這個 repo 的，可以用 `--phrases` 指定別的），結束後還原；伺服器只綁 `127.0.0.1:27115`。bot 的語言是伺服器語言，測試 log 裡 HUD 與聊天訊息的文字是 `ServerLang` 那個語言。粒子、魔法陣、天氣、HUD 外觀、音效、近戰揮空還是要進遊戲看。
 
 ## 開發中
 - [x] 惠惠：升級原本的爆裂技能（施放過程中改變天氣狀態）

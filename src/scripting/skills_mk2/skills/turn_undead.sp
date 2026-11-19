@@ -6,7 +6,7 @@ static int g_iChase[MAX_PLAYERS + 1];
 
 int TurnUndead_Register()
 {
-	s_iTurnUndead = Skill_Register("Sacred Turn Undead 淨化", 3.5, 2.0, 50.0);
+	s_iTurnUndead = Skill_Register("Skill_TurnUndead", 3.5, 2.0, 50.0);
 	Skill_OnStart(s_iTurnUndead, TurnUndead_OnStart);
 	Skill_OnCleanup(s_iTurnUndead, TurnUndead_OnCleanup);
 	Skill_OnPrecache(s_iTurnUndead, TurnUndead_OnPrecache);
@@ -83,7 +83,7 @@ static void TurnUndead_StepRush(int client, DataPack data)
 		AcceptEntityInput(entity, "FireUser4");
 	}
 
-	PrintToChatAll("\x04%N \x01施放淨化引來屍潮！", client);
+	Chat_PrintAll("%t", "Chat_TurnUndeadHorde", client);
 }
 
 // 施放後 2.5 秒：淨化瞄準點周圍的殭屍
@@ -150,5 +150,5 @@ static void TurnUndead_OnStart(int client)
 {
 	GlowForSecs(client, 0, 0, 100, 3.5*time_weight);
 	TurnUndeadAim(client, 2.5*time_weight);
-	PrintToChatAll("\x04%N \x01淨化!", client);
+	Chat_PrintAll("%t", "Chat_TurnUndeadCast", client);
 }

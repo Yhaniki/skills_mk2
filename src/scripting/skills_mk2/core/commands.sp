@@ -20,7 +20,7 @@ public Action Event_SkillStateTransition(int client, int args)
 	}
 	else if (StrEqual(cmd, "fix"))
 	{
-		PrintToChat(client, "Correction Mana Bar");
+		PrintToChat(client, "%t", "Chat_FixMP");
 		Player_OnClientConnected(client);
 	}
 	Hud_Refresh(client, true);
@@ -44,7 +44,7 @@ public Action Cmd_SkillsFillAllMP(int client, int args)
 	if (!client)
 		PrintToServer("[skills_mk2] Filled MP to max for %d human player(s).", n);
 	else
-		ReplyToCommand(client, "\x04[skills_mk2]\x01 已將 %d 名玩家的魔力補滿。", n);
+		ReplyToCommand(client, "\x04[skills_mk2]\x01 %t", "Cmd_FillMP", n);
 
 	return Plugin_Handled;
 }

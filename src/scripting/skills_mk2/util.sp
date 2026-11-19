@@ -1,4 +1,4 @@
-// 通用純函式：實體判斷、距離、瞄準、傷害、timer 工具
+// 通用純函式：實體判斷、距離、瞄準、傷害、timer 工具、聊天訊息
 // 這裡的函式不持有自己的狀態；有狀態的效果系統放在 fx/
 
 // 安全刪除 timer 並歸零 handle，避免換圖後殭屍 handle
@@ -210,3 +210,33 @@ void DealDamage(int victim, int damage, int attacker = 0, int dmg_type = DMG_GEN
 		}
 	}
 }
+
+//===========================================================
+//======================== 聊天訊息 =========================
+//===========================================================
+// 文字都在 translations/skills_mk2.phrases.txt，用 %t / %T 取。
+// 只送給一位玩家、不用顏色時直接 PrintToChat(client, "%t", ...)，SourceMod 會用那位玩家的語言翻譯。
+
+// 翻譯檔裡的顏色標籤換成顏色碼：{default} 白、{green} 綠
+void Chat_Colorize(char[] buf, int maxlen)
+{
+	ReplaceString(buf, maxlen, "{default}", "\x01");
+	ReplaceString(buf, maxlen, "{green}", "\x04");
+}
+
+// 送給所有人：跟 PrintToChatAll 一樣每位玩家用自己的語言翻譯，再換上顏色
+// 測試版（test/main_test.sp）改用 test/harness.sp 裡記 log 的版本
+#if !defined SKILLS_TEST
+void Chat_PrintAll(const char[] format, any ...)
+{
+	char buf[254];
+	for (int i = 1; i <= MaxClients; i++)
+	{
+		if (!IsClientInGame(i)) continue;
+		SetGlobalTransTarget(i);
+		VFormat(buf, sizeof(buf), format, 2);
+		Chat_Colorize(buf, sizeof(buf));
+		PrintToChat(i, "%s", buf);
+	}
+}
+#endif

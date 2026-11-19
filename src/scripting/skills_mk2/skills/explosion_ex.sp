@@ -15,7 +15,7 @@ static int    g_iExDynLightRef[MAX_PLAYERS + 1];// light_dynamic 強光照亮魔
 // base：skill2 施放這個技能時，目前選用的技能（爆裂）
 int ExplosionEx_Register(int base)
 {
-	s_iExplosionEx = Skill_Register("EXPLOSION ☆爆裂★", explosion_ex_delay_secs+2.0, 2.0, 100.0, SKILL_HIDDEN);
+	s_iExplosionEx = Skill_Register("Skill_ExplosionEx", explosion_ex_delay_secs+2.0, 2.0, 100.0, SKILL_HIDDEN);
 	Skill_OnStart(s_iExplosionEx, ExplosionEx_OnStart);
 	Skill_OnEnd(s_iExplosionEx, ExplosionEx_OnEnd);
 	Skill_OnCleanup(s_iExplosionEx, ExplosionEx_OnCleanup);
@@ -393,7 +393,7 @@ static void ExplosionEx_OnStart(int client)
 {
 	float Pos[3];
 	if (GetAimOrigin(client, Pos, 10.0) == 0) {
-		PrintToChatAll("\x04%N \x01施放爆裂失敗", client);
+		Chat_PrintAll("%t", "Chat_ExplosionFailed", client);
 		return;
 	}
 	PrintToChatAll("\x04%N \x01エクスプロージョン!", client);

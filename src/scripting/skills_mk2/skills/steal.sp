@@ -4,7 +4,7 @@ static int s_iSteal;
 
 int Steal_Register()
 {
-	s_iSteal = Skill_Register("Steal 偷竊", 6.0, 2.0, 20.0);
+	s_iSteal = Skill_Register("Skill_Steal", 6.0, 2.0, 20.0);
 	Skill_OnStart(s_iSteal, Steal_OnStart);
 	Skill_OnPrecache(s_iSteal, Steal_OnPrecache);
 	return s_iSteal;
@@ -16,7 +16,7 @@ static void Steal_OnPrecache()
 	SetupSound("skills\\steal.mp3", true);
 }
 
-// 從殭屍身上偷到的物品表
+// 從殭屍身上偷到的物品表。偷到時用它當翻譯檔的 key 顯示名稱，所以每一項都要在翻譯檔裡
 static char g_sWeapons[MAX_WEAPONS][] =
 {
 	"weapon_rifle",
@@ -130,36 +130,32 @@ static void Steal_StepSteal(int client, DataPack data)
 				if (weaponIdx > 0)
 				{
 					GetEdictClassname(weaponIdx, item, MAXCMD);
+					// 訊息裡的武器名稱：翻譯檔的 key 是 classname，近戰武器的 classname 都是 weapon_melee，
+					// 要看腳本名稱（katana → weapon_katana）。翻譯檔沒有的（自訂近戰武器等）直接顯示名稱
+					char key[MAXCMD];
+					char shown[MAXCMD];
+					strcopy(key, sizeof(key), item);
+					strcopy(shown, sizeof(shown), item);
+					if (StrEqual(item, "weapon_melee"))
+					{
+						GetEntPropString(weaponIdx, Prop_Data, "m_strMapSetScriptName", shown, sizeof(shown));
+						FormatEx(key, sizeof(key), "weapon_%s", shown);
+					}
 					SetItemToPlayer(client, item, weaponIdx, ammo, clip);
-					int idx = GetItemTranslateIdx(item);
+					int idx = GetItemTranslateIdx(key);
 					if (idx >= 0)
-					{
-						char wname[MAXCMD];
-						GetWeaponTranslate(idx, LANG_SERVER, wname, sizeof(wname));
-						PrintToChatAll("\x04%N \x01從 \x04%N \x01身上偷了 \x04%s", client, entityId, wname);
-					}
-					else if(weaponIdx<ALL_WEAPONS)
-					{
-						PrintToChatAll("idx %d all %d %d\n",idx,ALL_WEAPONS,weaponIdx);
-						PrintToChatAll("\x04%N \x01從 \x04%N \x01身上偷了 \x04%s", client, entityId, g_sWeaponNames[weaponIdx]);
-					}
+						Chat_PrintAll("%t", "Chat_StolePlayer", client, entityId, g_sWeaponNames[idx]);
 					else
-					{
-						if(StrEqual(item, "weapon_melee")==true)
-						{
-							GetEntPropString(entityId, Prop_Data, "m_strMapSetScriptName", item, MAXCMD);
-						}
-						PrintToChatAll("\x04%N \x01從 \x04%N \x01身上偷了 \x04%s", client, entityId, item);
-					}
+						Chat_PrintAll("%t", "Chat_StolePlayerRaw", client, entityId, shown);
 				}
 				else
 				{
-					PrintToChatAll("\x04%N \x01偷竊失敗", client);
+					Chat_PrintAll("%t", "Chat_StealFailed", client);
 				}
 			}
 			else
 			{
-				PrintToChatAll("\x04%N \x01偷竊失敗", client);
+				Chat_PrintAll("%t", "Chat_StealFailed", client);
 			}
 		}
 		else if (type==1)
@@ -168,33 +164,26 @@ static void Steal_StepSteal(int client, DataPack data)
 			//    The chance of obtaining an item can be based on a predetermined percentage set in the table
 			// 女巫跟殭屍一樣從物品表隨機拿，但偷完會驚嚇她（施放時瞄準的是女巫就算，她中途死了也照樣偷到）
 			bool fromWitch = (witchRef != INVALID_ENT_REFERENCE);
-			char from[16];
-			strcopy(from, sizeof(from), fromWitch ? "女巫" : "殭屍");
 			int weaponIdx = GetRandomInt(0, MAX_WEAPONS - 1);
 			int idx = GetItemIdx(weaponIdx);
-			if (idx >= 0)
-			{
-				char wname[MAXCMD];
-				GetWeaponTranslate(idx, LANG_SERVER, wname, sizeof(wname));
-				PrintToChatAll("\x04%N \x01從 \x04%s \x01身上偷了 \x04%s", client, from, wname);
-			}
+			char victim[MAXCMD];
+			if (fromWitch)
+				strcopy(victim, sizeof(victim), "Victim_Witch");
 			else
-			{
-				PrintToChatAll("\x04%N \x01從 \x04%s \x01身上偷了 \x04%s", client, from, g_sWeapons[weaponIdx]);
-			}
-			// PrintToChatAll("\x04%N \x01從殭屍身上偷了 %s", client, g_sWeapons[weaponIdx]);
+				strcopy(victim, sizeof(victim), "Victim_Infected");
+			Chat_PrintAll("%t", "Chat_StoleInfected", client, victim, g_sWeapons[weaponIdx]);
 			SetItemToPlayer(client, g_sWeapons[weaponIdx], idx, -1,-1);
 			if (fromWitch)
 				Steal_StartleWitch(client, witchRef);
 		}
 		else
 		{
-			PrintToChatAll("\x04%N \x01偷竊失敗", client);
+			Chat_PrintAll("%t", "Chat_StealFailed", client);
 		}
 	}
 	else
 	{
 		// 4. If the player hasn't aimed at any person, return a failed status
-		PrintToChatAll("\x04%N \x01偷竊失敗", client);
+		Chat_PrintAll("%t", "Chat_StealFailed", client);
 	}
 }

@@ -4,7 +4,7 @@ static int s_iExplosion;
 
 int Explosion_Register()
 {
-	s_iExplosion = Skill_Register("Explosion 爆裂", 3.0, 2.0, 30.0);
+	s_iExplosion = Skill_Register("Skill_Explosion", 3.0, 2.0, 30.0);
 	Skill_OnStart(s_iExplosion, Explosion_OnStart);
 	Skill_OnPrecache(s_iExplosion, Explosion_OnPrecache);
 	return s_iExplosion;

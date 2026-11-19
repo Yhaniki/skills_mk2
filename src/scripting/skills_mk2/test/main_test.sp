@@ -8,6 +8,7 @@
 // - IsFakeClient 永遠回傳 false：技能系統原本會略過 bot，換掉之後 bot 也能施放技能
 // - PrintHintText / PrintCenterText / PrintToChat / PrintToChatAll：照常送出，另外把文字記進測試 log
 // - SendConVarValue：記進測試 log；對 bot 不送（bot 沒有網路通道，會丟錯誤）
+// - Chat_PrintAll（util.sp）：定義了 SKILLS_TEST 時正式版的不編譯，改用 harness.sp 的版本（用伺服器語言送一次、記一筆 all）
 //
 // 第三方 include 要先在這裡 include，替換才不會套用到它們（main.sp 再 include 時會被 include guard 略過）。
 

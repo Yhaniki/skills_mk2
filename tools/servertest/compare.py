@@ -120,6 +120,7 @@ def compare_map(a, b, label):
 
 
 def main():
+    sys.stdout.reconfigure(errors="replace")  # 主控台是 cp950 時，印不出的字（日文等）換成 ?
     base, new = load(sys.argv[1]), load(sys.argv[2])
     sections = [
         ("檢查點", compare_cp(base["cp"], new["cp"])),
