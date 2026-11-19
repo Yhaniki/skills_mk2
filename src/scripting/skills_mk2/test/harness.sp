@@ -722,6 +722,107 @@ static char s_sMelee[][] =
 	"cvarreset z_witch_personal_space",
 };
 
+// 鷹眼的發光：施放中打死的殭屍（屍體）還亮不亮、施放結束時是不是全部熄掉、發光時 edict 的傳送旗標
+// b2 放鷹眼；nb_stop 讓殭屍和 bot 都不動
+static char s_sGlow[][] =
+{
+	"findbots",
+	"home",
+	"prep",
+	"cvar nb_stop 1",
+	"cvar nb_blind 1",
+	"gscan start",
+
+	// 施放中打死：屍體的發光
+	"scen glow_kill",
+	"change 2 2",
+	"wait 2.5",
+	"commons 2 10",
+	"wait 1.0",
+	"gcount spawned",
+	"mp 2 100",
+	"cmd 2 skill1",
+	"wait 0.3",
+	"gcount act",
+	"gscan act",
+	"killcommons 2",
+	"gcount t0",
+	"wait 0.1",
+	"gcount t0.1",
+	"wait 0.5",
+	"gcount t0.6",
+	"wait 2.0",
+	"gcount t2.6",
+	"wait 7.0",
+
+	// 施放結束：全部熄掉
+	"scen glow_end",
+	"commons 2 10",
+	"wait 1.0",
+	"mp 2 100",
+	"cmd 2 skill1",
+	"wait 0.3",
+	"gcount act",
+	"wait 7.2",
+	"gcount end",
+	"wait 3.0",
+	"gcount after_timer",
+	"killcommons 2",
+	"wait 2.5",
+
+	// 手動加 FL_EDICT_ALWAYS，遊戲會不會改回去
+	"scen force_tx",
+	"commons 2 5",
+	"wait 1.0",
+	"gcount before",
+	"forcetx on",
+	"gcount t0",
+	"wait 1.0",
+	"gcount t1",
+	"wait 3.0",
+	"gcount t4",
+	"forcetx off",
+	"gcount off",
+	"killcommons 2",
+	"wait 1.0",
+
+	// 加了 FL_EDICT_ALWAYS 的殭屍被打死，旗標會不會被遊戲改掉
+	"scen force_tx_death",
+	"commons 2 5",
+	"wait 1.0",
+	"forcetx on",
+	"killcommons 2",
+	"gcount t0",
+	"wait 0.2",
+	"gcount t0.2",
+	"wait 1.0",
+	"gcount t1.2",
+	"forcetx off",
+
+	// 倖存者、特感、女巫的傳送旗標；鷹眼標示女巫、特感後打死
+	"scen glow_others",
+	"special 2 3",
+	"witch 2",
+	"wait 1.0",
+	"gplayers spawned",
+	"mp 2 100",
+	"cmd 2 skill1",
+	"wait 0.3",
+	"gplayers act",
+	"killothers 2",
+	"gplayers t0",
+	"wait 0.2",
+	"gplayers t0.2",
+	"wait 1.0",
+	"gplayers t1.2",
+	"wait 7.0",
+	"gplayers end",
+	"killwitch",
+	"gscan end",
+	"cvarreset nb_stop",
+	"cvarreset nb_blind",
+};
+
 static char s_sFinish[][] =
 {
 	"scen finish",
@@ -775,6 +876,11 @@ static bool T_GetLine(int idx, char[] line, int maxlen)
 		if (idx >= sizeof(s_sMelee)) return false;
 		strcopy(line, maxlen, s_sMelee[idx]);
 	}
+	else if (StrEqual(s_sPhase, "glow"))
+	{
+		if (idx >= sizeof(s_sGlow)) return false;
+		strcopy(line, maxlen, s_sGlow[idx]);
+	}
 	else if (StrEqual(s_sPhase, "finish"))
 	{
 		if (idx >= sizeof(s_sFinish)) return false;
@@ -794,9 +900,10 @@ static bool T_GetLine(int idx, char[] line, int maxlen)
 public void OnAllPluginsLoaded()
 {
 	BuildPath(Path_SM, s_sLog, sizeof(s_sLog), "logs/skills_test.log");
-	RegServerCmd("sm_skilltest", Cmd_SkillTest, "skills_mk2 自動測試：sm_skilltest <main|ex_down|ex_prep|after_reload|after_map|ex_restart|dissolve|steal_witch|drop|melee|finish>");
+	RegServerCmd("sm_skilltest", Cmd_SkillTest, "skills_mk2 自動測試：sm_skilltest <main|ex_down|ex_prep|after_reload|after_map|ex_restart|dissolve|steal_witch|drop|melee|glow|finish>");
 	HookEvent("player_death", T_Event_Death);
 	HookEvent("witch_harasser_set", T_Event_WitchHarasser);
+	HookEvent("infected_death", T_Event_InfDeath);
 
 	// 另外掛一個近戰判定的 detour，只用來計數（技能系統自己的 detour 照常運作）
 	Handle gd = LoadGameConfigFile(GAMEDATA_MELEE);
@@ -866,8 +973,28 @@ static void T_Event_WitchHarasser(Event event, const char[] name, bool dontBroad
 		EntRefToEntIndex(s_iWitch) == event.GetInt("witchid"), tag, event.GetBool("first"));
 }
 
+// glow 階段：記下死亡事件帶的欄位、事件當下殭屍的 m_iGlowType（Event_DeathUnglow 在這之前已經執行）
+static void T_Event_InfDeath(Event event, const char[] name, bool dontBroadcast)
+{
+	if (!StrEqual(s_sPhase, "glow")) return;
+	int id = event.GetInt("infected_id");
+	T_Log("INFDEATH %s/%s infected_id=%d is_infected=%d glow=%d", s_sPhase, s_sScen, id, IsInf(id),
+		IsInf(id) ? GetEntProp(id, Prop_Send, "m_iGlowType") : -1);
+}
+
 static void T_Event_Death(Event event, const char[] name, bool dontBroadcast)
 {
+	if (StrEqual(s_sPhase, "glow"))
+	{
+		int ent = event.GetInt("entityid");
+		int victim = GetClientOfUserId(event.GetInt("userid"));
+		if (victim <= 0) victim = ent;
+		char cls[32];
+		if (victim > 0 && IsValidEntity(victim)) GetEntityClassname(victim, cls, sizeof(cls));
+		T_Log("PDEATH %s/%s userid=%d entityid=%d victim=%d cls=%s glow=%d flags=0x%x", s_sPhase, s_sScen, event.GetInt("userid"), ent,
+			victim, cls, (victim > 0 && HasEntProp(victim, Prop_Send, "m_iGlowType")) ? GetEntProp(victim, Prop_Send, "m_iGlowType") : -1,
+			(victim > 0 && IsValidEdict(victim)) ? GetEdictFlags(victim) : -1);
+	}
 	if (!s_sPhase[0] || !IsInf(event.GetInt("entityid"))) return;
 	s_iInfDeaths++;
 	if (s_iPurifier > 0 && GetClientOfUserId(event.GetInt("attacker")) == s_iPurifier)
@@ -1075,6 +1202,55 @@ static float T_Exec(const char[] line)
 	else if (StrEqual(a[0], "dcount"))
 	{
 		T_DissolveCount(a[1]);
+	}
+	else if (StrEqual(a[0], "gcount"))
+	{
+		T_GlowCount(a[1]);
+	}
+	else if (StrEqual(a[0], "gscan"))
+	{
+		T_GlowScan(a[1]);
+	}
+	else if (StrEqual(a[0], "special"))
+	{
+		// 在 b 前方 150 單位生一隻特感（zombieClass：1 smoker、3 hunter…）
+		if (b)
+		{
+			float org[3], ang[3], fwd[3];
+			GetClientAbsOrigin(b, org);
+			GetClientEyeAngles(b, ang);
+			ang[0] = 0.0;
+			GetAngleVectors(ang, fwd, NULL_VECTOR, NULL_VECTOR);
+			for (int i = 0; i < 2; i++) org[i] += fwd[i] * 150.0;
+			int si = L4D2_SpawnSpecial(StringToInt(a[2]), org, ang);
+			T_Log("SPECIAL %s/%s class=%s client=%d", s_sPhase, s_sScen, a[2], si);
+		}
+	}
+	else if (StrEqual(a[0], "gplayers"))
+	{
+		T_GlowPlayers(a[1]);
+	}
+	else if (StrEqual(a[0], "killothers"))
+	{
+		// 打死測試生出來的女巫和所有特感，攻擊者是 b
+		if (b)
+		{
+			int w = EntRefToEntIndex(s_iWitch);
+			if (w != INVALID_ENT_REFERENCE) DealDamage(w, 5000, b, DMG_BULLET);
+			for (int i = 1; i <= MaxClients; i++)
+				if (IsAliveSpecialInf(i)) ForcePlayerSuicide(i);
+		}
+	}
+	else if (StrEqual(a[0], "forcetx"))
+	{
+		bool on = StrEqual(a[1], "on");
+		for (int i = 0; i < s_iCommonN; i++)
+		{
+			int e = EntRefToEntIndex(s_iCommon[i]);
+			if (e == INVALID_ENT_REFERENCE) continue;
+			int fl = GetEdictFlags(e);
+			SetEdictFlags(e, on ? (fl | FL_EDICT_ALWAYS) : (fl & ~FL_EDICT_ALWAYS));
+		}
 	}
 	else if (StrEqual(a[0], "witch"))
 	{
@@ -1309,6 +1485,80 @@ static void T_DissolveCount(const char[] label)
 	T_Log("DCOUNT %s/%s/%s spawned=%d exist=%d alive=%d alive_inrange=%d slots=%d/%d dissolvers=%d inf_deaths=%d by_caster=%d mp_b1=%.1f",
 		s_sPhase, s_sScen, label, s_iCommonN, exist, alive, inrange, slots, MAX_DISSOLVE, dissolvers,
 		s_iInfDeaths, s_iInfDeathsBy, (b1 > 0 && IsClientInGame(b1)) ? Skill_MP[b1] : -1.0);
+}
+
+// 生出來的普通殭屍：還在幾隻、死了幾隻、m_iGlowType 不是 0 的幾隻（其中死掉的幾隻）、State_Glow、edict 傳送旗標
+static void T_GlowCount(const char[] label)
+{
+	int exist = 0, dead = 0, glow = 0, glowDead = 0, state = 0, always = 0, pvs = 0, dontsend = 0, full = 0;
+	char sample[256];
+	for (int i = 0; i < s_iCommonN; i++)
+	{
+		int e = EntRefToEntIndex(s_iCommon[i]);
+		if (e == INVALID_ENT_REFERENCE) continue;
+		exist++;
+		int hp = GetEntProp(e, Prop_Data, "m_iHealth");
+		int gt = GetEntProp(e, Prop_Send, "m_iGlowType");
+		int fl = GetEdictFlags(e);
+		if (hp <= 0) dead++;
+		if (gt != 0)
+		{
+			glow++;
+			if (hp <= 0) glowDead++;
+		}
+		if (State_Glow[e]) state++;
+		if (fl & FL_EDICT_ALWAYS) always++;
+		else if (fl & FL_EDICT_DONTSEND) dontsend++;
+		else if (fl & FL_EDICT_PVSCHECK) pvs++;
+		else full++;
+		if (i < 3)
+			Format(sample, sizeof(sample), "%s [#%d hp=%d glow=%d state=%d flags=0x%x]", sample, e, hp, gt, State_Glow[e], fl);
+	}
+	T_Log("GCOUNT %s/%s/%s spawned=%d exist=%d dead=%d glow=%d glow_dead=%d state=%d tx_always=%d tx_pvs=%d tx_dontsend=%d tx_fullcheck=%d%s",
+		s_sPhase, s_sScen, label, s_iCommonN, exist, dead, glow, glowDead, state, always, pvs, dontsend, full, sample);
+}
+
+// 倖存者、特感、女巫：活著沒有、m_iGlowType、State_Glow、edict 傳送旗標
+static void T_GlowPlayers(const char[] label)
+{
+	char buf[1024];
+	for (int i = 1; i <= MaxClients; i++)
+	{
+		if (!IsClientInGame(i) || GetClientTeam(i) < 2) continue;
+		Format(buf, sizeof(buf), "%s [%s%d alive=%d glow=%d state=%d flags=0x%x]", buf, GetClientTeam(i) == 3 ? "si" : "sv", i,
+			IsPlayerAlive(i), GetEntProp(i, Prop_Send, "m_iGlowType"), State_Glow[i], GetEdictFlags(i));
+	}
+	int w = EntRefToEntIndex(s_iWitch);
+	if (w != INVALID_ENT_REFERENCE)
+		Format(buf, sizeof(buf), "%s [witch%d hp=%d glow=%d state=%d flags=0x%x]", buf, w, GetEntProp(w, Prop_Data, "m_iHealth"),
+			GetEntProp(w, Prop_Send, "m_iGlowType"), State_Glow[w], GetEdictFlags(w));
+	else
+		StrCat(buf, sizeof(buf), " [witch gone]");
+	T_Log("GPLAYERS %s/%s/%s%s", s_sPhase, s_sScen, label, buf);
+}
+
+// GetEntityCount()（使用中的 edict 數）跟實際最大的 entity 編號差多少；編號超過 GetEntityCount() 的普通殭屍有幾隻
+static void T_GlowScan(const char[] label)
+{
+	int count = GetEntityCount(), maxEnt = GetMaxEntities(), highest = 0, holes = 0, infAll = 0, infBeyond = 0;
+	for (int i = 1; i < maxEnt; i++)
+	{
+		if (!IsValidEdict(i))
+		{
+			holes++;
+			continue;
+		}
+		highest = i;
+		if (IsInf(i))
+		{
+			infAll++;
+			if (i > count) infBeyond++;
+		}
+	}
+	// holes 只算 highest 以下的空位
+	holes -= (maxEnt - 1 - highest);
+	T_Log("GSCAN %s/%s/%s entity_count=%d max_entities=%d highest=%d holes_below=%d infected=%d infected_beyond_count=%d",
+		s_sPhase, s_sScen, label, count, maxEnt, highest, holes, infAll, infBeyond);
 }
 
 // 從 b 往 8 個方向找前方沒有障礙、底下有地板的位置（依序試 200、160、120 單位），生一隻面向 b 的女巫

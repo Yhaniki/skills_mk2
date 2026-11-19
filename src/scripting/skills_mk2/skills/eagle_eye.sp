@@ -48,8 +48,9 @@ void DetectInfect(int client)
 			}
 		}
 	}
-	int EntityCount = GetEntityCount();
-	for (int i = MAX_PLAYERS + 1; i <= EntityCount; i++)
+	// GetEntityCount() 是 entity 的數量，不是最大的編號，中間有空號時會漏掉後面的殭屍
+	int maxEnt = GetMaxEntities();
+	for (int i = MAX_PLAYERS + 1; i < maxEnt; i++)
 	{
 		if (!IsValidEntity(i) || !IsAlive(i) || State_Glow[i])
 			continue;
@@ -73,7 +74,8 @@ void DetectInfect(int client)
 
 static void EagleEye_OnEnd(int client)
 {
-	for (int i = 1; i <= GetEntityCount(); i++)
+	int maxEnt = GetMaxEntities();
+	for (int i = 1; i < maxEnt; i++)
 	{
 		if (!IsValidEntity(i)) continue;
 		if (IsWitch(i) || IsInf(i) || IsAliveSpecialInf(i))

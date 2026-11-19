@@ -481,12 +481,8 @@ void Skills_MapEndCleanup()
 		Skills_Cleanup(i, SKILL_CLEANUP_MAP_END);
 	}
 
-	// 清理所有 entity 的 glow timer
-	for (int i = 0; i < MAXENTITIES; i++)
-	{
-		SafeDeleteTimer(Glow_Timer[i]);
-		State_Glow[i]   = false;
-	}
+	// 清理所有 entity 的 glow 狀態與 timer
+	Glow_MapEndCleanup();
 
 	// 換圖前先 reset 天氣狀態，避免 s_hRestoreTimer 變殭屍 handle 後被 OnMapStart 再 KillTimer
 	ResetMagicAtmosphere();
@@ -540,4 +536,5 @@ void Skills_PluginEndCleanup()
 		Invulnerable[i] = false;
 		Skills_Cleanup(i, SKILL_CLEANUP_PLUGIN_END);
 	}
+	Glow_PluginEndCleanup();
 }

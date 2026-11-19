@@ -121,8 +121,7 @@ public void OnPluginStart()
 	HookEvent("adrenaline_used",			Event_MPGain);
 	HookEvent("pills_used",					Event_MPGain);
 	// HookEvent("player_hurt", 				Event_DmgReducedByManaShield);
-	HookEvent("player_death", 				Event_DeathUnglow);
-	HookEvent("infected_death", 			Event_DeathUnglow);
+	HookEvent("player_death", 				Event_DeathUnglow);   // 普通殭屍、女巫也會觸發（entityid）
 	HookEvent("round_start",				Event_SkillsRoundStart, EventHookMode_PostNoCopy);
 	// 逃脫、結算、任務失敗的畫面算過場（Player_InCutscene），下一個 round_start 恢復（Event_SkillsRoundStart 裡）
 	HookEvent("round_end",					Event_RoundOver, EventHookMode_PostNoCopy);
