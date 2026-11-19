@@ -1,8 +1,9 @@
 // 實體發光（輪廓光）
 //
 // 伺服器只會把 PVS 裡的 entity 傳給玩家（普通殭屍、女巫的傳送旗標是 FL_EDICT_PVSCHECK，發光也不會改變）。
-// 隔著牆、不在 PVS 裡的殭屍熄掉或死掉時，玩家收不到這個更新，畫面會停在最後收到的狀態，光就一直留著。
-// 所以熄掉時暫時加上 FL_EDICT_ALWAYS，多傳 GLOW_SEND_ALL_SECS 秒，確定每個玩家都收到之後再拿掉。
+// 隔著牆、不在 PVS 裡的殭屍，玩家收不到它的更新，畫面會停在最後收到的狀態：
+// 光停在舊位置不跟著殭屍走，熄掉或死掉時光也一直留著。
+// 所以發光期間加上 FL_EDICT_ALWAYS 傳給所有人，熄掉後再多傳 GLOW_SEND_ALL_SECS 秒，確定每個玩家都收到熄燈才拿掉。
 // 玩家（倖存者、特感）的傳送由遊戲自己的 ShouldTransmit 決定（FULLCHECK），不去動它。
 #define GLOW_SEND_ALL_SECS 2.0
 
@@ -28,6 +29,7 @@ void GlowForSecs(int entity, int r, int g, int b, float time)
 	SetEntProp(entity, Prop_Send, "m_glowColorOverride", glowcolor);
 	SetEntProp(entity, Prop_Send, "m_iGlowType", 3);
 	AcceptEntityInput(entity, "StartGlowing");
+	Glow_SendToAll(entity, true);
 	Glow_Timer[entity] = CreateTimer(time, Timer_Unglow, entity);
 }
 
@@ -62,11 +64,11 @@ void UnGlow(int entity)
 	if (GetEntProp(entity, Prop_Send, "m_iGlowType") != 0) wasGlowing = true;
 	SetEntProp(entity, Prop_Send, "m_iGlowType", 0);
 	// 鷹眼結束時會對所有殭屍呼叫，只有真的亮過的才需要多傳
-	if (wasGlowing) Glow_SendToAll(entity);
+	if (wasGlowing) Glow_SendToAll(entity, false);
 }
 
-// 熄光（或死亡）的狀態要送到每個玩家：暫時傳給所有人，GLOW_SEND_ALL_SECS 秒後恢復原本的傳送方式
-static void Glow_SendToAll(int entity)
+// 傳給所有人。hold：發光中，一直傳到熄掉；不是 hold：熄掉（或死亡）了，再傳 GLOW_SEND_ALL_SECS 秒就恢復原本的傳送方式
+static void Glow_SendToAll(int entity, bool hold)
 {
 	if (entity <= MaxClients || entity >= MAXENTITIES || !IsValidEdict(entity)) return;
 
@@ -79,7 +81,8 @@ static void Glow_SendToAll(int entity)
 		s_iSendAllRef[entity] = ref;
 	}
 	delete s_hSendAllTimer[entity];
-	s_hSendAllTimer[entity] = CreateTimer(GLOW_SEND_ALL_SECS, Timer_GlowSendAllEnd, entity);
+	if (!hold)
+		s_hSendAllTimer[entity] = CreateTimer(GLOW_SEND_ALL_SECS, Timer_GlowSendAllEnd, entity);
 }
 
 static Action Timer_GlowSendAllEnd(Handle timer, any entity)

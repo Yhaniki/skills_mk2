@@ -755,6 +755,29 @@ static char s_sGlow[][] =
 	"gcount t2.6",
 	"wait 7.0",
 
+	// 發光中受傷、被移動，傳送旗標要一直保持 FL_EDICT_ALWAYS
+	"scen glow_hold",
+	"commons 2 10",
+	"wait 1.0",
+	"mp 2 100",
+	"cmd 2 skill1",
+	"wait 0.3",
+	"gcount act",
+	"hurtcommons 2 1",
+	"movecommons",
+	"gcount t0.3",
+	"wait 2.0",
+	"movecommons",
+	"gcount t2.3",
+	"wait 2.0",
+	"gcount t4.3",
+	"wait 3.2",
+	"gcount end",
+	"wait 2.5",
+	"gcount after",
+	"killcommons 2",
+	"wait 2.5",
+
 	// 施放結束：全部熄掉
 	"scen glow_end",
 	"commons 2 10",
@@ -1240,6 +1263,35 @@ static float T_Exec(const char[] line)
 			for (int i = 1; i <= MaxClients; i++)
 				if (IsAliveSpecialInf(i)) ForcePlayerSuicide(i);
 		}
+	}
+	else if (StrEqual(a[0], "hurtcommons"))
+	{
+		// 對每一隻還活著的普通殭屍造成一點傷害（不會死），攻擊者是 b
+		if (b)
+		{
+			for (int i = 0; i < s_iCommonN; i++)
+			{
+				int e = EntRefToEntIndex(s_iCommon[i]);
+				if (e != INVALID_ENT_REFERENCE && GetEntProp(e, Prop_Data, "m_iHealth") > StringToInt(a[2]))
+					DealDamage(e, StringToInt(a[2]), b, DMG_BULLET);
+			}
+		}
+	}
+	else if (StrEqual(a[0], "movecommons"))
+	{
+		// 每一隻普通殭屍移到下一隻的位置（位置一定是合法的地板）
+		int ents[TEST_MAX_COMMONS], cnt = 0;
+		float pos[TEST_MAX_COMMONS][3];
+		for (int i = 0; i < s_iCommonN; i++)
+		{
+			int e = EntRefToEntIndex(s_iCommon[i]);
+			if (e == INVALID_ENT_REFERENCE) continue;
+			ents[cnt] = e;
+			GetEntPropVector(e, Prop_Send, "m_vecOrigin", pos[cnt]);
+			cnt++;
+		}
+		for (int i = 0; i < cnt; i++)
+			TeleportEntity(ents[i], pos[(i + 1) % cnt], NULL_VECTOR, NULL_VECTOR);
 	}
 	else if (StrEqual(a[0], "forcetx"))
 	{
