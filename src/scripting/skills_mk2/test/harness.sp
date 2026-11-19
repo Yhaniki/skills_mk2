@@ -38,6 +38,16 @@ static int   s_iWitchCaster;
 static int   s_iHarassN;
 static int   s_iHarasser;
 
+// 近戰：hold 的 bot 不移動、固定視角、只照劇本揮刀；揮刀次數、近戰判定次數、畫面中央文字的次數
+static bool  s_bHold[MAXPLAYERS + 1];
+static float s_vHoldAng[MAXPLAYERS + 1][3];
+static int   s_iSwingTicks[MAXPLAYERS + 1];
+static float s_fSwingId[MAXPLAYERS + 1];
+static int   s_iSwingN[MAXPLAYERS + 1];
+static int   s_iMeleeCalls[MAXPLAYERS + 1];
+static int   s_iCenterN[MAXPLAYERS + 1];
+static Handle s_hMeleeDetour;
+
 //===========================================================
 //========================= 劇本 ============================
 //===========================================================
@@ -68,6 +78,11 @@ static int   s_iHarasser;
 //   wcount <名稱>        記錄女巫還在不在、血量、怒氣、生女巫的 bot 是否瞄著她、被驚嚇幾次、最後是誰驚嚇她
 //   killwitch            刪掉女巫
 //   give <k> <物品>      給 bot 物品並切換過去
+//   melee <k> <名稱>     給 bot 近戰武器（fireaxe、katana…）並切換過去
+//   approach <k> <距離>  把 bot k 移到女巫前方「距離」單位、瞄準女巫，並 hold
+//   hold <k>             bot k 不移動、固定目前的視角、不按任何按鍵（只照劇本揮刀）；prep 會解除
+//   swing <k>            bot k 揮一刀（按住攻擊鍵 4 個 tick，要先 hold）
+//   mcount <k> <名稱>    記錄 bot k 揮了幾刀、近戰判定被呼叫幾次、畫面中央文字幾次、女巫血量、melee_range（記完歸零）
 //   weapons <k> <名稱>   記錄 bot 每一格的武器、手上的武器、主武器備用彈藥，以及 150 單位內地上沒人拿的武器
 //   cp <名稱>            記錄檢查點（每個 bot 的技能狀態與 HUD 文字）
 //   wait <秒>            等待
@@ -636,6 +651,77 @@ static char s_sDrop[][] =
 	"prep",
 };
 
+// 近戰：魔心護盾開啟時近戰揮空（女巫不扣血）、一刀只顯示一次 MISS、護盾玩家客戶端的 melee_range
+// bot 被測試腳本 hold 住，只照劇本揮刀；女巫的怒氣累積與「靠太近就驚醒」（預設 100 單位）都關掉
+static char s_sMelee[][] =
+{
+	"findbots",
+	"home",
+	"prep",
+	"cvar z_witch_anger_rate 0",
+	"cvar z_witch_personal_space 0",
+	"melee 0 fireaxe",
+	"wait 1.5",
+	"weapons 0 melee",
+
+	// 沒有護盾：砍得到女巫
+	"scen melee_normal",
+	"change 0 0",
+	"wait 0.5",
+	"witch 0",
+	"wait 1.0",
+	"approach 0 45",
+	"wait 0.5",
+	"mcount 0 start",
+	"swing 0",
+	"wait 1.5",
+	"swing 0",
+	"wait 1.5",
+	"mcount 0 after",
+	"wcount after",
+	"killwitch",
+	"prep",
+	"wait 0.5",
+
+	// 魔心護盾：砍不到女巫
+	"scen melee_shield",
+	"change 0 1",
+	"mp 0 100",
+	"wait 0.6",
+	"witch 0",
+	"wait 1.0",
+	"approach 0 45",
+	"wait 0.5",
+	"mcount 0 start",
+	"swing 0",
+	"wait 1.5",
+	"swing 0",
+	"wait 1.5",
+	"mcount 0 after",
+	"wcount after",
+	"killwitch",
+	"prep",
+	"wait 0.5",
+
+	// 魔心護盾、對著地板揮（前面沒有東西）
+	"scen melee_air",
+	"hold 0",
+	"wait 0.5",
+	"mcount 0 start",
+	"swing 0",
+	"wait 1.5",
+	"mcount 0 after",
+	"prep",
+
+	// 關掉護盾
+	"scen melee_off",
+	"change 0 0",
+	"wait 0.5",
+	"mcount 0 after",
+	"cvarreset z_witch_anger_rate",
+	"cvarreset z_witch_personal_space",
+};
+
 static char s_sFinish[][] =
 {
 	"scen finish",
@@ -684,6 +770,11 @@ static bool T_GetLine(int idx, char[] line, int maxlen)
 		if (idx >= sizeof(s_sDrop)) return false;
 		strcopy(line, maxlen, s_sDrop[idx]);
 	}
+	else if (StrEqual(s_sPhase, "melee"))
+	{
+		if (idx >= sizeof(s_sMelee)) return false;
+		strcopy(line, maxlen, s_sMelee[idx]);
+	}
 	else if (StrEqual(s_sPhase, "finish"))
 	{
 		if (idx >= sizeof(s_sFinish)) return false;
@@ -703,9 +794,64 @@ static bool T_GetLine(int idx, char[] line, int maxlen)
 public void OnAllPluginsLoaded()
 {
 	BuildPath(Path_SM, s_sLog, sizeof(s_sLog), "logs/skills_test.log");
-	RegServerCmd("sm_skilltest", Cmd_SkillTest, "skills_mk2 自動測試：sm_skilltest <main|ex_down|ex_prep|after_reload|after_map|ex_restart|dissolve|steal_witch|drop|finish>");
+	RegServerCmd("sm_skilltest", Cmd_SkillTest, "skills_mk2 自動測試：sm_skilltest <main|ex_down|ex_prep|after_reload|after_map|ex_restart|dissolve|steal_witch|drop|melee|finish>");
 	HookEvent("player_death", T_Event_Death);
 	HookEvent("witch_harasser_set", T_Event_WitchHarasser);
+
+	// 另外掛一個近戰判定的 detour，只用來計數（技能系統自己的 detour 照常運作）
+	Handle gd = LoadGameConfigFile(GAMEDATA_MELEE);
+	if (gd != null)
+	{
+		s_hMeleeDetour = DHookCreateFromConf(gd, "CTerrorMeleeWeapon::TestMeleeSwingCollision");
+		delete gd;
+		if (s_hMeleeDetour != null) DHookEnableDetour(s_hMeleeDetour, false, T_MeleeSwingPre);
+	}
+}
+
+static MRESReturn T_MeleeSwingPre(int pThis, Handle hReturn)
+{
+	if (!s_sPhase[0] || !IsValidEntity(pThis)) return MRES_Ignored;
+	int owner = GetEntPropEnt(pThis, Prop_Send, "m_hOwnerEntity");
+	if (owner < 1 || owner > MaxClients || !s_bHold[owner]) return MRES_Ignored;
+	s_iMeleeCalls[owner]++;
+	// 同一刀的 m_flNextPrimaryAttack 不變，換一刀才會變
+	float id = GetEntPropFloat(pThis, Prop_Send, "m_flNextPrimaryAttack");
+	if (id != s_fSwingId[owner])
+	{
+		s_fSwingId[owner] = id;
+		s_iSwingN[owner]++;
+		float ang[3];
+		GetClientEyeAngles(owner, ang);
+		char who[8];
+		T_Who(owner, who, sizeof(who));
+		T_Log("SWING %s/%s %s pitch=%.0f yaw=%.0f", s_sPhase, s_sScen, who, ang[0], ang[1]);
+	}
+	return MRES_Ignored;
+}
+
+// hold 的 bot：不移動、視角固定、只按劇本要的攻擊鍵、手上一定拿近戰武器（有的話）
+public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3], float angles[3], int &weapon, int &subtype, int &cmdnum, int &tickcount, int &seed, int mouse[2])
+{
+	if (client < 1 || client > MaxClients || !s_bHold[client]) return Plugin_Continue;
+	buttons = 0;
+	if (s_iSwingTicks[client] > 0)
+	{
+		buttons = IN_ATTACK;
+		s_iSwingTicks[client]--;
+	}
+	vel[0] = 0.0;
+	vel[1] = 0.0;
+	vel[2] = 0.0;
+	for (int i = 0; i < 3; i++) angles[i] = s_vHoldAng[client][i];
+	TeleportEntity(client, NULL_VECTOR, s_vHoldAng[client], NULL_VECTOR);
+	int m = GetPlayerWeaponSlot(client, 1);
+	if (m > 0 && GetEntPropEnt(client, Prop_Send, "m_hActiveWeapon") != m)
+	{
+		char cls[32];
+		GetEntityClassname(m, cls, sizeof(cls));
+		if (StrEqual(cls, "weapon_melee")) weapon = m;
+	}
+	return Plugin_Changed;
 }
 
 static void T_Event_WitchHarasser(Event event, const char[] name, bool dontBroadcast)
@@ -959,6 +1105,30 @@ static float T_Exec(const char[] line)
 	else if (StrEqual(a[0], "weapons"))
 	{
 		if (b) T_Weapons(b, a[2]);
+	}
+	else if (StrEqual(a[0], "melee"))
+	{
+		if (b) T_GiveMelee(b, a[2]);
+	}
+	else if (StrEqual(a[0], "approach"))
+	{
+		if (b) T_Approach(b, StringToFloat(a[2]));
+	}
+	else if (StrEqual(a[0], "hold"))
+	{
+		if (b)
+		{
+			GetClientEyeAngles(b, s_vHoldAng[b]);
+			s_bHold[b] = true;
+		}
+	}
+	else if (StrEqual(a[0], "swing"))
+	{
+		if (b) s_iSwingTicks[b] = 4;
+	}
+	else if (StrEqual(a[0], "mcount"))
+	{
+		if (b) T_MeleeCount(b, a[2]);
 	}
 	else if (StrEqual(a[0], "hp"))
 	{
@@ -1303,10 +1473,84 @@ static void T_Weapons(int b, const char[] label)
 		s_sPhase, s_sScen, label, who, slots, cls, actClip, dual, reserve, n, ground, pistols);
 }
 
+static void T_GiveMelee(int b, const char[] script)
+{
+	int flags = GetCommandFlags("give");
+	SetCommandFlags("give", flags & ~FCVAR_CHEAT);
+	FakeClientCommand(b, "give %s", script);
+	SetCommandFlags("give", flags);
+	FakeClientCommand(b, "use weapon_melee");
+
+	int m = GetPlayerWeaponSlot(b, 1);
+	char cls[48] = "-", name[48] = "-", who[8];
+	if (m > 0)
+	{
+		GetEntityClassname(m, cls, sizeof(cls));
+		if (HasEntProp(m, Prop_Data, "m_strMapSetScriptName"))
+			GetEntPropString(m, Prop_Data, "m_strMapSetScriptName", name, sizeof(name));
+	}
+	T_Who(b, who, sizeof(who));
+	T_Log("MELEE %s/%s %s slot1=%s script=%s", s_sPhase, s_sScen, who, cls, name);
+	if (!StrEqual(cls, "weapon_melee")) T_Log("FAIL melee：給不了 %s", script);
+}
+
+// 把 b 移到女巫前方 dist 單位（沿著女巫到 b 的方向）、瞄準女巫身體中心，並 hold
+static void T_Approach(int b, float dist)
+{
+	int w = EntRefToEntIndex(s_iWitch);
+	if (w == INVALID_ENT_REFERENCE)
+	{
+		T_Log("FAIL approach：沒有女巫");
+		return;
+	}
+	float wpos[3], bpos[3], dir[3], pos[3], zero[3];
+	GetEntPropVector(w, Prop_Send, "m_vecOrigin", wpos);
+	GetClientAbsOrigin(b, bpos);
+	dir[0] = bpos[0] - wpos[0];
+	dir[1] = bpos[1] - wpos[1];
+	NormalizeVector(dir, dir);
+	pos[0] = wpos[0] + dir[0] * dist;
+	pos[1] = wpos[1] + dir[1] * dist;
+	pos[2] = wpos[2] + 2.0;
+	TeleportEntity(b, pos, NULL_VECTOR, zero);
+
+	float eye[3], mins[3], maxs[3], aim[3];
+	GetClientEyePosition(b, eye);
+	GetEntPropVector(w, Prop_Send, "m_vecMins", mins);
+	GetEntPropVector(w, Prop_Send, "m_vecMaxs", maxs);
+	for (int i = 0; i < 3; i++) aim[i] = wpos[i] + (mins[i] + maxs[i]) * 0.5 - eye[i];
+	GetVectorAngles(aim, s_vHoldAng[b]);
+	TeleportEntity(b, NULL_VECTOR, s_vHoldAng[b], NULL_VECTOR);
+	s_bHold[b] = true;
+	char who[8];
+	T_Who(b, who, sizeof(who));
+	T_Log("APPROACH %s/%s %s dist=%.0f pitch=%.0f witch_box=%.0f..%.0f", s_sPhase, s_sScen, who, dist,
+		s_vHoldAng[b][0], mins[2], maxs[2]);
+}
+
+static void T_MeleeCount(int b, const char[] label)
+{
+	int w = EntRefToEntIndex(s_iWitch);
+	int hp = w != INVALID_ENT_REFERENCE ? GetEntProp(w, Prop_Data, "m_iHealth") : -1;
+	ConVar range = FindConVar("melee_range");
+	char cls[32] = "-", who[8];
+	int act = GetEntPropEnt(b, Prop_Send, "m_hActiveWeapon");
+	if (act > 0) GetEntityClassname(act, cls, sizeof(cls));
+	T_Who(b, who, sizeof(who));
+	T_Log("MCOUNT %s/%s/%s %s swings=%d calls=%d center=%d witch_hp=%d melee_range=%d replicated=%d shield=%d active=%s",
+		s_sPhase, s_sScen, label, who, s_iSwingN[b], s_iMeleeCalls[b], s_iCenterN[b], hp,
+		range.IntValue, (range.Flags & FCVAR_REPLICATED) != 0, State_ManaShield[b], cls);
+	s_iSwingN[b] = 0;
+	s_iMeleeCalls[b] = 0;
+	s_iCenterN[b] = 0;
+}
+
 static void T_Prep(int k)
 {
 	int b = s_iBot[k];
 	if (b <= 0 || !IsClientInGame(b)) return;
+	s_bHold[b] = false;
+	s_iSwingTicks[b] = 0;
 	if (!IsPlayerAlive(b))
 		L4D_RespawnPlayer(b);
 	else if (T_IsIncapped(b))
@@ -1428,6 +1672,33 @@ stock void Test_PrintHintText(int client, const char[] format, any ...)
 	char who[8];
 	T_Who(client, who, sizeof(who));
 	T_Log("HINT %s/%s %s %s", s_sPhase, s_sScen, who, norm);
+}
+
+stock void Test_PrintCenterText(int client, const char[] format, any ...)
+{
+	char buf[512];
+	SetGlobalTransTarget(client);
+	VFormat(buf, sizeof(buf), format, 3);
+	PrintCenterText(client, "%s", buf);
+	if (client < 1 || client > MaxClients || !s_sPhase[0]) return;
+	s_iCenterN[client]++;
+	char who[8];
+	T_Who(client, who, sizeof(who));
+	T_Log("CENTER %s/%s %s %s", s_sPhase, s_sScen, who, buf);
+}
+
+// bot 沒有網路通道，SendConVarValue 對 bot 會丟錯誤；只記 log，真人才真的送
+stock bool Test_SendConVarValue(int client, ConVar convar, const char[] value)
+{
+	if (s_sPhase[0])
+	{
+		char name[64], who[8];
+		convar.GetName(name, sizeof(name));
+		T_Who(client, who, sizeof(who));
+		T_Log("SENDCVAR %s/%s %s %s=%s", s_sPhase, s_sScen, who, name, value);
+	}
+	if (IsFakeClient(client)) return false;
+	return SendConVarValue(client, convar, value);
 }
 
 stock void Test_PrintToChat(int client, const char[] format, any ...)

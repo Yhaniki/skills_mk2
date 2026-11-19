@@ -277,9 +277,10 @@ spcomp skills_mk2/main.sp -o ../plugins/skills_mk2.smx
 - `servertest.py phase --phase 階段`：只跑指定的測試腳本階段（不做 reload、換圖、重開回合）。
   - `ex_down`（也在 skills 的完整流程裡）：倒地、倒地血量很低、黑白時施放隱藏版爆裂。
   - `dissolve`（不在完整流程裡）：在 bot 周圍生普通殭屍，直接呼叫 `Turn_Undead` 或實際施放淨化，記錄溶解了幾隻、正常死亡幾隻、隊友的 MP。用 `nb_stop` 讓殭屍和 bot 都不動。
+  - `melee`（不在完整流程裡）：bot 拿斧頭站在女巫面前，由測試腳本固定位置與視角、按攻擊鍵揮刀（bot 自己不會揮近戰）。記錄揮了幾刀、近戰判定被呼叫幾次（一刀二十幾次）、畫面中央的 MISS 次數、女巫血量、送給客戶端的 `melee_range`。沒護盾要扣血；開護盾不扣血、砍到女巫一刀一次 MISS、對著地板揮不顯示。
 - `compare.py`：比對兩次 skills 的結果（通常是 0.7 對新版）。MP 容許 ±1；血量只比測試腳本造成傷害時的變化量（爆裂的瓦斯罐有沒有炸到 bot 每次不同）。
 - 測試時的伺服器設定：只綁 `127.0.0.1:27115`、`sb_all_bot_game 1`（沒有真人時才不會休眠）、`sb_stop 1`、關掉殭屍與特感、`director_no_death_check 1`（隱藏版爆裂會把所有倖存者炸倒）。測試期間暫時換掉 `plugins/skills_mk2.smx`，結束後一律還原。
-- 還是要人進遊戲驗證的部分：粒子、魔法陣、天氣、HUD 外觀、音效、近戰揮空、真人連線與重連流程。
+- 還是要人進遊戲驗證的部分：粒子、魔法陣、天氣、HUD 外觀、音效、近戰揮空的畫面（不噴血、MISS 文字）、真人連線與重連流程。
 - 測試環境跟真人的差異：bot 觸發 `OnClientPostAdminCheck` 時還不在遊戲中，所以插件不會幫 bot 掛受傷 hook，測試腳本會自己補掛。
 
 ## 伺服器測試清單（每步完成後）
@@ -294,5 +295,5 @@ spcomp skills_mk2/main.sp -o ../plugins/skills_mk2.smx
 - [ ] 斷線重連後，MP 條和技能都正常。（自動：bot 斷線後補新的 bot；人工：真人斷線重連）
 - [ ] `sm plugins reload skills_mk2` 後狀態正常。（自動）
 - [ ] 伺服器 console 沒有新的 error 或 exception。（自動）
-- [ ] 魔心護盾開啟時近戰揮空。（人工：bot 不會揮近戰）
+- [ ] 魔心護盾開啟時近戰揮空。（自動：`phase --phase melee`，伺服器端不扣血、一刀一次 MISS；人工：自己畫面不噴血、MISS 文字的位置與停留時間）
 - [ ] 淨化普通殭屍時溶解特效正常，殭屍不會先倒成一般的屍體。（自動：擊殺、MP、溶解器數量；人工：實際畫面）

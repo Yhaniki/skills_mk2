@@ -4,9 +4,10 @@
 //   spcomp skills_mk2/test/main_test.sp -o skills_mk2_test.smx
 // 用法見 tools/servertest/servertest.py。這個版本只給自動測試用，不要放上正式伺服器。
 //
-// 跟正式版的差別只有下面三個替換，加上最後 include 的 test/harness.sp：
+// 跟正式版的差別只有下面這些替換，加上最後 include 的 test/harness.sp：
 // - IsFakeClient 永遠回傳 false：技能系統原本會略過 bot，換掉之後 bot 也能施放技能
-// - PrintHintText / PrintToChat / PrintToChatAll：照常送出，另外把文字記進測試 log
+// - PrintHintText / PrintCenterText / PrintToChat / PrintToChatAll：照常送出，另外把文字記進測試 log
+// - SendConVarValue：記進測試 log；對 bot 不送（bot 沒有網路通道，會丟錯誤）
 //
 // 第三方 include 要先在這裡 include，替換才不會套用到它們（main.sp 再 include 時會被 include guard 略過）。
 
@@ -25,6 +26,8 @@
 #define SKILLS_TEST
 #define IsFakeClient   Test_IsFakeClient
 #define PrintHintText  Test_PrintHintText
+#define PrintCenterText Test_PrintCenterText
+#define SendConVarValue Test_SendConVarValue
 #define PrintToChat    Test_PrintToChat
 #define PrintToChatAll Test_PrintToChatAll
 
@@ -32,6 +35,8 @@
 
 #undef IsFakeClient
 #undef PrintHintText
+#undef PrintCenterText
+#undef SendConVarValue
 #undef PrintToChat
 #undef PrintToChatAll
 
