@@ -124,6 +124,11 @@ public void OnPluginStart()
 	HookEvent("player_death", 				Event_DeathUnglow);
 	HookEvent("infected_death", 			Event_DeathUnglow);
 	HookEvent("round_start",				Event_SkillsRoundStart, EventHookMode_PostNoCopy);
+	// 逃脫、結算、任務失敗的畫面算過場（Player_InCutscene），下一個 round_start 恢復（Event_SkillsRoundStart 裡）
+	HookEvent("round_end",					Event_RoundOver, EventHookMode_PostNoCopy);
+	HookEvent("finale_vehicle_leaving",		Event_RoundOver, EventHookMode_PostNoCopy);
+	HookEvent("finale_win",					Event_RoundOver, EventHookMode_PostNoCopy);
+	HookEvent("mission_lost",				Event_RoundOver, EventHookMode_PostNoCopy);
 
 	RegConsoleCmd("skill1",					Event_SkillStateTransition);
 	RegConsoleCmd("skill2",					Event_SkillStateTransition);
@@ -158,6 +163,7 @@ public void OnConfigsExecuted()
 public void OnMapStart()
 {
 	Timescale_OnMapStart();
+	Player_OnRoundStart();
 	Skills_Precache();
 	Dissolve_OnMapStart();
 	CheckPlayerConnections();

@@ -496,6 +496,7 @@ void Skills_MapEndCleanup()
 public void Event_SkillsRoundStart(Event event, const char[] name, bool dontBroadcast)
 {
 	Skills_RoundStartCleanup();
+	Player_OnRoundStart();
 }
 
 void Skills_RoundStartCleanup()

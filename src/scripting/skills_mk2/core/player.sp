@@ -8,6 +8,7 @@ player_state State_Player[MAX_PLAYERS + 1];
 bool Invulnerable[MAX_PLAYERS + 1];
 
 static bool Hooked[MAX_PLAYERS + 1];
+static bool s_bRoundOver;   // 回合已結束：逃脫、結算、任務失敗的畫面，到下一個 round_start 為止
 
 //===========================================================
 //==================== State Transition =====================
@@ -70,6 +71,29 @@ public void Event_NoDraw(Event event, const char[] name, bool dontBroadcast)
 	for (int i = 1; i <= MAX_PLAYERS; i++) {
 		State_Transition[i] = true;
 	}
+}
+
+// round_end / finale_vehicle_leaving / finale_win / mission_lost
+public void Event_RoundOver(Event event, const char[] name, bool dontBroadcast)
+{
+	s_bRoundOver = true;
+}
+
+// round_start 與 OnMapStart
+void Player_OnRoundStart()
+{
+	s_bRoundOver = false;
+}
+
+// 過場中：地圖的過場鏡頭（point_viewcontrol 系列）接管了玩家的視角，或回合已經結束（逃脫、結算、任務失敗的畫面）。
+// 這時不顯示 MP 條、不能放技能。
+// 官方地圖的過場另外會觸發 gameinstructor_nodraw（State_Transition），非官方地圖常常沒有，只能看視角
+bool Player_InCutscene(int client)
+{
+	if (s_bRoundOver) return true;
+	if (client < 1 || client > MaxClients || !IsClientInGame(client)) return false;
+	int view = GetEntPropEnt(client, Prop_Send, "m_hViewEntity");
+	return view > 0 && view != client;
 }
 
 public void Event_StateTransition(Event event, const char[] name, bool dontBroadcast)

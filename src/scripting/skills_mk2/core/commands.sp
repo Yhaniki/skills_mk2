@@ -4,7 +4,7 @@ public Action Event_SkillStateTransition(int client, int args)
 {
 	char cmd[MAXCMD];
 	GetCmdArg(0, cmd, MAXCMD);
-	if (State_Transition[client] || (State_Player[client] == PLAYER_DEAD)) return Plugin_Handled;
+	if (State_Transition[client] || (State_Player[client] == PLAYER_DEAD) || Player_InCutscene(client)) return Plugin_Handled;
 
 	if (StrEqual(cmd, "skill1"))
 	{
