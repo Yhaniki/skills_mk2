@@ -56,6 +56,8 @@ static int   s_iInfDeathsBy;
 //   purify <k>           對每一隻生出來的普通殭屍呼叫 Turn_Undead（跟淨化第 2.5 秒的步驟一樣），攻擊者是 bot k
 //   killcommons <k>      用一般傷害打死每一隻生出來的普通殭屍（不經過淨化），攻擊者是 bot k
 //   dcount <名稱>        記錄生出來的普通殭屍還剩幾隻、溶解器數量、普通殭屍的 player_death 次數、b1 的 MP
+//   give <k> <物品>      給 bot 物品並切換過去
+//   weapons <k> <名稱>   記錄 bot 每一格的武器、手上的武器、主武器備用彈藥，以及 150 單位內地上沒人拿的武器
 //   cp <名稱>            記錄檢查點（每個 bot 的技能狀態與 HUD 文字）
 //   wait <秒>            等待
 //
@@ -536,6 +538,38 @@ static char s_sDissolve[][] =
 	"cvar nb_blind 0",
 };
 
+// 丟槍：skills_mk2 不再處理 drop（下了沒反應），改用伺服器上社群插件 l4d_drop 的 sm_drop
+// （伺服器沒裝 l4d_drop 的話 sm_drop 也丟不掉，這個階段的結果就沒有意義）
+static char s_sDrop[][] =
+{
+	"findbots",
+	"home",
+	"prep",
+	"scen drop_cmd",
+	"give 0 weapon_smg",
+	"wait 2.0",
+	"weapons 0 given",
+	"cmd 0 drop",
+	"wait 1.0",
+	"weapons 0 after",
+
+	"scen sm_drop",
+	"cmd 0 sm_drop",
+	"wait 1.0",
+	"weapons 0 after",
+
+	// 雙手手槍：丟一把、留一把
+	"scen sm_drop_dual",
+	"give 0 weapon_pistol",
+	"give 0 weapon_pistol",
+	"wait 2.0",
+	"weapons 0 given",
+	"cmd 0 sm_drop",
+	"wait 1.0",
+	"weapons 0 after",
+	"prep",
+};
+
 static char s_sFinish[][] =
 {
 	"scen finish",
@@ -574,6 +608,11 @@ static bool T_GetLine(int idx, char[] line, int maxlen)
 		if (idx >= sizeof(s_sDissolve)) return false;
 		strcopy(line, maxlen, s_sDissolve[idx]);
 	}
+	else if (StrEqual(s_sPhase, "drop"))
+	{
+		if (idx >= sizeof(s_sDrop)) return false;
+		strcopy(line, maxlen, s_sDrop[idx]);
+	}
 	else if (StrEqual(s_sPhase, "finish"))
 	{
 		if (idx >= sizeof(s_sFinish)) return false;
@@ -593,7 +632,7 @@ static bool T_GetLine(int idx, char[] line, int maxlen)
 public void OnAllPluginsLoaded()
 {
 	BuildPath(Path_SM, s_sLog, sizeof(s_sLog), "logs/skills_test.log");
-	RegServerCmd("sm_skilltest", Cmd_SkillTest, "skills_mk2 自動測試：sm_skilltest <main|ex_down|ex_prep|after_reload|after_map|ex_restart|dissolve|finish>");
+	RegServerCmd("sm_skilltest", Cmd_SkillTest, "skills_mk2 自動測試：sm_skilltest <main|ex_down|ex_prep|after_reload|after_map|ex_restart|dissolve|drop|finish>");
 	HookEvent("player_death", T_Event_Death);
 }
 
@@ -801,6 +840,18 @@ static float T_Exec(const char[] line)
 	{
 		T_DissolveCount(a[1]);
 	}
+	else if (StrEqual(a[0], "give"))
+	{
+		if (b)
+		{
+			if (GivePlayerItem(b, a[2]) == -1) T_Log("FAIL give：%s", a[2]);
+			FakeClientCommand(b, "use %s", a[2]);
+		}
+	}
+	else if (StrEqual(a[0], "weapons"))
+	{
+		if (b) T_Weapons(b, a[2]);
+	}
 	else if (StrEqual(a[0], "hp"))
 	{
 		if (b) SetEntityHealth(b, StringToInt(a[2]));
@@ -980,6 +1031,61 @@ static void T_DissolveCount(const char[] label)
 	T_Log("DCOUNT %s/%s/%s spawned=%d exist=%d alive=%d alive_inrange=%d slots=%d/%d dissolvers=%d inf_deaths=%d by_caster=%d mp_b1=%.1f",
 		s_sPhase, s_sScen, label, s_iCommonN, exist, alive, inrange, slots, MAX_DISSOLVE, dissolvers,
 		s_iInfDeaths, s_iInfDeathsBy, (b1 > 0 && IsClientInGame(b1)) ? Skill_MP[b1] : -1.0);
+}
+
+static void T_Weapons(int b, const char[] label)
+{
+	char slots[256], cls[48];
+	for (int s = 0; s < 5; s++)
+	{
+		int w = GetPlayerWeaponSlot(b, s);
+		if (w > 0) GetEntityClassname(w, cls, sizeof(cls));
+		else strcopy(cls, sizeof(cls), "-");
+		Format(slots, sizeof(slots), "%s s%d=%s", slots, s, cls);
+	}
+	int act = GetEntPropEnt(b, Prop_Send, "m_hActiveWeapon");
+	if (act > 0) GetEntityClassname(act, cls, sizeof(cls));
+	else strcopy(cls, sizeof(cls), "-");
+	int actClip = act > 0 ? GetEntProp(act, Prop_Send, "m_iClip1") : -1;
+	int pistol = GetPlayerWeaponSlot(b, 1);
+	int dual = pistol > 0 && HasEntProp(pistol, Prop_Send, "m_isDualWielding") ? GetEntProp(pistol, Prop_Send, "m_isDualWielding") : -1;
+	int primary = GetPlayerWeaponSlot(b, 0);
+	int reserve = primary > 0 ? GetPlayerReserveAmmo(b, primary) : -1;
+
+	// 地上沒人拿的武器（排除地圖上的 weapon_*_spawn 補給點）
+	char ground[512], gcls[48];
+	float org[3], p[3];
+	GetClientAbsOrigin(b, org);
+	int n = 0;
+	for (int e = MaxClients + 1; e < GetMaxEntities(); e++)
+	{
+		if (!IsValidEdict(e)) continue;
+		GetEdictClassname(e, gcls, sizeof(gcls));
+		if (StrContains(gcls, "weapon_") != 0 || StrContains(gcls, "_spawn") != -1) continue;
+		if (!HasEntProp(e, Prop_Send, "m_hOwnerEntity") || GetEntPropEnt(e, Prop_Send, "m_hOwnerEntity") != -1) continue;
+		GetEntPropVector(e, Prop_Send, "m_vecOrigin", p);
+		if (GetVectorDistance(p, org) > 150.0) continue;
+		int clip = HasEntProp(e, Prop_Send, "m_iClip1") ? GetEntProp(e, Prop_Send, "m_iClip1") : -1;
+		int extra = HasEntProp(e, Prop_Send, "m_iExtraPrimaryAmmo") ? GetEntProp(e, Prop_Send, "m_iExtraPrimaryAmmo") : -1;
+		Format(ground, sizeof(ground), "%s %s(clip=%d,extra=%d)", ground, gcls, clip, extra);
+		n++;
+	}
+	// 所有手槍（不限距離）：誰拿著、離 b 多遠、彈匣
+	char pistols[512], owner[8];
+	int pe = -1;
+	while ((pe = FindEntityByClassname(pe, "weapon_pistol")) != -1)
+	{
+		int o = GetEntPropEnt(pe, Prop_Send, "m_hOwnerEntity");
+		if (o > 0 && o <= MaxClients) T_Who(o, owner, sizeof(owner));
+		else IntToString(o, owner, sizeof(owner));
+		GetEntPropVector(pe, Prop_Send, "m_vecOrigin", p);
+		Format(pistols, sizeof(pistols), "%s pistol(owner=%s,dist=%.0f,clip=%d)", pistols, owner,
+			GetVectorDistance(p, org), GetEntProp(pe, Prop_Send, "m_iClip1"));
+	}
+	char who[8];
+	T_Who(b, who, sizeof(who));
+	T_Log("WEAPONS %s/%s/%s %s%s active=%s(clip=%d) dual=%d reserve=%d ground=%d%s /%s",
+		s_sPhase, s_sScen, label, who, slots, cls, actClip, dual, reserve, n, ground, pistols);
 }
 
 static void T_Prep(int k)

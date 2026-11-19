@@ -14,6 +14,12 @@
 .\spcomp.exe skills_mk2/main.sp -o ../plugins/skills_mk2.smx
 ```
 
+## 丟槍
+
+這個插件不提供丟槍。要丟槍請另外安裝社群插件 l4d_drop（[L4D1/2] Weapon Drop，作者 Machine, dcx2, Electr000999 /z, Senip, Shao, NoroHime, HarryPotter）：
++ 指令是 `sm_drop` 或 `sm_g`（聊天輸入 `!drop`），**不是** `drop`
++ 綁定：`bind "g" "sm_drop"`
+
 ## 常用指令
 ```
 sm plugins reload skills_mk2
@@ -55,7 +61,7 @@ scripting/skills_mk2/
 │  ├─ player.sp         玩家狀態、受傷 hook、無敵
 │  ├─ mp.sp             MP 增減、回復、腎上腺素
 │  ├─ hud.sp            技能提示文字與 MP 條
-│  └─ commands.sp       skill1 / skill2 / change_skill / drop / fix / sm_skills_fillmp
+│  └─ commands.sp       skill1 / skill2 / change_skill / fix / sm_skills_fillmp
 ├─ fx/                  效果：粒子、發光、慢動作、畫面震動、腳下魔法陣、天氣
 ├─ lib/                 武器、Dissolve Infected、ResourceManager
 ├─ skills/              一個技能一個檔案
@@ -139,6 +145,9 @@ python tools/servertest/servertest.py skills --smx skills_mk2_test.smx --out 輸
 
 # 只跑指定的測試腳本階段，例如淨化與 dissolve 槽的實驗（不在 skills 的完整流程裡）
 python tools/servertest/servertest.py phase --smx skills_mk2_test.smx --out 輸出資料夾 --phase dissolve
+
+# 丟槍（drop：確認 skills_mk2 不再處理 drop，伺服器上的 l4d_drop 用 sm_drop 丟得掉）
+python tools/servertest/servertest.py phase --smx skills_mk2_test.smx --out 輸出資料夾 --phase drop
 
 # 比對兩次 skills 的結果（例如修改前後）
 python tools/servertest/compare.py 修改前的輸出資料夾 修改後的輸出資料夾

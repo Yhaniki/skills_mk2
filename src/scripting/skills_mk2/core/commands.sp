@@ -1,4 +1,4 @@
-// 玩家與管理員指令：skill1 / skill2 / change_skill / drop / fix / sm_skills_fillmp
+// 玩家與管理員指令：skill1 / skill2 / change_skill / fix / sm_skills_fillmp
 
 public Action Event_SkillStateTransition(int client, int args)
 {
@@ -17,10 +17,6 @@ public Action Event_SkillStateTransition(int client, int args)
 	else if (StrEqual(cmd, "change_skill"))
 	{
 		Skill_OpenMenu(client);
-	}
-	else if (StrEqual(cmd, "drop"))
-	{
-		DropActiveWeapon(client);
 	}
 	else if (StrEqual(cmd, "fix"))
 	{

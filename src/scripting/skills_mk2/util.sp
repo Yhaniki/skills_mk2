@@ -80,9 +80,6 @@ bool IsIncapped(int client)
 	return view_as<bool>(GetEntProp(client, Prop_Send, "m_isIncapacitated"));
 }
 
-bool IsSurvivor(int client)
-{ return (GetClientTeam(client) == 2 || GetClientTeam(client) == 4); }
-
 bool IsValidClient(int client, bool replaycheck = true)
 {
 	if (client > 0 && client <= MAX_PLAYERS && IsClientInGame(client))
@@ -95,9 +92,6 @@ bool IsValidClient(int client, bool replaycheck = true)
 	}
 	return false;
 }
-
-bool RealValidEntity(int entity)
-{ return (entity > 0 && IsValidEntity(entity)); }
 
 //===========================================================
 //======================== 位置與瞄準 =======================

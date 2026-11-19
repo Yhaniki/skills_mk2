@@ -1,11 +1,9 @@
-// 武器相關：名稱翻譯、彈藥存取、丟槍、給物品
-
-static GlobalForward OnWeaponDrop;
+// 武器相關：名稱翻譯、彈藥存取、給物品（偷竊用）
+// 玩家丟槍不在這個插件裡，改用社群插件 l4d_drop（指令 sm_drop）
 
 void Weapons_Init()
 {
 	SetWeaponNameId();
-	OnWeaponDrop = CreateGlobalForward("OnWeaponDrop", ET_Event, Param_Cell, Param_CellByRef);
 }
 
 char g_sWeaponNames[ALL_WEAPONS][] =
@@ -96,38 +94,9 @@ int GetPlayerReserveAmmo(int client, int weapon)
 	return 0;
 }
 
-void DropActiveWeapon(int client)
+// 偷竊拿到新物品時，把同一格原本的武器丟在地上（備用彈藥跟著武器走，雙手手槍拆成兩把）
+static void DropWeapon(int client, int weapon)
 {
-	if (!IsValidClient(client) || !IsSurvivor(client) || !IsPlayerAlive(client) || IsIncapped(client)) return;
-
-	//static char classname[64];
-	//GetEntityClassname(GetPlayerWeaponSlot(client, tester_wep_slot), classname, sizeof(classname));
-	//PrintToChatAll("slot: %s", classname);
-
-	int weapon = GetEntPropEnt(client, Prop_Data, "m_hActiveWeapon");
-	if (RealValidEntity(weapon))
-		DropWeapon(client, weapon);
-}
-
-void DropWeapon(int client, int weapon)
-{
-	Action actResult = Plugin_Continue;
-	Call_StartForward(OnWeaponDrop);
-	Call_PushCell(client);
-	Call_PushCellRef(weapon);
-	Call_Finish(actResult);
-	switch (actResult) {
-		case Plugin_Continue, Plugin_Changed :
-		{
-			//nothing
-		}
-		default:
-		{
-			PrintToChat(client, "Third-Party plugin prevents you from weapon dropping");
-			return;
-		}
-	}
-
 	static char classname[32];
 	GetEntityClassname(weapon, classname, sizeof(classname));
 	if (strcmp(classname, "weapon_pistol") == 0 && GetEntProp(weapon, Prop_Send, "m_isDualWielding") > 0)

@@ -133,7 +133,6 @@ public void OnPluginStart()
 	RegConsoleCmd("skill1",					Event_SkillStateTransition);
 	RegConsoleCmd("skill2",					Event_SkillStateTransition);
 	RegConsoleCmd("change_skill",			Event_SkillStateTransition);
-	RegConsoleCmd("drop",					Event_SkillStateTransition);
 	RegConsoleCmd("fix",					Event_SkillStateTransition);
 
 	// 管理員：瞬間將所有真人玩家魔力補滿（控制台或遊戲內均需 ADMFLAG_ROOT）

@@ -37,13 +37,13 @@ src/scripting/
    │  ├─ player.sp         玩家狀態事件、無敵、受傷 hook
    │  ├─ mp.sp             MP 增減、回復、腎上腺素
    │  ├─ hud.sp            技能提示文字與 MP 條
-   │  ├─ commands.sp       skill1 / skill2 / change_skill / drop / fix / sm_skills_fillmp
+   │  ├─ commands.sp       skill1 / skill2 / change_skill / fix / sm_skills_fillmp（drop 已移除，丟槍改用社群插件 l4d_drop 的 sm_drop）
    │  └─ precache.sp       資源預載（第 2 步拆進各技能的 onPrecache 後移除）
    ├─ fx/                  有自己狀態與清理的效果系統
    │  ├─ particle.sp   glow.sp   timescale.sp   screen.sp
    │  └─ magic_circle.sp   atmosphere.sp
    ├─ lib/
-   │  ├─ weapons.sp        丟槍、彈藥、給物品（drop 指令和偷竊共用）
+   │  ├─ weapons.sp        彈藥、給物品、偷竊換武器時丟掉原本的武器
    │  ├─ dissolve.sp       Silvers 的 Dissolve Infected（forward 移到 main.sp）
    │  └─ resourcemanager.sp
    ├─ skills/
@@ -151,7 +151,7 @@ spcomp skills_mk2/main.sp -o ../plugins/skills_mk2.smx
 | `fx/screen.sp` | `Fade`、`Shake`、`StaggerClient` |
 | `fx/magic_circle.sp` | 腳下魔法陣全部 |
 | `fx/atmosphere.sp` | `magic_atmosphere.sp` |
-| `lib/weapons.sp` | 武器名稱翻譯、`DropWeapon`、彈藥存取、`ForceWeaponDrop(BySlot)`、`SetItemToPlayer`、`OnWeaponDrop` forward |
+| `lib/weapons.sp` | 武器名稱翻譯、`DropWeapon`、彈藥存取、`ForceWeaponDrop(BySlot)`、`SetItemToPlayer`（`drop` 指令與 `OnWeaponDrop` forward 後來移除，丟槍改用社群插件 l4d_drop） |
 | `lib/dissolve.sp` | `l4d_dissolve_infected.sp`（forward 移到 `main.sp`）、`Turn_Undead` |
 | `lib/resourcemanager.sp` | `resourcemanager.sp` |
 | `skills/explosion.sp` | 爆裂 start、`ExplodeAim`、`Timer_ExplodeAimDelay`、`ComputeExploDmg`、`PropaneAtPos` |
