@@ -1,4 +1,4 @@
-// 偷竊 Steal：對準隊友偷走手上武器，或對準殭屍隨機取得物品
+// 偷竊 Steal：對準隊友偷走手上武器，或對準殭屍、特感、女巫隨機取得物品（偷女巫會把她驚醒）
 
 static int s_iSteal;
 
@@ -75,6 +75,16 @@ static void Steal_OnStart(int client)
 	DataPack data = Skill_Schedule(s_iSteal, client, 5.2*time_weight, Steal_StepSteal);
 	data.WriteCell(entityId);
 	data.WriteCell(CheckStealType(entityId));
+	// 女巫偷到的瞬間要驚嚇她。5.2 秒內女巫可能死掉、實體編號被別的東西重用，所以存 reference
+	data.WriteCell(IsWitch(entityId) ? EntIndexToEntRef(entityId) : INVALID_ENT_REFERENCE);
+}
+
+// 施法者對女巫造成 1 點傷害：女巫受到倖存者攻擊就會驚醒，並把攻擊者當成目標
+static void Steal_StartleWitch(int client, int witchRef)
+{
+	int witch = EntRefToEntIndex(witchRef);
+	if (witch == INVALID_ENT_REFERENCE || GetEntProp(witch, Prop_Data, "m_iHealth") <= 0) return;
+	SDKHooks_TakeDamage(witch, client, client, 1.0, DMG_BULLET);
 }
 
 int GetItemIdx(int idx)
@@ -95,6 +105,7 @@ static void Steal_StepSteal(int client, DataPack data)
 {
 	int entityId = data.ReadCell();
 	int type = data.ReadCell();
+	int witchRef = data.ReadCell();
 	// 1. Read the type and coordinates of the object aimed by the player
 	// new entityId = GetClientAimTarget(client, false);//return Entity
 	char item[MAXCMD];
@@ -155,20 +166,26 @@ static void Steal_StepSteal(int client, DataPack data)
 		{
 			// 3. If the player has aimed a zombie, randomly choose an item from the item table
 			//    The chance of obtaining an item can be based on a predetermined percentage set in the table
+			// 女巫跟殭屍一樣從物品表隨機拿，但偷完會驚嚇她（施放時瞄準的是女巫就算，她中途死了也照樣偷到）
+			bool fromWitch = (witchRef != INVALID_ENT_REFERENCE);
+			char from[16];
+			strcopy(from, sizeof(from), fromWitch ? "女巫" : "殭屍");
 			int weaponIdx = GetRandomInt(0, MAX_WEAPONS - 1);
 			int idx = GetItemIdx(weaponIdx);
 			if (idx >= 0)
 			{
 				char wname[MAXCMD];
 				GetWeaponTranslate(idx, LANG_SERVER, wname, sizeof(wname));
-				PrintToChatAll("\x04%N \x01從 \x04殭屍 \x01身上偷了 \x04%s", client, wname);
+				PrintToChatAll("\x04%N \x01從 \x04%s \x01身上偷了 \x04%s", client, from, wname);
 			}
 			else
 			{
-				PrintToChatAll("\x04%N \x01從 \x04殭屍 \x01身上偷了 \x04%s", client, g_sWeapons[weaponIdx]);
+				PrintToChatAll("\x04%N \x01從 \x04%s \x01身上偷了 \x04%s", client, from, g_sWeapons[weaponIdx]);
 			}
 			// PrintToChatAll("\x04%N \x01從殭屍身上偷了 %s", client, g_sWeapons[weaponIdx]);
 			SetItemToPlayer(client, g_sWeapons[weaponIdx], idx, -1,-1);
+			if (fromWitch)
+				Steal_StartleWitch(client, witchRef);
 		}
 		else
 		{

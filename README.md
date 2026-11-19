@@ -44,7 +44,7 @@ meta_vertion
 + 爆裂: 惠惠的爆裂魔法。
 + 魔心護盾: 使用4MP抵銷1傷害，~~但用近戰武器無傷害。~~
 + 鷹眼: 時間減慢，可以偵查周圍的所有殭屍。
-+ 偷竊: 可以對準殭屍或者隊友施放，隨機拿取物品。
++ 偷竊: 可以對準殭屍、女巫或者隊友施放，隨機拿取物品。偷女巫會把她驚醒。
 + 淨化: 淨化周圍殭屍，~~施放完後會吸引更多殭屍過來。~~
 + 隱藏版爆裂: 消費100MP使用skill2，施放隱藏版爆裂。施放過程中無敵，~~結束後會因魔力枯竭倒地。~~
 
@@ -146,8 +146,8 @@ python tools/servertest/servertest.py skills --smx skills_mk2_test.smx --out 輸
 # 只跑指定的測試腳本階段，例如淨化與 dissolve 槽的實驗（不在 skills 的完整流程裡）
 python tools/servertest/servertest.py phase --smx skills_mk2_test.smx --out 輸出資料夾 --phase dissolve
 
-# 丟槍（drop：確認 skills_mk2 不再處理 drop，伺服器上的 l4d_drop 用 sm_drop 丟得掉）
-python tools/servertest/servertest.py phase --smx skills_mk2_test.smx --out 輸出資料夾 --phase drop
+# 偷女巫（steal_witch）；丟槍（drop：確認 skills_mk2 不再處理 drop，伺服器上的 l4d_drop 用 sm_drop 丟得掉）
+python tools/servertest/servertest.py phase --smx skills_mk2_test.smx --out 輸出資料夾 --phase steal_witch --phase drop
 
 # 比對兩次 skills 的結果（例如修改前後）
 python tools/servertest/compare.py 修改前的輸出資料夾 修改後的輸出資料夾

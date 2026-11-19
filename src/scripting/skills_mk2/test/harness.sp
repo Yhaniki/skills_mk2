@@ -32,6 +32,12 @@ static int   s_iPurifier;
 static int   s_iInfDeaths;
 static int   s_iInfDeathsBy;
 
+// 偷女巫：測試生出來的女巫（reference）、生女巫的 bot、witch_harasser_set 的次數與最後驚嚇她的人
+static int   s_iWitch = INVALID_ENT_REFERENCE;
+static int   s_iWitchCaster;
+static int   s_iHarassN;
+static int   s_iHarasser;
+
 //===========================================================
 //========================= 劇本 ============================
 //===========================================================
@@ -52,10 +58,15 @@ static int   s_iInfDeathsBy;
 //   hp <k> <值>          設定血量（倒地時是倒地血量）
 //   restart              投票重開回合（L4D_RestartScenarioFromVote）
 //   cvar <名稱> <值>     設定 cvar（可以設 cheat cvar）
+//   cvarreset <名稱>     cvar 恢復預設值
 //   commons <k> <n>      在 bot k 周圍 80～600 單位的地板上生 n 隻普通殭屍，並把 k 記成施法者、死亡計數歸零
 //   purify <k>           對每一隻生出來的普通殭屍呼叫 Turn_Undead（跟淨化第 2.5 秒的步驟一樣），攻擊者是 bot k
 //   killcommons <k>      用一般傷害打死每一隻生出來的普通殭屍（不經過淨化），攻擊者是 bot k
 //   dcount <名稱>        記錄生出來的普通殭屍還剩幾隻、溶解器數量、普通殭屍的 player_death 次數、b1 的 MP
+//   witch <k>            在 bot k 前方的地板生一隻女巫（盡量離 200 單位），女巫被驚嚇的次數歸零
+//   aimwitch <k>         讓 bot k 瞄準女巫的身體中心
+//   wcount <名稱>        記錄女巫還在不在、血量、怒氣、生女巫的 bot 是否瞄著她、被驚嚇幾次、最後是誰驚嚇她
+//   killwitch            刪掉女巫
 //   give <k> <物品>      給 bot 物品並切換過去
 //   weapons <k> <名稱>   記錄 bot 每一格的武器、手上的武器、主武器備用彈藥，以及 150 單位內地上沒人拿的武器
 //   cp <名稱>            記錄檢查點（每個 bot 的技能狀態與 HUD 文字）
@@ -538,6 +549,61 @@ static char s_sDissolve[][] =
 	"cvar nb_blind 0",
 };
 
+// 偷女巫：瞄準女巫施放偷竊，第 5.2 秒偷到物品，同時施法者對女巫造成 1 點傷害（血量 1000 → 999）
+// 測不到「女巫被嚇醒」：施法者是 bot，bot 造成的傷害（SDKHooks、point_hurt、真的開槍都試過）不會嚇醒女巫，
+// 正式版只有真人能施放技能，驚嚇要進遊戲確認。wcount 的 harassed 在這裡會是 0。
+// 其他 bot 站在附近時女巫的怒氣會慢慢累積到自己醒來，所以把怒氣累積速度設成 0，避免情境之間互相影響
+static char s_sStealWitch[][] =
+{
+	"findbots",
+	"home",
+	"prep",
+	"cvar z_witch_anger_rate 0",
+	"change 2 3",
+	"wait 2.5",
+
+	// 先對照：瞄著女巫 6 秒不施放，女巫不應該醒（排除 bot 站太近就把她嚇醒的情況）
+	"scen steal_witch",
+	"mp 2 100",
+	"witch 2",
+	"wait 1.0",
+	"aimwitch 2",
+	"wcount spawned",
+	"wait 6.0",
+	"aimwitch 2",
+	"wcount idle",
+	"cmd 2 skill1",
+	"wait 0.3",
+	"cp act",
+	"wait 4.6",
+	"wcount t4.9",
+	"weapons 2 t4.9",
+	"wait 0.6",
+	"wcount t5.5",
+	"weapons 2 t5.5",
+	"cp stolen",
+	"killwitch",
+	"wait 2.5",
+	"prep",
+	"wait 1.0",
+
+	// 偷到之前女巫就消失了：照樣偷到東西，也不會出錯
+	"scen steal_witch_gone",
+	"mp 2 100",
+	"witch 2",
+	"wait 1.0",
+	"aimwitch 2",
+	"cmd 2 skill1",
+	"wait 2.0",
+	"killwitch",
+	"wait 3.5",
+	"wcount t5.5",
+	"cp stolen",
+	"wait 2.5",
+	"prep",
+	"cvarreset z_witch_anger_rate",
+};
+
 // 丟槍：skills_mk2 不再處理 drop（下了沒反應），改用伺服器上社群插件 l4d_drop 的 sm_drop
 // （伺服器沒裝 l4d_drop 的話 sm_drop 也丟不掉，這個階段的結果就沒有意義）
 static char s_sDrop[][] =
@@ -608,6 +674,11 @@ static bool T_GetLine(int idx, char[] line, int maxlen)
 		if (idx >= sizeof(s_sDissolve)) return false;
 		strcopy(line, maxlen, s_sDissolve[idx]);
 	}
+	else if (StrEqual(s_sPhase, "steal_witch"))
+	{
+		if (idx >= sizeof(s_sStealWitch)) return false;
+		strcopy(line, maxlen, s_sStealWitch[idx]);
+	}
 	else if (StrEqual(s_sPhase, "drop"))
 	{
 		if (idx >= sizeof(s_sDrop)) return false;
@@ -632,8 +703,21 @@ static bool T_GetLine(int idx, char[] line, int maxlen)
 public void OnAllPluginsLoaded()
 {
 	BuildPath(Path_SM, s_sLog, sizeof(s_sLog), "logs/skills_test.log");
-	RegServerCmd("sm_skilltest", Cmd_SkillTest, "skills_mk2 自動測試：sm_skilltest <main|ex_down|ex_prep|after_reload|after_map|ex_restart|dissolve|drop|finish>");
+	RegServerCmd("sm_skilltest", Cmd_SkillTest, "skills_mk2 自動測試：sm_skilltest <main|ex_down|ex_prep|after_reload|after_map|ex_restart|dissolve|steal_witch|drop|finish>");
 	HookEvent("player_death", T_Event_Death);
+	HookEvent("witch_harasser_set", T_Event_WitchHarasser);
+}
+
+static void T_Event_WitchHarasser(Event event, const char[] name, bool dontBroadcast)
+{
+	if (!s_sPhase[0]) return;
+	int who = GetClientOfUserId(event.GetInt("userid"));
+	s_iHarassN++;
+	s_iHarasser = who;
+	char tag[8];
+	T_Who(who, tag, sizeof(tag));
+	T_Log("HARASS %s/%s ours=%d by=%s first=%d", s_sPhase, s_sScen,
+		EntRefToEntIndex(s_iWitch) == event.GetInt("witchid"), tag, event.GetBool("first"));
 }
 
 static void T_Event_Death(Event event, const char[] name, bool dontBroadcast)
@@ -805,6 +889,12 @@ static float T_Exec(const char[] line)
 		if (cv != null) cv.SetString(a[2]);
 		else T_Log("FAIL 找不到 cvar：%s", a[1]);
 	}
+	else if (StrEqual(a[0], "cvarreset"))
+	{
+		ConVar cv = FindConVar(a[1]);
+		if (cv != null) cv.RestoreDefault();
+		else T_Log("FAIL 找不到 cvar：%s", a[1]);
+	}
 	else if (StrEqual(a[0], "commons"))
 	{
 		if (b) T_SpawnCommons(b, StringToInt(a[2]));
@@ -839,6 +929,24 @@ static float T_Exec(const char[] line)
 	else if (StrEqual(a[0], "dcount"))
 	{
 		T_DissolveCount(a[1]);
+	}
+	else if (StrEqual(a[0], "witch"))
+	{
+		if (b) T_SpawnWitch(b);
+	}
+	else if (StrEqual(a[0], "aimwitch"))
+	{
+		if (b) T_AimWitch(b);
+	}
+	else if (StrEqual(a[0], "wcount"))
+	{
+		T_WitchCount(a[1]);
+	}
+	else if (StrEqual(a[0], "killwitch"))
+	{
+		int w = EntRefToEntIndex(s_iWitch);
+		if (w != INVALID_ENT_REFERENCE) RemoveEntity(w);
+		s_iWitch = INVALID_ENT_REFERENCE;
 	}
 	else if (StrEqual(a[0], "give"))
 	{
@@ -1031,6 +1139,113 @@ static void T_DissolveCount(const char[] label)
 	T_Log("DCOUNT %s/%s/%s spawned=%d exist=%d alive=%d alive_inrange=%d slots=%d/%d dissolvers=%d inf_deaths=%d by_caster=%d mp_b1=%.1f",
 		s_sPhase, s_sScen, label, s_iCommonN, exist, alive, inrange, slots, MAX_DISSOLVE, dissolvers,
 		s_iInfDeaths, s_iInfDeathsBy, (b1 > 0 && IsClientInGame(b1)) ? Skill_MP[b1] : -1.0);
+}
+
+// 從 b 往 8 個方向找前方沒有障礙、底下有地板的位置（依序試 200、160、120 單位），生一隻面向 b 的女巫
+static void T_SpawnWitch(int b)
+{
+	s_iHarassN = 0;
+	s_iHarasser = 0;
+	s_iWitchCaster = b;
+	float dists[] = {200.0, 160.0, 120.0};
+	float org[3], start[3], end[3], dir[3], pos[3], down[3];
+	GetClientAbsOrigin(b, org);
+	for (int di = 0; di < sizeof(dists); di++)
+	{
+		for (int d = 0; d < 8; d++)
+		{
+			float yaw = DegToRad(d * 45.0);
+			dir[0] = Cosine(yaw);
+			dir[1] = Sine(yaw);
+			dir[2] = 0.0;
+			start = org;
+			start[2] += 40.0;
+			for (int i = 0; i < 3; i++) end[i] = start[i] + dir[i] * (dists[di] + 40.0);
+			TR_TraceRayFilter(start, end, MASK_PLAYERSOLID, RayType_EndPoint, T_TraceNoPlayers);
+			if (TR_DidHit()) continue;
+			for (int i = 0; i < 3; i++) pos[i] = start[i] + dir[i] * dists[di];
+			down = pos;
+			down[2] = org[2] - 60.0;
+			TR_TraceRayFilter(pos, down, MASK_PLAYERSOLID, RayType_EndPoint, T_TraceNoPlayers);
+			if (!TR_DidHit()) continue;
+			TR_GetEndPosition(pos);
+
+			float ang[3];
+			ang[1] = d * 45.0 + 180.0;
+			int w = CreateEntityByName("witch");
+			if (w == -1)
+			{
+				T_Log("FAIL witch：CreateEntityByName 失敗");
+				return;
+			}
+			TeleportEntity(w, pos, ang, NULL_VECTOR);
+			DispatchSpawn(w);
+			ActivateEntity(w);
+			s_iWitch = EntIndexToEntRef(w);
+
+			// 擋在施法者和女巫中間的隊友移到施法者背後，不然施法者瞄到的是隊友（偷竊會變成偷隊友）
+			int moved = 0;
+			for (int k = 0; k < TEST_BOTS; k++)
+			{
+				int o = s_iBot[k];
+				if (o <= 0 || o == b || !IsClientInGame(o) || !IsPlayerAlive(o)) continue;
+				float op[3];
+				GetClientAbsOrigin(o, op);
+				float along = (op[0] - org[0]) * dir[0] + (op[1] - org[1]) * dir[1];
+				float side = FloatAbs((op[0] - org[0]) * dir[1] - (op[1] - org[1]) * dir[0]);
+				if (along < -20.0 || along > dists[di] + 40.0 || side > 60.0) continue;
+				moved++;
+				float np[3], zero[3];
+				np[0] = org[0] - dir[0] * 50.0 * moved;
+				np[1] = org[1] - dir[1] * 50.0 * moved;
+				np[2] = org[2];
+				TeleportEntity(o, np, NULL_VECTOR, zero);
+			}
+			T_Log("WITCH %s/%s spawned dist=%.0f moved_teammates=%d", s_sPhase, s_sScen, dists[di], moved);
+			return;
+		}
+	}
+	T_Log("FAIL witch：找不到空位");
+}
+
+static void T_AimWitch(int b)
+{
+	int w = EntRefToEntIndex(s_iWitch);
+	if (w == INVALID_ENT_REFERENCE)
+	{
+		T_Log("FAIL aimwitch：沒有女巫");
+		return;
+	}
+	float eye[3], pos[3], mins[3], maxs[3], aim[3], ang[3];
+	GetClientEyePosition(b, eye);
+	GetEntPropVector(w, Prop_Send, "m_vecOrigin", pos);
+	GetEntPropVector(w, Prop_Send, "m_vecMins", mins);
+	GetEntPropVector(w, Prop_Send, "m_vecMaxs", maxs);
+	for (int i = 0; i < 3; i++) aim[i] = pos[i] + (mins[i] + maxs[i]) * 0.5 - eye[i];
+	GetVectorAngles(aim, ang);
+	TeleportEntity(b, NULL_VECTOR, ang, NULL_VECTOR);
+}
+
+static void T_WitchCount(const char[] label)
+{
+	int w = EntRefToEntIndex(s_iWitch);
+	int c = s_iWitchCaster;
+	bool casterOk = c > 0 && IsClientInGame(c) && IsPlayerAlive(c);
+	int hp = -1, aimed = 0;
+	float rage = -1.0;
+	if (w != INVALID_ENT_REFERENCE)
+	{
+		hp = GetEntProp(w, Prop_Data, "m_iHealth");
+		if (HasEntProp(w, Prop_Send, "m_rage")) rage = GetEntPropFloat(w, Prop_Send, "m_rage");
+		if (casterOk) aimed = (GetClientAimTarget(c, false) == w);
+	}
+	char by[8] = "-";
+	if (s_iHarassN > 0) T_Who(s_iHarasser, by, sizeof(by));
+	char caster[8];
+	T_Who(c, caster, sizeof(caster));
+	T_Log("WCOUNT %s/%s/%s exist=%d hp=%d rage=%.2f %s_aimed=%d harassed=%d by=%s %s_hp=%d %s_incap=%d",
+		s_sPhase, s_sScen, label, w != INVALID_ENT_REFERENCE, hp, rage, caster, aimed, s_iHarassN, by,
+		caster, casterOk ? GetClientHealth(c) : -1, caster, casterOk && T_IsIncapped(c));
 }
 
 static void T_Weapons(int b, const char[] label)
