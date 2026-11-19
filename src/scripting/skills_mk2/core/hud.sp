@@ -3,7 +3,6 @@
 static Handle s_hNotify[MAX_PLAYERS + 1];   // 每 0.5 秒更新 HUD
 static Handle s_hAni[MAX_PLAYERS + 1];      // 每 0.5 秒推進「準備好」的 > < 動畫
 static int    s_iAni[MAX_PLAYERS + 1];
-static bool   s_bHidden[MAX_PLAYERS + 1];   // 上一次更新時 HUD 被藏起來了（只在剛藏起來時清一次畫面）
 
 void Hud_Start(int client)
 {
@@ -13,7 +12,6 @@ void Hud_Start(int client)
 		delete s_hAni[client];
 	s_hNotify[client] = CreateTimer(0.5, Skill_Notify, client, TIMER_REPEAT);
 	s_iAni[client] = 0;
-	s_bHidden[client] = false;
 	s_hAni[client] = CreateTimer(0.5, Skill_Notify_Ani, client, TIMER_REPEAT);
 }
 
@@ -135,17 +133,11 @@ void Skill_Notify_MPbar(const char[] str, const char[] state, int client)
 	}
 
 	// 過場中不顯示：每 0.5 秒重送提示文字會讓畫面一直閃。
-	// 只擋顯示，上面把 MP 歸零、技能的 tick 都照常執行
+	// 只擋顯示，上面把 MP 歸零、技能的 tick 都照常執行。
+	// 畫面上最後一則 MP 條不主動清掉，讓它自己淡掉。不要用 PrintHintText(client, "") 清：
+	// L4D2 客戶端收到空的提示會顯示殘留的記憶體內容，變成一個裝著亂碼的小框（全隊倒地、任務失敗時看得到）
 	if (Player_InCutscene(client))
-	{
-		if (!s_bHidden[client])
-		{
-			s_bHidden[client] = true;
-			PrintHintText(client, "");    // 清掉還留在畫面上的那一則
-		}
 		return;
-	}
-	s_bHidden[client] = false;
 	PrintHintText(client, "%s\n[%s%s] MP %d\n%s", str, bar, dot, RoundToFloor(Skill_MP[client]),state);
 }
 
